@@ -13,7 +13,12 @@ permissions:
   packages: write
 
 jobs:
+  lint-server:
+    uses: ./.github/workflows/lint-server.yml
+    secrets: inherit
+
   test-server:
+    needs: lint-server
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
