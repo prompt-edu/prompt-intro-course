@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   server:
-    uses: prompt-edu/.github/.github/workflows/build-and-push-docker-image.yml@v1.1.1
+    uses: ls1intum/.github/.github/workflows/build-and-push-docker-image.yml@v1.1.1
     with:
       image-name: ghcr.io/prompt-edu/prompt-intro-course/prompt-server-intro-course
       docker-file: server/Dockerfile
@@ -30,7 +30,7 @@ jobs:
     secrets: inherit
 
   client:
-    uses: prompt-edu/.github/.github/workflows/build-and-push-docker-image.yml@v1.1.1
+    uses: ls1intum/.github/.github/workflows/build-and-push-docker-image.yml@v1.1.1
     with:
       image-name: ghcr.io/prompt-edu/prompt-intro-course/prompt-clients-intro-course-developer
       docker-file: client/Dockerfile
