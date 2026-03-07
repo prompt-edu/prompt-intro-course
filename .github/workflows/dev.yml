@@ -1,0 +1,49 @@
+name: Build and Deploy to Dev
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: server/go.mod
+      - name: Run server tests
+        run: |
+          cd server
+          go test ./...
+
+  build:
+    needs: test-server
+    uses: ./.github/workflows/build-and-push.yml
+    with:
+      release_tag: ${{ github.sha }}
+    secrets: inherit
+
+  deploy-dev:
+    if: github.event_name == 'push'
+    needs: build
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: prompt-dev-vm
+      server_image_tag: ${{ needs.build.outputs.server_image_tag }}
+      client_image_tag: ${{ needs.build.outputs.client_image_tag }}
+    secrets: inherit

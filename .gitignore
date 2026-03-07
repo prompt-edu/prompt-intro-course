@@ -1,0 +1,18 @@
+# Node / frontend
+client/node_modules/
+client/build/
+client/dist/
+
+# Go / server
+server/bin/
+server/.cache/
+
+# Editor/system
+.DS_Store
+.idea/
+.vscode/
+
+# Env
+.env
+.env.*
+!.env.template

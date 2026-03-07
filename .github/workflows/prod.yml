@@ -1,0 +1,42 @@
+name: Production Release
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: server/go.mod
+      - name: Run server tests
+        run: |
+          cd server
+          go test ./...
+
+  build:
+    needs: test-server
+    uses: ./.github/workflows/build-and-push.yml
+    with:
+      release_tag: "${{ github.event.release.tag_name }},latest"
+    secrets: inherit
+
+  deploy-prod:
+    needs: build
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: prompt-prod-vm
+      server_image_tag: ${{ needs.build.outputs.server_image_tag }}
+      client_image_tag: ${{ needs.build.outputs.client_image_tag }}
+    secrets: inherit

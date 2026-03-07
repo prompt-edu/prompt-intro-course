@@ -1,0 +1,19 @@
+services:
+  db-intro-course:
+    image: postgres:15.2-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_DB=${DB_NAME:-intro_course}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+    volumes:
+      - intro-course-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-intro_course}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  intro-course-db-data:

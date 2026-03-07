@@ -1,0 +1,75 @@
+services:
+  server-intro-course:
+    image: ghcr.io/prompt-edu/prompt-intro-course/prompt-server-intro-course:${SERVER_IMAGE_TAG}
+    container_name: server-intro-course
+    restart: unless-stopped
+    networks:
+      - prompt-network
+    depends_on:
+      db-intro-course:
+        condition: service_healthy
+    environment:
+      - SERVER_ADDRESS=0.0.0.0:8080
+      - CORE_HOST=${CORE_HOST}
+      - SERVER_CORE_HOST=${SERVER_CORE_HOST}
+      - DB_HOST=db-intro-course
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - KEYCLOAK_HOST=${KEYCLOAK_HOST}
+      - KEYCLOAK_REALM_NAME=${KEYCLOAK_REALM_NAME}
+      - KEYCLOAK_AUTHORIZED_PARTY=${KEYCLOAK_AUTHORIZED_PARTY}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID}
+      - GITLAB_ACCESS_TOKEN=${GITLAB_ACCESS_TOKEN}
+      - SENTRY_DSN=${SENTRY_DSN}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.intro-course-api.rule=Host(`${CORE_HOST}`) && PathPrefix(`/intro-course/api`)"
+      - "traefik.http.routers.intro-course-api.entrypoints=websecure"
+      - "traefik.http.routers.intro-course-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.intro-course-api.loadbalancer.server.port=8080"
+      - "traefik.http.routers.intro-course-api.middlewares=rate-limit@docker"
+      - "traefik.docker.network=prompt-network"
+
+  client-intro-course-developer-component:
+    image: ghcr.io/prompt-edu/prompt-intro-course/prompt-clients-intro-course-developer:${CLIENT_IMAGE_TAG}
+    container_name: client-intro-course-developer-component
+    restart: unless-stopped
+    networks:
+      - prompt-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.intro-course-developer.rule=Host(`${CORE_HOST}`) && PathPrefix(`/intro-course-developer`)"
+      - "traefik.http.routers.intro-course-developer.entrypoints=websecure"
+      - "traefik.http.routers.intro-course-developer.tls.certresolver=letsencrypt"
+      - "traefik.http.middlewares.intro-course-developer-strip.stripprefix.prefixes=/intro-course-developer"
+      - "traefik.http.routers.intro-course-developer.middlewares=intro-course-developer-strip@docker,compress@docker"
+      - "traefik.http.services.intro-course-developer.loadbalancer.server.port=80"
+      - "traefik.docker.network=prompt-network"
+
+  db-intro-course:
+    image: postgres:15.2-alpine
+    container_name: db-intro-course
+    restart: unless-stopped
+    networks:
+      - prompt-network
+    volumes:
+      - intro-course-db-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  intro-course-db-data:
+
+networks:
+  prompt-network:
+    name: prompt-network
+    external: true

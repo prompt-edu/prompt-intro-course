@@ -1,0 +1,41 @@
+name: Build and Push
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: "Optional image tag override"
+        required: false
+        type: string
+    outputs:
+      server_image_tag:
+        description: "Tag of the built server image"
+        value: ${{ jobs.server.outputs.image_tag }}
+      client_image_tag:
+        description: "Tag of the built client image"
+        value: ${{ jobs.client.outputs.image_tag }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  server:
+    uses: prompt-edu/.github/.github/workflows/build-and-push-docker-image.yml@v1.1.1
+    with:
+      image-name: ghcr.io/prompt-edu/prompt-intro-course/prompt-server-intro-course
+      docker-file: server/Dockerfile
+      docker-context: ./server
+      tags: ${{ inputs.release_tag }}
+    secrets: inherit
+
+  client:
+    uses: prompt-edu/.github/.github/workflows/build-and-push-docker-image.yml@v1.1.1
+    with:
+      image-name: ghcr.io/prompt-edu/prompt-intro-course/prompt-clients-intro-course-developer
+      docker-file: client/Dockerfile
+      docker-context: ./client
+      tags: ${{ inputs.release_tag }}
+      build-args: |
+        "IMAGE_TAG=latest"
+    secrets: inherit
