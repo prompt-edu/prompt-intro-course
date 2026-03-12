@@ -13,20 +13,27 @@ Standalone repository for the PROMPT intro course services.
 
 1. Copy `.env.template` to `.env` and adapt values if needed.
    Intro-course-specific runtime variables previously kept in `prompt2` now live in this repository.
-2. Start the intro-course database:
+2. Link the shared library from the main PROMPT repository:
+   ```bash
+   ln -sfn ../prompt2/clients/shared_library shared_library
+   ```
+3. Start the intro-course database:
    ```bash
    docker compose up -d
    ```
-3. Run server:
+4. Run server:
    ```bash
    cd server
    go run main.go
    ```
-4. Run client:
+5. Install client dependencies and run the client:
    ```bash
    cd client
+   yarn install
    yarn dev
    ```
+
+Use a Node LTS release (recommended: Node 22) for local client tooling.
 
 The core app in the main PROMPT repository can load this client via Module Federation at `http://localhost:3005`.
 

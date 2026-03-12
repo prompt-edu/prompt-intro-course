@@ -1,28 +1,18 @@
-import path from 'path'
-import 'webpack-dev-server'
-import HtmlWebpackPlugin from 'html-webpack-plugin'
-import packageJson from './package.json' with { type: 'json' }
-import webpack from 'webpack'
-import container from 'webpack'
-import { fileURLToPath } from 'url'
-import CopyPlugin from 'copy-webpack-plugin'
+const path = require('path')
+const HtmlWebpackPlugin = require('html-webpack-plugin')
+const CopyPlugin = require('copy-webpack-plugin')
+const webpack = require('webpack')
+const packageJson = require('./package.json')
 
 const { ModuleFederationPlugin } = webpack.container
 
-// ########################################
-// ### Component specific configuration ###
-// ########################################
 const COMPONENT_NAME = 'intro_course_developer_component'
 const COMPONENT_DEV_PORT = 3005
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-const config: (env: Record<string, string>) => container.Configuration = (env) => {
-  const getVariable = (name: string) => env[name]
-
+module.exports = (env = {}) => {
+  const getVariable = (name) => env[name]
   const IS_DEV = getVariable('NODE_ENV') !== 'production'
-  const deps = packageJson.dependencies
+  const deps = packageJson.dependencies || {}
 
   return {
     target: 'web',
@@ -50,6 +40,7 @@ const config: (env: Record<string, string>) => container.Configuration = (env) =
             loader: 'ts-loader',
             options: {
               configFile: path.resolve(__dirname, 'tsconfig.json'),
+              transpileOnly: true,
             },
           },
           exclude: /node_modules/,
@@ -57,11 +48,11 @@ const config: (env: Record<string, string>) => container.Configuration = (env) =
         {
           test: /\.css$/i,
           use: ['style-loader', 'css-loader', 'postcss-loader'],
-          exclude: /node_modules/, // 🛠 Only apply postcss-loader to your src/
+          exclude: /node_modules/,
         },
         {
           test: /\.css$/i,
-          include: /node_modules/, // 🛠 Load node_modules CSS without postcss-loader
+          include: /node_modules/,
           use: ['style-loader', 'css-loader'],
         },
       ],
@@ -69,17 +60,17 @@ const config: (env: Record<string, string>) => container.Configuration = (env) =
     output: {
       filename: '[name].[contenthash].js',
       path: path.resolve(__dirname, 'build'),
-      publicPath: 'auto', // Whole Domain is crucial when deployed under other domain!
+      publicPath: 'auto',
     },
     resolve: {
       extensions: ['.ts', '.tsx', '.js', '.mjs', '.jsx'],
       alias: {
-        '@': path.resolve('../shared_library'),
+        '@': path.resolve(__dirname, '../shared_library'),
       },
     },
     plugins: [
       new ModuleFederationPlugin({
-        name: COMPONENT_NAME, // TODO: rename this to your component name
+        name: COMPONENT_NAME,
         filename: 'remoteEntry.js',
         exposes: {
           './routes': './routes',
@@ -87,16 +78,16 @@ const config: (env: Record<string, string>) => container.Configuration = (env) =
           './provide': './src/provide',
         },
         shared: {
-          react: { singleton: true, requiredVersion: deps.react },
-          'react-dom': { singleton: true, requiredVersion: deps['react-dom'] },
-          'react-router-dom': { singleton: true, requiredVersion: deps['react-router-dom'] },
+          react: { singleton: true, requiredVersion: deps.react || false },
+          'react-dom': { singleton: true, requiredVersion: deps['react-dom'] || false },
+          'react-router-dom': { singleton: true, requiredVersion: deps['react-router-dom'] || false },
           '@tanstack/react-query': {
             singleton: true,
-            requiredVersion: deps['@tanstack/react-query'],
+            requiredVersion: deps['@tanstack/react-query'] || false,
           },
           '@tumaet/prompt-shared-state': {
             singleton: true,
-            requiredVersion: deps['@tumaet/prompt-shared-state'],
+            requiredVersion: deps['@tumaet/prompt-shared-state'] || false,
           },
         },
       }),
@@ -118,11 +109,9 @@ const config: (env: Record<string, string>) => container.Configuration = (env) =
           minifyURLs: true,
         },
       }),
-    ].filter(Boolean),
+    ],
     cache: {
       type: 'filesystem',
     },
   }
 }
-
-export default config

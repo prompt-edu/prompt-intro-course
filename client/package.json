@@ -4,15 +4,52 @@
   "main": "src/index.ts",
   "license": "MIT",
   "scripts": {
-    "dev": "webpack serve --open --mode development",
+    "dev": "webpack serve --config webpack.config.cjs --open --mode development",
     "lint": "eslint \"src/**/*.{js,jsx,ts,tsx}\"",
     "lint:fix": "eslint \"src/**/*.{js,jsx,ts,tsx}\" --fix",
-    "build": "webpack --mode=production --env NODE_ENV=production",
-    "check-performance": "webpack --mode=production --env NODE_ENV=production --env BUNDLE_SIZE=true"
+    "build": "webpack --config webpack.config.cjs --mode=production --env NODE_ENV=production",
+    "check-performance": "webpack --config webpack.config.cjs --mode=production --env NODE_ENV=production --env BUNDLE_SIZE=true"
   },
   "devDependencies": {
+    "@types/file-saver": "^2",
+    "@types/node": "^25.3.5",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/react-is": "^19",
+    "autoprefixer": "^10.4.27",
+    "copy-webpack-plugin": "^13.0.0",
+    "css-loader": "^7.1.4",
+    "html-webpack-plugin": "^5.6.6",
+    "postcss": "^8.5.8",
+    "postcss-loader": "8.2.1",
+    "style-loader": "^4.0.0",
+    "tailwindcss": "^3.4.19",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.3",
     "webpack": "^5.105.4",
-    "webpack-cli": "^6.0.1"
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.3"
   },
-  "packageManager": "yarn@4.12.0"
+  "packageManager": "yarn@4.12.0",
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@tanstack/react-query": "^5.90.21",
+    "@tanstack/react-table": "^8.21.3",
+    "@tumaet/prompt-shared-state": "^1.0.8",
+    "@tumaet/prompt-ui-components": "^1.0.8",
+    "axios": "^1.13.6",
+    "clsx": "^2.1.1",
+    "file-saver": "^2.0.5",
+    "i18n-iso-countries": "^7.14.0",
+    "js-sha256": "^0.11.1",
+    "lucide-react": "^0.575.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-hook-form": "^7.71.2",
+    "react-is": "^19.2.0",
+    "react-router-dom": "^7.13.1",
+    "tailwind-merge": "^3.4.1",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.11"
+  }
 }

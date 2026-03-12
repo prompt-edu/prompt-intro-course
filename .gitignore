@@ -2,6 +2,8 @@
 client/node_modules/
 client/build/
 client/dist/
+client/.yarn/
+shared_library
 
 # Go / server
 server/bin/
