@@ -13,15 +13,12 @@ jobs:
       run:
         working-directory: ./client
     steps:
-      - uses: actions/checkout@v6
+      - run: corepack enable
       - uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: "yarn"
-          cache-dependency-path: client/yarn.lock
-      - name: Enable Corepack
-        run: corepack enable
-      - name: Install dependencies
-        run: yarn install
+          cache-dependency-path: ./client/yarn.lock
+      - run: yarn install
       - name: Run client lint
         run: yarn lint
