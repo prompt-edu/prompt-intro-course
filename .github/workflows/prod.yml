@@ -17,6 +17,10 @@ jobs:
     uses: ./.github/workflows/lint-server.yml
     secrets: inherit
 
+  lint-client:
+    uses: ./.github/workflows/lint-client.yml
+    secrets: inherit
+
   test-server:
     needs: lint-server
     runs-on: ubuntu-latest
@@ -31,7 +35,7 @@ jobs:
           go test ./...
 
   build:
-    needs: test-server
+    needs: [test-server, lint-client]
     uses: ./.github/workflows/build-and-push.yml
     with:
       release_tag: "${{ github.event.release.tag_name }},latest"
