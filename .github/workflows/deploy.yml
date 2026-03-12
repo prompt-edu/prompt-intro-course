@@ -69,7 +69,7 @@ jobs:
             KEYCLOAK_AUTHORIZED_PARTY=${{ vars.KEYCLOAK_AUTHORIZED_PARTY }}
             KEYCLOAK_CLIENT_ID=${{ vars.KEYCLOAK_CLIENT_ID }}
             GITLAB_ACCESS_TOKEN=${{ vars.GITLAB_ACCESS_TOKEN }}
-            SENTRY_DSN=${{ vars.SENTRY_DSN_INTRO_COURSE }}
+            SENTRY_DSN=${{ vars.SENTRY_DSN || vars.SENTRY_DSN_INTRO_COURSE }}
             EOT
 
             docker compose -f docker-compose.prod.yml --env-file=.env.prod up --pull=always -d

@@ -4,6 +4,7 @@ FROM ghcr.io/prompt-edu/prompt/prompt-clients-base:${IMAGE_TAG} AS core-base
 
 WORKDIR /app/client
 COPY . ./
+RUN touch yarn.lock
 RUN yarn install
 
 RUN yarn build

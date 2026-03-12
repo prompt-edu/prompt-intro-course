@@ -12,6 +12,7 @@ Standalone repository for the PROMPT intro course services.
 ## Local Development
 
 1. Copy `.env.template` to `.env` and adapt values if needed.
+   Intro-course-specific runtime variables previously kept in `prompt2` now live in this repository.
 2. Start the intro-course database:
    ```bash
    docker compose up -d
