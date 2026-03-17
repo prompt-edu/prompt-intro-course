@@ -25,11 +25,14 @@ services:
       - SENTRY_DSN=${SENTRY_DSN}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.intro-course-api.rule=Host(`${CORE_HOST}`) && PathPrefix(`/intro-course/api`)"
-      - "traefik.http.routers.intro-course-api.entrypoints=websecure"
-      - "traefik.http.routers.intro-course-api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.intro-course-api.loadbalancer.server.port=8080"
-      - "traefik.http.routers.intro-course-api.middlewares=rate-limit@docker"
+      - "traefik.http.routers.intro-course-api-standalone.rule=Host(`${CORE_HOST}`) && PathPrefix(`/intro-course/api`)"
+      - "traefik.http.routers.intro-course-api-standalone.entrypoints=websecure"
+      - "traefik.http.routers.intro-course-api-standalone.priority=200"
+      - "traefik.http.routers.intro-course-api-standalone.tls.certresolver=letsencrypt"
+      - "traefik.http.services.intro-course-api-standalone.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.intro-course-api-standalone-ratelimit.ratelimit.average=300"
+      - "traefik.http.middlewares.intro-course-api-standalone-ratelimit.ratelimit.burst=100"
+      - "traefik.http.routers.intro-course-api-standalone.middlewares=intro-course-api-standalone-ratelimit@docker"
       - "traefik.docker.network=prompt-network"
 
   client-intro-course-developer-component:
@@ -40,12 +43,14 @@ services:
       - prompt-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.intro-course-developer.rule=Host(`${CORE_HOST}`) && PathPrefix(`/intro-course-developer`)"
-      - "traefik.http.routers.intro-course-developer.entrypoints=websecure"
-      - "traefik.http.routers.intro-course-developer.tls.certresolver=letsencrypt"
-      - "traefik.http.middlewares.intro-course-developer-strip.stripprefix.prefixes=/intro-course-developer"
-      - "traefik.http.routers.intro-course-developer.middlewares=intro-course-developer-strip@docker,compress@docker"
-      - "traefik.http.services.intro-course-developer.loadbalancer.server.port=80"
+      - "traefik.http.routers.intro-course-developer-standalone.rule=Host(`${CORE_HOST}`) && PathPrefix(`/intro-course-developer`)"
+      - "traefik.http.routers.intro-course-developer-standalone.entrypoints=websecure"
+      - "traefik.http.routers.intro-course-developer-standalone.priority=200"
+      - "traefik.http.routers.intro-course-developer-standalone.tls.certresolver=letsencrypt"
+      - "traefik.http.middlewares.intro-course-developer-standalone-strip.stripprefix.prefixes=/intro-course-developer"
+      - "traefik.http.middlewares.intro-course-developer-standalone-compress.compress=true"
+      - "traefik.http.routers.intro-course-developer-standalone.middlewares=intro-course-developer-standalone-strip@docker,intro-course-developer-standalone-compress@docker"
+      - "traefik.http.services.intro-course-developer-standalone.loadbalancer.server.port=80"
       - "traefik.docker.network=prompt-network"
 
   db-intro-course:
