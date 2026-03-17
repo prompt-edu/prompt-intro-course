@@ -49,25 +49,23 @@ services:
       - "traefik.docker.network=prompt-network"
 
   db-intro-course:
-    image: postgres:15.2-alpine
+    image: postgres:15.16-alpine
     container_name: db-intro-course
     restart: unless-stopped
     networks:
       - prompt-network
     volumes:
-      - intro-course-db-data:/var/lib/postgresql/data
+      - ./postgres_intro_course_data:/var/lib/postgresql/data
     environment:
       - POSTGRES_DB=${DB_NAME}
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - TZ=Europe/Berlin
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
-
-volumes:
-  intro-course-db-data:
 
 networks:
   prompt-network:
