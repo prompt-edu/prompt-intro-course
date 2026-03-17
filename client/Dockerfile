@@ -5,6 +5,7 @@ FROM ghcr.io/prompt-edu/prompt/prompt-clients-base:${IMAGE_TAG} AS core-base
 WORKDIR /app/intro_course_developer_component
 COPY . ./
 RUN yarn install
+RUN ln -sfn /app/intro_course_developer_component/node_modules /app/node_modules
 
 RUN yarn build
 
