@@ -35,7 +35,7 @@
   "packageManager": "yarn@4.12.0",
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
-    "@tanstack/react-query": "^5.90.21",
+    "@tanstack/react-query": "^5.91.3",
     "@tanstack/react-table": "^8.21.3",
     "@tumaet/prompt-shared-state": "^1.0.8",
     "@tumaet/prompt-ui-components": "^1.0.8",
