@@ -17,12 +17,16 @@ jobs:
     uses: ./.github/workflows/lint-server.yml
     secrets: inherit
 
+  vet-server:
+    uses: ./.github/workflows/vet-server.yml
+    secrets: inherit
+
   lint-client:
     uses: ./.github/workflows/lint-client.yml
     secrets: inherit
 
   test-server:
-    needs: lint-server
+    needs: [lint-server, vet-server]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -35,7 +39,7 @@ jobs:
           go test ./...
 
   build:
-    needs: [test-server, lint-client]
+    needs: [test-server, lint-client, vet-server]
     uses: ./.github/workflows/build-and-push.yml
     with:
       release_tag: "${{ github.event.release.tag_name }},latest"
