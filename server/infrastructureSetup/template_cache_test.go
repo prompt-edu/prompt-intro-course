@@ -109,7 +109,7 @@ func fakeGitLabServerPaginated(t *testing.T, treePages [][]map[string]interface{
 			}
 			if page < 1 || page > len(treePages) {
 				w.Header().Set("Content-Type", "application/json")
-				fmt.Fprint(w, "[]")
+				_, _ = fmt.Fprint(w, "[]")
 				return
 			}
 
@@ -133,7 +133,7 @@ func fakeGitLabServerPaginated(t *testing.T, treePages [][]map[string]interface{
 			filePath = strings.TrimSuffix(filePath, suffix)
 			if content, ok := fileContents[filePath]; ok {
 				w.Header().Set("Content-Type", "application/octet-stream")
-				fmt.Fprint(w, content)
+				_, _ = fmt.Fprint(w, content)
 				return
 			}
 		}
@@ -195,14 +195,14 @@ func TestTemplateCacheThreadSafety(t *testing.T) {
 		if path == "/api/v4/projects/42/repository/tree" {
 			fetchCount.Add(1)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"id": "a1", "name": "file.txt", "type": "blob", "path": "student_repo_template/file.txt", "mode": "100644"},
 			})
 			return
 		}
 
 		if strings.Contains(path, "/repository/files/") && strings.HasSuffix(path, "/raw") {
-			fmt.Fprint(w, "content")
+			_, _ = fmt.Fprint(w, "content")
 			return
 		}
 
@@ -245,18 +245,18 @@ func TestTemplateCacheRetryOnError(t *testing.T) {
 			if count == 1 {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
-				fmt.Fprint(w, `{"message":"401 Unauthorized"}`)
+				_, _ = fmt.Fprint(w, `{"message":"401 Unauthorized"}`)
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"id": "a1", "name": "file.txt", "type": "blob", "path": "student_repo_template/file.txt", "mode": "100644"},
 			})
 			return
 		}
 
 		if strings.Contains(path, "/repository/files/") && strings.HasSuffix(path, "/raw") {
-			fmt.Fprint(w, "file content")
+			_, _ = fmt.Fprint(w, "file content")
 			return
 		}
 
@@ -313,7 +313,7 @@ func TestCreateProjectFiles(t *testing.T) {
 		// Tree listing endpoint (teaching material repo, project 100)
 		if path == "/api/v4/projects/100/repository/tree" {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"id": "a1", "name": "README.md", "type": "blob", "path": "student_repo_template/README.md", "mode": "100644"},
 				{"id": "a2", "name": "post-checkout", "type": "blob", "path": "student_repo_template/.githooks/post-checkout", "mode": "100755"},
 			})
@@ -332,7 +332,7 @@ func TestCreateProjectFiles(t *testing.T) {
 			}
 			if content, ok := contents[filePath]; ok {
 				w.Header().Set("Content-Type", "application/octet-stream")
-				fmt.Fprint(w, content)
+				_, _ = fmt.Fprint(w, content)
 				return
 			}
 		}
@@ -347,7 +347,7 @@ func TestCreateProjectFiles(t *testing.T) {
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id":      "abc123",
 				"message": commitBody["commit_message"],
 			})
@@ -410,14 +410,14 @@ func TestCreateProjectFilesIdempotent(t *testing.T) {
 
 		if path == "/api/v4/projects/100/repository/tree" {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"id": "a1", "name": "file.txt", "type": "blob", "path": "student_repo_template/file.txt", "mode": "100644"},
 			})
 			return
 		}
 
 		if strings.Contains(path, "/repository/files/") && strings.HasSuffix(path, "/raw") {
-			fmt.Fprint(w, "content")
+			_, _ = fmt.Fprint(w, "content")
 			return
 		}
 
@@ -425,7 +425,7 @@ func TestCreateProjectFilesIdempotent(t *testing.T) {
 		if path == "/api/v4/projects/200/repository/commits" && r.Method == http.MethodPost {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"message": "A file with this name already exists",
 			})
 			return
@@ -578,7 +578,7 @@ func TestCreateOrGetProject(t *testing.T) {
 			if r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusCreated)
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"id":   42,
 					"name": "test-project",
 				})
@@ -605,13 +605,13 @@ func TestCreateOrGetProject(t *testing.T) {
 			if r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
-				fmt.Fprint(w, `{"message":"conflict"}`)
+				_, _ = fmt.Fprint(w, `{"message":"conflict"}`)
 				return
 			}
 			// GetProject: go-gitlab URL-encodes path slashes, Go decodes them
 			if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v4/projects/") {
 				w.Header().Set("Content-Type", "application/json")
-				fmt.Fprint(w, `{"id":99,"name":"existing-project"}`)
+				_, _ = fmt.Fprint(w, `{"id":99,"name":"existing-project"}`)
 				return
 			}
 			http.NotFound(w, r)
@@ -634,7 +634,7 @@ func TestCreateOrGetProject(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
-			fmt.Fprint(w, `{"message":"forbidden"}`)
+			_, _ = fmt.Fprint(w, `{"message":"forbidden"}`)
 		}))
 		defer server.Close()
 
@@ -667,7 +667,7 @@ func TestCreateDemoProject(t *testing.T) {
 		if r.Method == http.MethodPost && path == "/api/v4/projects" {
 			projectCreated.Store(true)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id": 300, "name": "demo",
 			})
 			return
@@ -675,7 +675,7 @@ func TestCreateDemoProject(t *testing.T) {
 
 		// Template tree listing (teaching material repo)
 		if path == "/api/v4/projects/100/repository/tree" {
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"id": "a1", "name": "README.md", "type": "blob", "path": "student_repo_template/README.md", "mode": "100644"},
 			})
 			return
@@ -684,35 +684,35 @@ func TestCreateDemoProject(t *testing.T) {
 		// Raw file content
 		if strings.HasPrefix(path, "/api/v4/projects/100/repository/files/") && strings.HasSuffix(path, "/raw") {
 			w.Header().Set("Content-Type", "application/octet-stream")
-			fmt.Fprint(w, "# {{.StudentName}}'s Demo")
+			_, _ = fmt.Fprint(w, "# {{.StudentName}}'s Demo")
 			return
 		}
 
 		// CreateCommit
 		if path == "/api/v4/projects/300/repository/commits" && r.Method == http.MethodPost {
-			json.NewDecoder(r.Body).Decode(&commitBody)
+			_ = json.NewDecoder(r.Body).Decode(&commitBody)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]interface{}{"id": "commit123"})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "commit123"})
 			return
 		}
 
 		// ProtectBranch
 		if path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodPost {
 			branchProtected.Store(true)
-			json.NewEncoder(w).Encode(map[string]interface{}{"name": "main"})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"name": "main"})
 			return
 		}
 
 		// ListIssueBoards
 		if path == "/api/v4/projects/300/boards" && r.Method == http.MethodGet {
-			json.NewEncoder(w).Encode([]interface{}{})
+			_ = json.NewEncoder(w).Encode([]interface{}{})
 			return
 		}
 
 		// CreateIssueBoard
 		if path == "/api/v4/projects/300/boards" && r.Method == http.MethodPost {
 			boardCreated.Store(true)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id": 1, "name": "Issue Board", "lists": []interface{}{},
 			})
 			return
@@ -720,7 +720,7 @@ func TestCreateDemoProject(t *testing.T) {
 
 		// CreateIssueBoardList
 		if strings.HasPrefix(path, "/api/v4/projects/300/boards/") && strings.HasSuffix(path, "/lists") && r.Method == http.MethodPost {
-			json.NewEncoder(w).Encode(map[string]interface{}{"id": 1})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 1})
 			return
 		}
 
@@ -768,7 +768,7 @@ func TestFetchTemplateFilesPartialFailure(t *testing.T) {
 
 		if path == "/api/v4/projects/42/repository/tree" {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"id": "a1", "name": "good.txt", "type": "blob", "path": "student_repo_template/good.txt", "mode": "100644"},
 				{"id": "a2", "name": "bad.txt", "type": "blob", "path": "student_repo_template/bad.txt", "mode": "100644"},
 			})
@@ -781,12 +781,12 @@ func TestFetchTemplateFilesPartialFailure(t *testing.T) {
 			filePath := strings.TrimPrefix(path, prefix)
 			filePath = strings.TrimSuffix(filePath, suffix)
 			if filePath == "student_repo_template/good.txt" {
-				fmt.Fprint(w, "good content")
+				_, _ = fmt.Fprint(w, "good content")
 				return
 			}
 			// bad.txt returns 404
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprint(w, `{"message":"404 File Not Found"}`)
+			_, _ = fmt.Fprint(w, `{"message":"404 File Not Found"}`)
 			return
 		}
 
@@ -812,13 +812,13 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 		// CreateProject returns 409 Conflict (project already exists)
 		if r.Method == http.MethodPost && path == "/api/v4/projects" {
 			w.WriteHeader(http.StatusConflict)
-			fmt.Fprint(w, `{"message":"conflict"}`)
+			_, _ = fmt.Fprint(w, `{"message":"conflict"}`)
 			return
 		}
 
 		// GetProject (fetches existing project after conflict)
 		if r.Method == http.MethodGet && strings.HasPrefix(path, "/api/v4/projects/") && !strings.Contains(path, "/repository") && !strings.Contains(path, "/boards") && !strings.Contains(path, "/protected_branches") && !strings.Contains(path, "/approval_rules") {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id": 300, "name": "demo",
 			})
 			return
@@ -826,7 +826,7 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 
 		// Template tree listing
 		if path == "/api/v4/projects/100/repository/tree" {
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"id": "a1", "name": "README.md", "type": "blob", "path": "student_repo_template/README.md", "mode": "100644"},
 			})
 			return
@@ -835,27 +835,27 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 		// Raw file content
 		if strings.HasPrefix(path, "/api/v4/projects/100/repository/files/") && strings.HasSuffix(path, "/raw") {
 			w.Header().Set("Content-Type", "application/octet-stream")
-			fmt.Fprint(w, "# Demo content")
+			_, _ = fmt.Fprint(w, "# Demo content")
 			return
 		}
 
 		// CreateCommit returns "already exists" (files already pushed)
 		if path == "/api/v4/projects/300/repository/commits" && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, `{"message":"A file with this name already exists"}`)
+			_, _ = fmt.Fprint(w, `{"message":"A file with this name already exists"}`)
 			return
 		}
 
 		// ProtectBranch returns "already exists" (already protected)
 		if path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusConflict)
-			fmt.Fprint(w, `{"message":"Protected branch already exists"}`)
+			_, _ = fmt.Fprint(w, `{"message":"Protected branch already exists"}`)
 			return
 		}
 
 		// ListIssueBoards returns existing board with both lists
 		if path == "/api/v4/projects/300/boards" && r.Method == http.MethodGet {
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{
 					"id": 1, "name": "Issue Board",
 					"lists": []map[string]interface{}{
