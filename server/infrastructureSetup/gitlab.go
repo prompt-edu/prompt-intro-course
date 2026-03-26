@@ -2,6 +2,9 @@ package infrastructureSetup
 
 import (
 	"errors"
+	"fmt"
+	"net/http"
+	"strings"
 
 	"github.com/prompt-edu/prompt-intro-course/server/infrastructureSetup/data"
 	log "github.com/sirupsen/logrus"
@@ -12,35 +15,93 @@ const IN_PROGRESS_LABEL_ID int64 = 53319
 const IN_REVIEW_LABEL_ID int64 = 53320
 const ASE_GROUP_ID int64 = 186940
 
-func getClient() (*gitlab.Client, error) {
-	// Create a client
-	git, err := gitlab.NewClient(InfrastructureServiceSingleton.gitlabAccessToken, gitlab.WithBaseURL("https://gitlab.lrz.de/api/v4"))
-	if err != nil {
-		log.Error("Failed to create client: ", err)
-		return nil, err
-	}
-	return git, nil
+var errGitLabClientNotInitialized = errors.New("gitlab client not initialized")
 
+func getClient() (*gitlab.Client, error) {
+	if InfrastructureServiceSingleton.gitlabClient == nil {
+		return nil, errGitLabClientNotInitialized
+	}
+	return InfrastructureServiceSingleton.gitlabClient, nil
 }
 
-func createCourseIterationGroup(courseIteration string, parentID int64) (*gitlab.Group, error) {
-	// Create a top level group
+// isAlreadyExistsError checks whether a GitLab API error indicates the resource
+// already exists. It checks for 409 Conflict by status code, and for APIs that
+// return 400 with "already exists" in the structured response message.
+//
+// String matching is intentionally restricted to the gitlab.ErrorResponse.Message
+// field (not the full wrapped error chain) to avoid false positives from network
+// errors or wrapping context that happens to contain matching substrings.
+func isAlreadyExistsError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var errResp *gitlab.ErrorResponse
+	if errors.As(err, &errResp) && errResp.Response != nil {
+		code := errResp.Response.StatusCode
+		if code == http.StatusConflict {
+			return true
+		}
+		// Only string-match on the structured API response message,
+		// not the full wrapped error chain, to avoid false positives.
+		msg := errResp.Message
+		return strings.Contains(msg, "already exists") ||
+			strings.Contains(msg, "already a member") ||
+			strings.Contains(msg, "already been taken")
+	}
+	return false
+}
+
+// findSubGroup searches for a subgroup by name under the given parent.
+// Returns the group if found, nil if not found, or an error on API failure.
+func findSubGroup(groupName string, parentGroupID int64) (*gitlab.Group, error) {
 	git, err := getClient()
 	if err != nil {
 		return nil, err
 	}
 
-	exists, group, err := checkIfSubGroupExists(courseIteration, parentID)
+	groups, _, err := git.Groups.ListSubGroups(parentGroupID, &gitlab.ListSubGroupsOptions{
+		Search:       gitlab.Ptr(groupName),
+		AllAvailable: gitlab.Ptr(true),
+		ListOptions:  gitlab.ListOptions{PerPage: 100},
+	})
 	if err != nil {
-		log.Error("failed to create course iteration group: ", err)
+		return nil, fmt.Errorf("list subgroups of %d: %w", parentGroupID, err)
+	}
+
+	for _, group := range groups {
+		if group.Name == groupName && group.ParentID == parentGroupID {
+			return group, nil
+		}
+	}
+	return nil, nil
+}
+
+func getSubGroup(groupName string, parentGroupID int64) (*gitlab.Group, error) {
+	group, err := findSubGroup(groupName, parentGroupID)
+	if err != nil {
+		return nil, err
+	}
+	if group == nil {
+		return nil, fmt.Errorf("subgroup %q not found under group %d", groupName, parentGroupID)
+	}
+	return group, nil
+}
+
+func createCourseIterationGroup(courseIteration string, parentID int64) (*gitlab.Group, error) {
+	existing, err := findSubGroup(courseIteration, parentID)
+	if err != nil {
+		return nil, fmt.Errorf("check if course iteration group %q exists: %w", courseIteration, err)
+	}
+	if existing != nil {
+		return existing, nil
+	}
+
+	git, err := getClient()
+	if err != nil {
 		return nil, err
 	}
 
-	if exists {
-		return group, nil
-	}
-
-	group, _, err = git.Groups.CreateGroup(&gitlab.CreateGroupOptions{
+	group, _, err := git.Groups.CreateGroup(&gitlab.CreateGroupOptions{
 		Name:                  gitlab.Ptr(courseIteration),
 		ParentID:              gitlab.Ptr(parentID),
 		ProjectCreationLevel:  gitlab.Ptr(gitlab.MaintainerProjectCreation),
@@ -49,8 +110,15 @@ func createCourseIterationGroup(courseIteration string, parentID int64) (*gitlab
 		Path:                  gitlab.Ptr(courseIteration),
 	})
 	if err != nil {
-		log.Error("failed to create course iteration group: ", err)
-		return nil, err
+		if !isAlreadyExistsError(err) {
+			return nil, fmt.Errorf("create course iteration group %q: %w", courseIteration, err)
+		}
+		// Race: another request created it between our check and create
+		existing, findErr := findSubGroup(courseIteration, parentID)
+		if findErr != nil || existing == nil {
+			return nil, fmt.Errorf("course iteration group %q conflict but not found: %w", courseIteration, err)
+		}
+		return existing, nil
 	}
 
 	return group, nil
@@ -66,25 +134,21 @@ func createTeachingGroup(parentGroupID int64, groupName string) (*gitlab.Group, 
 }
 
 func createGitlabGroup(parentGroupID int64, groupName string, projectCreationLevel gitlab.ProjectCreationLevelValue, subGroupCreationLevel gitlab.SubGroupCreationLevelValue) (*gitlab.Group, error) {
-	// Create a top level group
+	existing, err := findSubGroup(groupName, parentGroupID)
+	if err != nil {
+		return nil, fmt.Errorf("check if group %q exists: %w", groupName, err)
+	}
+	if existing != nil {
+		return existing, nil
+	}
+
 	git, err := getClient()
 	if err != nil {
-		log.Error("failed to create group: ", groupName, " due to failed client creation")
 		return nil, err
-	}
-
-	exists, group, err := checkIfSubGroupExists(groupName, parentGroupID)
-	if err != nil {
-		log.Error("failed to create course iteration group: ", err)
-		return nil, err
-	}
-
-	if exists {
-		return group, nil
 	}
 
 	// Create a group
-	group, _, err = git.Groups.CreateGroup(&gitlab.CreateGroupOptions{
+	group, _, err := git.Groups.CreateGroup(&gitlab.CreateGroupOptions{
 		Name:                  gitlab.Ptr(groupName),
 		ParentID:              gitlab.Ptr(parentGroupID),
 		ProjectCreationLevel:  gitlab.Ptr(projectCreationLevel),
@@ -94,8 +158,15 @@ func createGitlabGroup(parentGroupID int64, groupName string, projectCreationLev
 	})
 
 	if err != nil {
-		log.Error("failed to create developer group: ", err)
-		return nil, err
+		if !isAlreadyExistsError(err) {
+			return nil, fmt.Errorf("create group %q: %w", groupName, err)
+		}
+		// Race: another request created it between our check and create
+		existing, findErr := findSubGroup(groupName, parentGroupID)
+		if findErr != nil || existing == nil {
+			return nil, fmt.Errorf("group %q conflict but not found: %w", groupName, err)
+		}
+		return existing, nil
 	}
 
 	return group, nil
@@ -104,8 +175,7 @@ func createGitlabGroup(parentGroupID int64, groupName string, projectCreationLev
 func getUserID(username string) (*gitlab.User, error) {
 	git, err := getClient()
 	if err != nil {
-		log.Error("failed to get client: ", err)
-		return nil, err
+		return nil, fmt.Errorf("get client for user lookup %q: %w", username, err)
 	}
 
 	userOpts := &gitlab.ListUsersOptions{
@@ -114,24 +184,22 @@ func getUserID(username string) (*gitlab.User, error) {
 
 	users, _, err := git.Users.ListUsers(userOpts)
 	if err != nil {
-		log.Error("failed to get user with username : ", username, ", error: ", err)
-		return nil, err
+		return nil, fmt.Errorf("list users for %q: %w", username, err)
 	}
 
 	if len(users) != 1 || users[0] == nil {
-		log.Error("failed to get user id: user not found")
-		return nil, errors.New("user not found")
+		return nil, fmt.Errorf("user %q not found on GitLab", username)
 	}
 	return users[0], nil
 }
 
-func CreateStudentProject(repoName string, devID, tutorID int64, introCourseID, devGroupID int64, studentName, submissionDeadline string) error {
+func CreateStudentProject(repoName string, devID, tutorID, introCourseID int64, introCourseGroupPath string, devGroupID int64, studentName, submissionDeadline string) error {
 	git, err := getClient()
 	if err != nil {
-		log.Error("failed to get client: ", err)
-		return errors.New("failed create student project")
+		return fmt.Errorf("get client for project %q: %w", repoName, err)
 	}
 
+	// 1. Create project (idempotent: handle conflict by fetching existing)
 	p := &gitlab.CreateProjectOptions{
 		Name:                             gitlab.Ptr(repoName),
 		NamespaceID:                      gitlab.Ptr(introCourseID),
@@ -157,60 +225,64 @@ func CreateStudentProject(repoName string, devID, tutorID int64, introCourseID, 
 
 	project, _, err := git.Projects.CreateProject(p)
 	if err != nil {
-		log.Error("failed to create project: ", err)
-		return errors.New("failed create student project")
+		if !isAlreadyExistsError(err) {
+			return fmt.Errorf("create project %q: %w", repoName, err)
+		}
+		// Project already exists — fetch by deterministic path
+		projectPath := introCourseGroupPath + "/" + repoName
+		project, _, err = git.Projects.GetProject(projectPath, nil)
+		if err != nil {
+			return fmt.Errorf("fetch existing project %q: %w", projectPath, err)
+		}
+		log.WithField("project", repoName).Info("project already exists, continuing with setup")
 	}
 
-	err = createProjectFiles(git, project.ID, studentName, submissionDeadline)
+	// 2. Create project files (idempotent: skip files that already exist)
+	err = createProjectFiles(git, project.ID, repoName, studentName, submissionDeadline)
 	if err != nil {
 		return err
 	}
 
-	// Add branch protection
+	// 3. Branch protection (idempotent: skip if already protected)
 	_, _, err = git.ProtectedBranches.ProtectRepositoryBranches(project.ID, &gitlab.ProtectRepositoryBranchesOptions{
 		Name:             gitlab.Ptr("main"),
 		PushAccessLevel:  gitlab.Ptr(gitlab.MaintainerPermissions),
 		MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
 	})
-	if err != nil {
-		log.Error("failed to add branch protect rules: ", err)
-		return errors.New("failed add branch protect rules")
+	if err != nil && !isAlreadyExistsError(err) {
+		return fmt.Errorf("protect branch for %q: %w", repoName, err)
 	}
 
-	err = createIssueBoard(git, project.ID)
+	// 4. Issue board (idempotent: reuse existing board, add missing lists)
+	err = ensureIssueBoard(git, project.ID, repoName)
 	if err != nil {
 		return err
 	}
 
-	// Add project members (Last step as this might fail if the tutor is already a member of a "higher" group)
-	err = addProjectMembers(git, project.ID, tutorID, devID, devGroupID)
+	// 5. Members (idempotent: skip if already a member)
+	// Last step before approval rule as this might fail if the tutor is already a member of a "higher" group
+	err = addProjectMembers(git, project.ID, repoName, tutorID, devID, devGroupID)
 	if err != nil {
 		return err
 	}
 
-	// Add MR approval rule
-	_, _, err = git.Projects.CreateProjectApprovalRule(project.ID, &gitlab.CreateProjectLevelRuleOptions{
-		Name:              gitlab.Ptr("Tutor Approval"),
-		ApprovalsRequired: gitlab.Ptr(int64(1)),
-		UserIDs:           gitlab.Ptr([]int64{tutorID}),
-	})
+	// 6. Approval rule (idempotent: skip if "Tutor Approval" rule exists)
+	err = ensureApprovalRule(git, project.ID, repoName, tutorID)
 	if err != nil {
-		log.Error("failed to add MR approval rule: ", err)
-		return errors.New("failed add MR approval rule")
+		return err
 	}
 
 	return nil
 }
 
-func addProjectMembers(git *gitlab.Client, projectID, tutorID, devID, devGroupID int64) error {
+func addProjectMembers(git *gitlab.Client, projectID int64, repoName string, tutorID, devID, devGroupID int64) error {
 	// Add student to the project
 	_, _, err := git.ProjectMembers.AddProjectMember(projectID, &gitlab.AddProjectMemberOptions{
 		UserID:      gitlab.Ptr(devID),
 		AccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
 	})
-	if err != nil {
-		log.Error("failed to add student to project: ", err)
-		return errors.New("failed add student to project")
+	if err != nil && !isAlreadyExistsError(err) {
+		return fmt.Errorf("add student %d to project %q: %w", devID, repoName, err)
 	}
 
 	// Add student to the developer group
@@ -218,9 +290,8 @@ func addProjectMembers(git *gitlab.Client, projectID, tutorID, devID, devGroupID
 		UserID:      gitlab.Ptr(devID),
 		AccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
 	})
-	if err != nil {
-		log.Error("failed to add student to developer group: ", err)
-		return errors.New("failed add student to developer group")
+	if err != nil && !isAlreadyExistsError(err) {
+		return fmt.Errorf("add student %d to developer group for %q: %w", devID, repoName, err)
 	}
 
 	// Add tutor to the project
@@ -228,53 +299,80 @@ func addProjectMembers(git *gitlab.Client, projectID, tutorID, devID, devGroupID
 		UserID:      gitlab.Ptr(tutorID),
 		AccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
 	})
-	if err != nil {
-		log.Error("failed to add tutor to project: ", err)
-		return errors.New("failed add tutor to project")
+	if err != nil && !isAlreadyExistsError(err) {
+		return fmt.Errorf("add tutor %d to project %q: %w", tutorID, repoName, err)
 	}
 
 	return nil
 }
 
-func createIssueBoard(git *gitlab.Client, projectID int64) error {
-	// Setup issue board
-	issueBoard, _, err := git.Boards.CreateIssueBoard(projectID, &gitlab.CreateIssueBoardOptions{
-		Name: gitlab.Ptr("Issue Board"),
-	})
+func ensureIssueBoard(git *gitlab.Client, projectID int64, repoName string) error {
+	boards, _, err := git.Boards.ListIssueBoards(projectID, nil)
 	if err != nil {
-		log.Error("failed to create issue board: ", err)
-		return errors.New("failed create issue board")
+		return fmt.Errorf("list issue boards for %q: %w", repoName, err)
 	}
 
-	// Add issue board lists
-	_, _, err = git.Boards.CreateIssueBoardList(projectID, issueBoard.ID, &gitlab.CreateIssueBoardListOptions{
-		LabelID: gitlab.Ptr(IN_PROGRESS_LABEL_ID),
-	})
-	if err != nil {
-		log.Error("failed to create issue board list: ", err)
-		return errors.New("failed create issue board list")
+	// Find existing board by name, or create one.
+	// GitLab allows duplicate board names, so we search first to avoid
+	// creating duplicates on partial-failure retries.
+	var board *gitlab.IssueBoard
+	for _, b := range boards {
+		if b.Name == "Issue Board" {
+			board = b
+			break
+		}
+	}
+	if board == nil {
+		board, _, err = git.Boards.CreateIssueBoard(projectID, &gitlab.CreateIssueBoardOptions{
+			Name: gitlab.Ptr("Issue Board"),
+		})
+		if err != nil {
+			return fmt.Errorf("create issue board for %q: %w", repoName, err)
+		}
 	}
 
-	_, _, err = git.Boards.CreateIssueBoardList(projectID, issueBoard.ID, &gitlab.CreateIssueBoardListOptions{
-		LabelID: gitlab.Ptr(IN_REVIEW_LABEL_ID),
-	})
-	if err != nil {
-		log.Error("failed to create issue board list: ", err)
-		return errors.New("failed create issue board list")
+	// Add lists individually (idempotent: skip if label list already exists on this board)
+	hasLabel := func(labelID int64) bool {
+		for _, l := range board.Lists {
+			if l.Label != nil && l.Label.ID == labelID {
+				return true
+			}
+		}
+		return false
 	}
+
+	if !hasLabel(IN_PROGRESS_LABEL_ID) {
+		_, _, err = git.Boards.CreateIssueBoardList(projectID, board.ID, &gitlab.CreateIssueBoardListOptions{
+			LabelID: gitlab.Ptr(IN_PROGRESS_LABEL_ID),
+		})
+		if err != nil && !isAlreadyExistsError(err) {
+			return fmt.Errorf("create 'In Progress' board list for %q: %w", repoName, err)
+		}
+	}
+
+	if !hasLabel(IN_REVIEW_LABEL_ID) {
+		_, _, err = git.Boards.CreateIssueBoardList(projectID, board.ID, &gitlab.CreateIssueBoardListOptions{
+			LabelID: gitlab.Ptr(IN_REVIEW_LABEL_ID),
+		})
+		if err != nil && !isAlreadyExistsError(err) {
+			return fmt.Errorf("create 'In Review' board list for %q: %w", repoName, err)
+		}
+	}
+
 	return nil
 }
 
-func createProjectFiles(git *gitlab.Client, projectID int64, studentName, submissionDeadline string) error {
+// createProjectFiles adds scaffold files to a student project.
+// Existing files are skipped (create-if-absent), not overwritten.
+func createProjectFiles(git *gitlab.Client, projectID int64, repoName, studentName, submissionDeadline string) error {
 	// Add custom README
 	_, _, err := git.RepositoryFiles.CreateFile(projectID, "README.md", &gitlab.CreateFileOptions{
 		Branch:        gitlab.Ptr("main"),
 		Content:       gitlab.Ptr(data.GetReadme(studentName, submissionDeadline)),
 		CommitMessage: gitlab.Ptr("Add custom README"),
 	})
-	if err != nil {
-		log.Error("failed to add custom README: ", err)
-		return errors.New("failed add custom README")
+	if err != nil && !isAlreadyExistsError(err) {
+		return fmt.Errorf("create README for %q: %w", repoName, err)
 	}
 
 	// Add custom swiftlint
@@ -283,9 +381,8 @@ func createProjectFiles(git *gitlab.Client, projectID int64, studentName, submis
 		Content:       gitlab.Ptr(data.GetSwiftlint()),
 		CommitMessage: gitlab.Ptr("Add custom .swiftlint.yml"),
 	})
-	if err != nil {
-		log.Error("failed to add custom .swiftlint.yml: ", err)
-		return errors.New("failed add custom .swiftlint.yml")
+	if err != nil && !isAlreadyExistsError(err) {
+		return fmt.Errorf("create .swiftlint.yml for %q: %w", repoName, err)
 	}
 
 	// Add custom gitignore
@@ -294,58 +391,35 @@ func createProjectFiles(git *gitlab.Client, projectID int64, studentName, submis
 		Content:       gitlab.Ptr(data.GetGitignore()),
 		CommitMessage: gitlab.Ptr("Add custom .gitignore"),
 	})
-	if err != nil {
-		log.Error("failed to add custom .gitignore: ", err)
-		return errors.New("failed add custom .gitignore")
+	if err != nil && !isAlreadyExistsError(err) {
+		return fmt.Errorf("create .gitignore for %q: %w", repoName, err)
 	}
 
 	return nil
 }
 
-func getSubGroup(groupName string, parentGroupID int64) (*gitlab.Group, error) {
-	git, err := getClient()
+// ensureApprovalRule creates the "Tutor Approval" rule if it doesn't exist.
+// GitLab does not enforce uniqueness on approval rule names, so we must
+// check first — create-then-handle-conflict is not possible for this resource.
+func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tutorID int64) error {
+	rules, _, err := git.Projects.GetProjectApprovalRules(projectID, nil)
 	if err != nil {
-		log.Error("failed to get group: ", err)
-		return nil, err
+		return fmt.Errorf("list approval rules for %q: %w", repoName, err)
 	}
-	groups, _, err := git.Groups.ListSubGroups(parentGroupID, &gitlab.ListSubGroupsOptions{
-		AllAvailable: gitlab.Ptr(true),
-	})
-	if err != nil {
-		log.Error("failed to get group: ", err)
-		return nil, err
-	}
-
-	for _, group := range groups {
-		log.Info("group: ", group.Name, " parent: ", group.ParentID)
-		if group.Name == groupName && group.ParentID == parentGroupID {
-			return group, nil
+	for _, r := range rules {
+		if r.Name == "Tutor Approval" {
+			return nil
 		}
 	}
-	return nil, errors.New("subgroup not found")
-}
 
-func checkIfSubGroupExists(groupName string, parentGroupID int64) (bool, *gitlab.Group, error) {
-	git, err := getClient()
-	if err != nil {
-		log.Error("failed to get group: ", err)
-		return false, nil, err
-	}
-
-	groups, _, err := git.Groups.ListSubGroups(parentGroupID, &gitlab.ListSubGroupsOptions{
-		Search:       gitlab.Ptr(groupName),
-		AllAvailable: gitlab.Ptr(true),
+	_, _, err = git.Projects.CreateProjectApprovalRule(projectID, &gitlab.CreateProjectLevelRuleOptions{
+		Name:              gitlab.Ptr("Tutor Approval"),
+		ApprovalsRequired: gitlab.Ptr(int64(1)),
+		UserIDs:           gitlab.Ptr([]int64{tutorID}),
 	})
 	if err != nil {
-		log.Error("failed to get group: ", err)
-		return false, nil, err
+		return fmt.Errorf("create approval rule for %q: %w", repoName, err)
 	}
 
-	for _, group := range groups {
-		log.Info("group: ", group.Name, " parent: ", group.ParentID)
-		if group.Name == groupName && group.ParentID == parentGroupID {
-			return true, group, nil
-		}
-	}
-	return false, nil, nil
+	return nil
 }
