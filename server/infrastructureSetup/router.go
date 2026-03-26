@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	promptSDK "github.com/prompt-edu/prompt-sdk"
 	"github.com/prompt-edu/prompt-intro-course/server/infrastructureSetup/infrastructureDTO"
+	promptSDK "github.com/prompt-edu/prompt-sdk"
 	log "github.com/sirupsen/logrus"
 )
 

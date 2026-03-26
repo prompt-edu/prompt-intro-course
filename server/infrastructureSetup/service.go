@@ -3,6 +3,7 @@ package infrastructureSetup
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,9 +15,9 @@ import (
 )
 
 type InfrastructureService struct {
-	queries           db.Queries
-	conn              *pgxpool.Pool
-	gitlabAccessToken string
+	queries      db.Queries
+	conn         *pgxpool.Pool
+	gitlabClient *gitlab.Client
 }
 
 var InfrastructureServiceSingleton *InfrastructureService
@@ -33,32 +34,30 @@ func CreateCourseInfrastructure(coursePhaseID uuid.UUID, semesterTag string) err
 
 	courseGroup, err := createCourseIterationGroup(semesterTag, ipraktikumGroup.ID)
 	if err != nil {
-		log.Error("Failed to create course iteration group: ", err)
 		return err
 	}
 
-	// 2.) Create the developer group
-	_, err = createDeveloperTopLevelGroup(courseGroup.ID)
-	if err != nil {
-		log.Error("Failed to create developer group: ", err)
+	// Steps 2-5 are independent — collect all errors instead of failing fast
+	var errs []error
+
+	if _, err = createDeveloperTopLevelGroup(courseGroup.ID); err != nil {
+		errs = append(errs, fmt.Errorf("create developer group: %w", err))
 	}
 
-	// 3.) Create the tutor groups
-	_, err = createTeachingGroup(courseGroup.ID, "tutors")
-	if err != nil {
-		log.Error("Failed to create tutor group: ", err)
+	if _, err = createTeachingGroup(courseGroup.ID, "tutors"); err != nil {
+		errs = append(errs, fmt.Errorf("create tutors group: %w", err))
 	}
 
-	// 4.) Create the coach group
-	_, err = createTeachingGroup(courseGroup.ID, "coaches")
-	if err != nil {
-		log.Error("Failed to create coach group: ", err)
+	if _, err = createTeachingGroup(courseGroup.ID, "coaches"); err != nil {
+		errs = append(errs, fmt.Errorf("create coaches group: %w", err))
 	}
 
-	// 5.) Create the introCourse group
-	_, err = createTeachingGroup(courseGroup.ID, "Introcourse")
-	if err != nil {
-		log.Error("Failed to create introCourse group: ", err)
+	if _, err = createTeachingGroup(courseGroup.ID, "Introcourse"); err != nil {
+		errs = append(errs, fmt.Errorf("create Introcourse group: %w", err))
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 
 	return nil
@@ -71,11 +70,10 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 		CoursePhaseID:         coursePhaseID,
 	})
 	if err != nil {
-		log.Error("Failed to get developer profile: ", err)
-		return errors.New("failed to get developer profile")
-	} else if devProfile.GitlabUsername == "" {
-		log.Error("cannot create student repo due to missing student gitlab username")
-		return errors.New("cannot create student repo due to missing student gitlab username")
+		return fmt.Errorf("get developer profile: %w", err)
+	}
+	if devProfile.GitlabUsername == "" {
+		return fmt.Errorf("cannot create student repo: missing GitLab username for participation %s", courseParticipationID)
 	}
 
 	// 2.) Get the assigned tutor
@@ -84,11 +82,10 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 		CoursePhaseID:   coursePhaseID,
 	})
 	if err != nil {
-		log.Error("Failed to get assigned tutor: ", err)
-		return errors.New("failed to get assigned tutor")
-	} else if !tutor.GitlabUsername.Valid || tutor.GitlabUsername.String == "" {
-		log.Error("cannot create student repo due to missing tutor gitlab username")
-		return errors.New("cannot create student repo due to missing tutor gitlab username")
+		return fmt.Errorf("get assigned tutor: %w", err)
+	}
+	if !tutor.GitlabUsername.Valid || tutor.GitlabUsername.String == "" {
+		return fmt.Errorf("cannot create student repo: missing tutor GitLab username for participation %s", courseParticipationID)
 	}
 
 	log.Info("Creating student repo for student: ", devProfile.GitlabUsername, " with tutor: ", tutor.AssignedTutor)
@@ -96,14 +93,12 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 	// 3.) Get Gitlab IDs
 	studentGitlabUser, err := getUserID(devProfile.GitlabUsername)
 	if err != nil {
-		log.Error("Failed to get student gitlab id: ", err)
-		return errors.New("failed to get student gitlab id")
+		return fmt.Errorf("get student GitLab ID for %q: %w", devProfile.GitlabUsername, err)
 	}
 
 	tutorGitlabUser, err := getUserID(tutor.GitlabUsername.String)
 	if err != nil {
-		log.Error("Failed to get tutor gitlab id: ", err)
-		return errors.New("failed to get tutor gitlab id")
+		return fmt.Errorf("get tutor GitLab ID for %q: %w", tutor.GitlabUsername.String, err)
 	}
 
 	// 4.) Get required GitLab groups
@@ -114,27 +109,23 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 
 	semesterGroup, err := getSubGroup(semesterTag, ipraktikumGroup.ID)
 	if err != nil {
-		log.Error("Failed to get course group: ", err)
-		return err
+		return fmt.Errorf("get semester group %q: %w", semesterTag, err)
 	}
 
 	introCourseGroup, err := getSubGroup("Introcourse", semesterGroup.ID)
 	if err != nil {
-		log.Error("Failed to get intro course group: ", err)
-		return err
+		return fmt.Errorf("get Introcourse group: %w", err)
 	}
 
 	developerGroup, err := getSubGroup("developer", semesterGroup.ID)
 	if err != nil {
-		log.Error("Failed to get intro course group: ", err)
-		return err
+		return fmt.Errorf("get developer group: %w", err)
 	}
 
-	// 5.) Create the student group
-	err = CreateStudentProject(repoName, studentGitlabUser.ID, tutorGitlabUser.ID, introCourseGroup.ID, developerGroup.ID, studentName, submissionDeadline)
+	// 5.) Create the student project (fully idempotent — safe to re-run)
+	err = CreateStudentProject(repoName, studentGitlabUser.ID, tutorGitlabUser.ID, introCourseGroup.ID, introCourseGroup.FullPath, developerGroup.ID, studentName, submissionDeadline)
 	if err != nil {
-		log.Error("Failed to create student project: ", err)
-		// store error in the db
+		log.WithField("student", repoName).Error("Failed to create student project: ", err)
 		dbError := InfrastructureServiceSingleton.queries.AddGitlabError(ctx, db.AddGitlabErrorParams{
 			CourseParticipationID: courseParticipationID,
 			CoursePhaseID:         coursePhaseID,
@@ -152,8 +143,7 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 	})
 
 	if err != nil {
-		log.Error("Failed to update gitlab status in db: ", err)
-		return errors.New("failed to update gitlab status in db")
+		return fmt.Errorf("update gitlab status in db: %w", err)
 	}
 
 	return nil
@@ -162,34 +152,34 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 func getiPraktikumGroup() (*gitlab.Group, error) {
 	ipraktikumGroup, err := getSubGroup(I_PRAKTIKUM_GROUP_NAME, ASE_GROUP_ID)
 	if err != nil {
-		log.Error("Failed to get group: ", err)
-		return nil, err
+		return nil, fmt.Errorf("get iPraktikum group: %w", err)
 	}
 
 	return ipraktikumGroup, nil
-
 }
 
 func GetAllStudentGitlabStatus(c context.Context, coursePhaseID uuid.UUID) ([]infrastructureDTO.GitlabStatus, error) {
-	// 1.) Get all gitlab status
-	gitlabStatuses, err := InfrastructureServiceSingleton.queries.GetAllGitlabStatus(c, coursePhaseID)
+	ctxWithTimeout, cancel := db.GetTimeoutContext(c)
+	defer cancel()
+
+	gitlabStatuses, err := InfrastructureServiceSingleton.queries.GetAllGitlabStatus(ctxWithTimeout, coursePhaseID)
 	if err != nil {
-		log.Error("Failed to get gitlab statuses: ", err)
-		return nil, err
+		return nil, fmt.Errorf("get gitlab statuses: %w", err)
 	}
 
 	return infrastructureDTO.GetGitlabStatusDTOsFromModels(gitlabStatuses), nil
-
 }
 
 func ManuallyOverwriteStudentGitlabStatus(c context.Context, coursePhaseID, courseParticipationID uuid.UUID) error {
-	err := InfrastructureServiceSingleton.queries.AddGitlabStatus(c, db.AddGitlabStatusParams{
+	ctxWithTimeout, cancel := db.GetTimeoutContext(c)
+	defer cancel()
+
+	err := InfrastructureServiceSingleton.queries.AddGitlabStatus(ctxWithTimeout, db.AddGitlabStatusParams{
 		CourseParticipationID: courseParticipationID,
 		CoursePhaseID:         coursePhaseID,
 	})
 	if err != nil {
-		log.Error("Failed to update gitlab status in db: ", err)
-		return err
+		return fmt.Errorf("update gitlab status in db: %w", err)
 	}
 	return nil
 }
