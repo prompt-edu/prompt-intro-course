@@ -40,18 +40,22 @@ func CreateCourseInfrastructure(coursePhaseID uuid.UUID, semesterTag string) err
 	// Steps 2-5 are independent — collect all errors instead of failing fast
 	var errs []error
 
+	// 2.) Create the developer group
 	if _, err = createDeveloperTopLevelGroup(courseGroup.ID); err != nil {
 		errs = append(errs, fmt.Errorf("create developer group: %w", err))
 	}
 
+	// 3.) Create the tutor groups
 	if _, err = createTeachingGroup(courseGroup.ID, "tutors"); err != nil {
 		errs = append(errs, fmt.Errorf("create tutors group: %w", err))
 	}
 
+	// 4.) Create the coach group
 	if _, err = createTeachingGroup(courseGroup.ID, "coaches"); err != nil {
 		errs = append(errs, fmt.Errorf("create coaches group: %w", err))
 	}
 
+	// 5.) Create the introCourse group
 	if _, err = createTeachingGroup(courseGroup.ID, "Introcourse"); err != nil {
 		errs = append(errs, fmt.Errorf("create Introcourse group: %w", err))
 	}
@@ -126,6 +130,7 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 	err = CreateStudentProject(repoName, studentGitlabUser.ID, tutorGitlabUser.ID, introCourseGroup.ID, introCourseGroup.FullPath, developerGroup.ID, studentName, submissionDeadline)
 	if err != nil {
 		log.WithField("student", repoName).Error("Failed to create student project: ", err)
+		// store error in the db
 		dbError := InfrastructureServiceSingleton.queries.AddGitlabError(ctx, db.AddGitlabErrorParams{
 			CourseParticipationID: courseParticipationID,
 			CoursePhaseID:         coursePhaseID,
@@ -156,18 +161,21 @@ func getiPraktikumGroup() (*gitlab.Group, error) {
 	}
 
 	return ipraktikumGroup, nil
+
 }
 
 func GetAllStudentGitlabStatus(c context.Context, coursePhaseID uuid.UUID) ([]infrastructureDTO.GitlabStatus, error) {
 	ctxWithTimeout, cancel := db.GetTimeoutContext(c)
 	defer cancel()
 
+	// 1.) Get all gitlab status
 	gitlabStatuses, err := InfrastructureServiceSingleton.queries.GetAllGitlabStatus(ctxWithTimeout, coursePhaseID)
 	if err != nil {
 		return nil, fmt.Errorf("get gitlab statuses: %w", err)
 	}
 
 	return infrastructureDTO.GetGitlabStatusDTOsFromModels(gitlabStatuses), nil
+
 }
 
 func ManuallyOverwriteStudentGitlabStatus(c context.Context, coursePhaseID, courseParticipationID uuid.UUID) error {

@@ -128,7 +128,7 @@ func createDeveloperTopLevelGroup(parentGroupID int64) (*gitlab.Group, error) {
 	return createGitlabGroup(parentGroupID, "developer", gitlab.NoOneProjectCreation, gitlab.OwnerSubGroupCreationLevelValue)
 }
 
-// createTeachingGroup creates groups for tutors and coaches.
+// create Groups for tutors and coaches
 func createTeachingGroup(parentGroupID int64, groupName string) (*gitlab.Group, error) {
 	return createGitlabGroup(parentGroupID, groupName, gitlab.DeveloperProjectCreation, gitlab.OwnerSubGroupCreationLevelValue)
 }
@@ -147,6 +147,7 @@ func createGitlabGroup(parentGroupID int64, groupName string, projectCreationLev
 		return nil, err
 	}
 
+	// Create a group
 	group, _, err := git.Groups.CreateGroup(&gitlab.CreateGroupOptions{
 		Name:                  gitlab.Ptr(groupName),
 		ParentID:              gitlab.Ptr(parentGroupID),
@@ -155,6 +156,7 @@ func createGitlabGroup(parentGroupID int64, groupName string, projectCreationLev
 		AutoDevopsEnabled:     gitlab.Ptr(false),
 		Path:                  gitlab.Ptr(groupName),
 	})
+
 	if err != nil {
 		if !isAlreadyExistsError(err) {
 			return nil, fmt.Errorf("create group %q: %w", groupName, err)
@@ -176,9 +178,11 @@ func getUserID(username string) (*gitlab.User, error) {
 		return nil, fmt.Errorf("get client for user lookup %q: %w", username, err)
 	}
 
-	users, _, err := git.Users.ListUsers(&gitlab.ListUsersOptions{
+	userOpts := &gitlab.ListUsersOptions{
 		Username: gitlab.Ptr(username),
-	})
+	}
+
+	users, _, err := git.Users.ListUsers(userOpts)
 	if err != nil {
 		return nil, fmt.Errorf("list users for %q: %w", username, err)
 	}
@@ -203,20 +207,20 @@ func CreateStudentProject(repoName string, devID, tutorID, introCourseID int64, 
 		OnlyAllowMergeIfPipelineSucceeds: gitlab.Ptr(true),
 		BuildsAccessLevel:                gitlab.Ptr(gitlab.PrivateAccessControl),
 		ContainerRegistryAccessLevel:     gitlab.Ptr(gitlab.DisabledAccessControl),
-		EnvironmentsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl),
-		FeatureFlagsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl),
-		ForkingAccessLevel:               gitlab.Ptr(gitlab.DisabledAccessControl),
-		InfrastructureAccessLevel:        gitlab.Ptr(gitlab.DisabledAccessControl),
-		PackagesEnabled:                  gitlab.Ptr(false),
-		ReleasesAccessLevel:              gitlab.Ptr(gitlab.DisabledAccessControl),
-		SecurityAndComplianceAccessLevel: gitlab.Ptr(gitlab.DisabledAccessControl),
-		SnippetsAccessLevel:              gitlab.Ptr(gitlab.DisabledAccessControl),
-		WikiAccessLevel:                  gitlab.Ptr(gitlab.DisabledAccessControl),
-		RequirementsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl),
-		ModelExperimentsAccessLevel:      gitlab.Ptr(gitlab.DisabledAccessControl),
-		ModelRegistryAccessLevel:         gitlab.Ptr(gitlab.DisabledAccessControl),
-		PagesAccessLevel:                 gitlab.Ptr(gitlab.DisabledAccessControl),
-		MonitorAccessLevel:               gitlab.Ptr(gitlab.DisabledAccessControl),
+		EnvironmentsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl), // disable environments
+		FeatureFlagsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl), // disable feature flags
+		ForkingAccessLevel:               gitlab.Ptr(gitlab.DisabledAccessControl), // disable forking
+		InfrastructureAccessLevel:        gitlab.Ptr(gitlab.DisabledAccessControl), // disable infrastructure
+		PackagesEnabled:                  gitlab.Ptr(false),                        // disable packages
+		ReleasesAccessLevel:              gitlab.Ptr(gitlab.DisabledAccessControl), // disable releases
+		SecurityAndComplianceAccessLevel: gitlab.Ptr(gitlab.DisabledAccessControl), // disable security & compliance
+		SnippetsAccessLevel:              gitlab.Ptr(gitlab.DisabledAccessControl), // disable snippets
+		WikiAccessLevel:                  gitlab.Ptr(gitlab.DisabledAccessControl), // disable wiki
+		RequirementsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl), // disable requirements
+		ModelExperimentsAccessLevel:      gitlab.Ptr(gitlab.DisabledAccessControl), // disable model experiments
+		ModelRegistryAccessLevel:         gitlab.Ptr(gitlab.DisabledAccessControl), // disable model registry
+		PagesAccessLevel:                 gitlab.Ptr(gitlab.DisabledAccessControl), // disable pages
+		MonitorAccessLevel:               gitlab.Ptr(gitlab.DisabledAccessControl), // disable monitor
 	}
 
 	project, _, err := git.Projects.CreateProject(p)
@@ -256,6 +260,7 @@ func CreateStudentProject(repoName string, devID, tutorID, introCourseID int64, 
 	}
 
 	// 5. Members (idempotent: skip if already a member)
+	// Last step before approval rule as this might fail if the tutor is already a member of a "higher" group
 	err = addProjectMembers(git, project.ID, repoName, tutorID, devID, devGroupID)
 	if err != nil {
 		return err
