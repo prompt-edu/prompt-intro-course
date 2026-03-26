@@ -153,7 +153,8 @@ func main() {
 
 	// Infrastructure Setup
 	gitlabAccessToken := utils.GetEnv("GITLAB_ACCESS_TOKEN", "")
-	infrastructureSetup.InitInfrastructureModule(api, *query, conn, gitlabAccessToken)
+	teachingMaterialProjectID := utils.GetEnv("GITLAB_TEACHING_MATERIAL_PROJECT_ID", "")
+	infrastructureSetup.InitInfrastructureModule(api, *query, conn, gitlabAccessToken, teachingMaterialProjectID)
 
 	copyApi := router.Group("intro-course/api")
 	copy.InitCopyModule(copyApi, *query, conn)

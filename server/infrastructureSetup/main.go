@@ -9,7 +9,7 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
-func InitInfrastructureModule(routerGroup *gin.RouterGroup, queries db.Queries, conn *pgxpool.Pool, gitlabAccessToken string) {
+func InitInfrastructureModule(routerGroup *gin.RouterGroup, queries db.Queries, conn *pgxpool.Pool, gitlabAccessToken, teachingMaterialProjectID string) {
 	setupInfrastructureRouter(routerGroup, promptSDK.AuthenticationMiddleware)
 
 	var gitlabClient *gitlab.Client
@@ -25,9 +25,21 @@ func InitInfrastructureModule(routerGroup *gin.RouterGroup, queries db.Queries, 
 		log.Warn("GITLAB_ACCESS_TOKEN not set — GitLab operations will fail")
 	}
 
-	InfrastructureServiceSingleton = &InfrastructureService{
-		queries:      queries,
-		conn:         conn,
-		gitlabClient: gitlabClient,
+	service := &InfrastructureService{
+		queries:                   queries,
+		conn:                      conn,
+		gitlabClient:              gitlabClient,
+		teachingMaterialProjectID: teachingMaterialProjectID,
+	}
+	InfrastructureServiceSingleton = service
+
+	// Best-effort cache warm — log error but don't crash the server.
+	// Other modules (developer profiles, seat plan, etc.) work fine without templates.
+	if gitlabClient != nil && teachingMaterialProjectID != "" {
+		if _, err := service.templates.get(gitlabClient, teachingMaterialProjectID); err != nil {
+			log.WithError(err).Error("Failed to warm template cache; student setup will retry on first request")
+		}
+	} else if teachingMaterialProjectID == "" {
+		log.Warn("GITLAB_TEACHING_MATERIAL_PROJECT_ID not set — student repo setup will fail")
 	}
 }

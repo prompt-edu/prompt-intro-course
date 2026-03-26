@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/prompt-edu/prompt-intro-course/server/infrastructureSetup/data"
 	log "github.com/sirupsen/logrus"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
@@ -193,6 +192,53 @@ func getUserID(username string) (*gitlab.User, error) {
 	return users[0], nil
 }
 
+// newCourseProjectOptions returns the shared project configuration for all
+// course projects (student repos and the demo repo). Features unrelated to
+// the intro course workflow are disabled to keep the UI clean for students.
+func newCourseProjectOptions(name string, namespaceID int64) *gitlab.CreateProjectOptions {
+	return &gitlab.CreateProjectOptions{
+		Name:                             gitlab.Ptr(name),
+		NamespaceID:                      gitlab.Ptr(namespaceID),
+		SharedRunnersEnabled:             gitlab.Ptr(true),
+		OnlyAllowMergeIfPipelineSucceeds: gitlab.Ptr(true),
+		BuildsAccessLevel:                gitlab.Ptr(gitlab.PrivateAccessControl),
+		ContainerRegistryAccessLevel:     gitlab.Ptr(gitlab.DisabledAccessControl),
+		EnvironmentsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl),
+		FeatureFlagsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl),
+		ForkingAccessLevel:               gitlab.Ptr(gitlab.DisabledAccessControl),
+		InfrastructureAccessLevel:        gitlab.Ptr(gitlab.DisabledAccessControl),
+		PackagesEnabled:                  gitlab.Ptr(false),
+		ReleasesAccessLevel:              gitlab.Ptr(gitlab.DisabledAccessControl),
+		SecurityAndComplianceAccessLevel: gitlab.Ptr(gitlab.DisabledAccessControl),
+		SnippetsAccessLevel:              gitlab.Ptr(gitlab.DisabledAccessControl),
+		WikiAccessLevel:                  gitlab.Ptr(gitlab.DisabledAccessControl),
+		RequirementsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl),
+		ModelExperimentsAccessLevel:      gitlab.Ptr(gitlab.DisabledAccessControl),
+		ModelRegistryAccessLevel:         gitlab.Ptr(gitlab.DisabledAccessControl),
+		PagesAccessLevel:                 gitlab.Ptr(gitlab.DisabledAccessControl),
+		MonitorAccessLevel:               gitlab.Ptr(gitlab.DisabledAccessControl),
+	}
+}
+
+// createOrGetProject creates a GitLab project or returns the existing one if
+// it already exists. This is the shared create-or-fetch pattern used by both
+// student and demo project creation.
+func createOrGetProject(git *gitlab.Client, opts *gitlab.CreateProjectOptions, groupPath string) (*gitlab.Project, error) {
+	project, _, err := git.Projects.CreateProject(opts)
+	if err != nil {
+		if !isAlreadyExistsError(err) {
+			return nil, fmt.Errorf("create project %q: %w", *opts.Name, err)
+		}
+		projectPath := groupPath + "/" + *opts.Name
+		project, _, err = git.Projects.GetProject(projectPath, nil)
+		if err != nil {
+			return nil, fmt.Errorf("fetch existing project %q: %w", projectPath, err)
+		}
+		log.WithField("project", *opts.Name).Info("project already exists, continuing with setup")
+	}
+	return project, nil
+}
+
 func CreateStudentProject(repoName string, devID, tutorID, introCourseID int64, introCourseGroupPath string, devGroupID int64, studentName, submissionDeadline string) error {
 	git, err := getClient()
 	if err != nil {
@@ -200,45 +246,16 @@ func CreateStudentProject(repoName string, devID, tutorID, introCourseID int64, 
 	}
 
 	// 1. Create project (idempotent: handle conflict by fetching existing)
-	p := &gitlab.CreateProjectOptions{
-		Name:                             gitlab.Ptr(repoName),
-		NamespaceID:                      gitlab.Ptr(introCourseID),
-		SharedRunnersEnabled:             gitlab.Ptr(true),
-		OnlyAllowMergeIfPipelineSucceeds: gitlab.Ptr(true),
-		BuildsAccessLevel:                gitlab.Ptr(gitlab.PrivateAccessControl),
-		ContainerRegistryAccessLevel:     gitlab.Ptr(gitlab.DisabledAccessControl),
-		EnvironmentsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl), // disable environments
-		FeatureFlagsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl), // disable feature flags
-		ForkingAccessLevel:               gitlab.Ptr(gitlab.DisabledAccessControl), // disable forking
-		InfrastructureAccessLevel:        gitlab.Ptr(gitlab.DisabledAccessControl), // disable infrastructure
-		PackagesEnabled:                  gitlab.Ptr(false),                        // disable packages
-		ReleasesAccessLevel:              gitlab.Ptr(gitlab.DisabledAccessControl), // disable releases
-		SecurityAndComplianceAccessLevel: gitlab.Ptr(gitlab.DisabledAccessControl), // disable security & compliance
-		SnippetsAccessLevel:              gitlab.Ptr(gitlab.DisabledAccessControl), // disable snippets
-		WikiAccessLevel:                  gitlab.Ptr(gitlab.DisabledAccessControl), // disable wiki
-		RequirementsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl), // disable requirements
-		ModelExperimentsAccessLevel:      gitlab.Ptr(gitlab.DisabledAccessControl), // disable model experiments
-		ModelRegistryAccessLevel:         gitlab.Ptr(gitlab.DisabledAccessControl), // disable model registry
-		PagesAccessLevel:                 gitlab.Ptr(gitlab.DisabledAccessControl), // disable pages
-		MonitorAccessLevel:               gitlab.Ptr(gitlab.DisabledAccessControl), // disable monitor
-	}
-
-	project, _, err := git.Projects.CreateProject(p)
+	project, err := createOrGetProject(git, newCourseProjectOptions(repoName, introCourseID), introCourseGroupPath)
 	if err != nil {
-		if !isAlreadyExistsError(err) {
-			return fmt.Errorf("create project %q: %w", repoName, err)
-		}
-		// Project already exists — fetch by deterministic path
-		projectPath := introCourseGroupPath + "/" + repoName
-		project, _, err = git.Projects.GetProject(projectPath, nil)
-		if err != nil {
-			return fmt.Errorf("fetch existing project %q: %w", projectPath, err)
-		}
-		log.WithField("project", repoName).Info("project already exists, continuing with setup")
+		return err
 	}
 
 	// 2. Create project files (idempotent: skip files that already exist)
-	err = createProjectFiles(git, project.ID, repoName, studentName, submissionDeadline)
+	err = createProjectFiles(git, project.ID, repoName, templateVars{
+		StudentName:        studentName,
+		SubmissionDeadline: submissionDeadline,
+	})
 	if err != nil {
 		return err
 	}
@@ -362,37 +379,42 @@ func ensureIssueBoard(git *gitlab.Client, projectID int64, repoName string) erro
 	return nil
 }
 
-// createProjectFiles adds scaffold files to a student project.
-// Existing files are skipped (create-if-absent), not overwritten.
-func createProjectFiles(git *gitlab.Client, projectID int64, repoName, studentName, submissionDeadline string) error {
-	// Add custom README
-	_, _, err := git.RepositoryFiles.CreateFile(projectID, "README.md", &gitlab.CreateFileOptions{
-		Branch:        gitlab.Ptr("main"),
-		Content:       gitlab.Ptr(data.GetReadme(studentName, submissionDeadline)),
-		CommitMessage: gitlab.Ptr("Add custom README"),
-	})
-	if err != nil && !isAlreadyExistsError(err) {
-		return fmt.Errorf("create README for %q: %w", repoName, err)
+// createProjectFiles fetches template files from the teaching material repo,
+// applies variable substitution, and pushes all files in a single atomic commit.
+// If the project already has commits on its default branch, file creation is
+// skipped entirely to maintain idempotency.
+func createProjectFiles(git *gitlab.Client, projectID int64, repoName string, vars templateVars) error {
+	svc := InfrastructureServiceSingleton
+	if svc.teachingMaterialProjectID == "" {
+		return fmt.Errorf("GITLAB_TEACHING_MATERIAL_PROJECT_ID not configured")
 	}
 
-	// Add custom swiftlint
-	_, _, err = git.RepositoryFiles.CreateFile(projectID, ".swiftlint.yml", &gitlab.CreateFileOptions{
-		Branch:        gitlab.Ptr("main"),
-		Content:       gitlab.Ptr(data.GetSwiftlint()),
-		CommitMessage: gitlab.Ptr("Add custom .swiftlint.yml"),
-	})
-	if err != nil && !isAlreadyExistsError(err) {
-		return fmt.Errorf("create .swiftlint.yml for %q: %w", repoName, err)
+	templates, err := svc.templates.get(git, svc.teachingMaterialProjectID)
+	if err != nil {
+		return fmt.Errorf("fetch templates for %q: %w", repoName, err)
 	}
 
-	// Add custom gitignore
-	_, _, err = git.RepositoryFiles.CreateFile(projectID, ".gitignore", &gitlab.CreateFileOptions{
+	actions := make([]*gitlab.CommitActionOptions, 0, len(templates))
+	for _, tmpl := range templates {
+		content := applyTemplateVars(tmpl.Content, vars)
+		action := &gitlab.CommitActionOptions{
+			Action:   gitlab.Ptr(gitlab.FileCreate),
+			FilePath: gitlab.Ptr(tmpl.Path),
+			Content:  gitlab.Ptr(content),
+		}
+		if tmpl.ExecuteFilemode {
+			action.ExecuteFilemode = gitlab.Ptr(true)
+		}
+		actions = append(actions, action)
+	}
+
+	_, _, err = git.Commits.CreateCommit(projectID, &gitlab.CreateCommitOptions{
 		Branch:        gitlab.Ptr("main"),
-		Content:       gitlab.Ptr(data.GetGitignore()),
-		CommitMessage: gitlab.Ptr("Add custom .gitignore"),
+		CommitMessage: gitlab.Ptr("Initialize repository from course template"),
+		Actions:       actions,
 	})
 	if err != nil && !isAlreadyExistsError(err) {
-		return fmt.Errorf("create .gitignore for %q: %w", repoName, err)
+		return fmt.Errorf("initialize %q from template: %w", repoName, err)
 	}
 
 	return nil
@@ -419,6 +441,45 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 	})
 	if err != nil {
 		return fmt.Errorf("create approval rule for %q: %w", repoName, err)
+	}
+
+	return nil
+}
+
+// createDemoProject creates a "demo" project in the Introcourse group,
+// initialized from the same template as student repos. This gives
+// instructors a reference repository for live demonstrations and testing.
+// Fully idempotent: safe to re-run on an existing course.
+func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourseGroupPath string) error {
+	const demoProjectName = "demo"
+
+	project, err := createOrGetProject(git, newCourseProjectOptions(demoProjectName, introCourseGroupID), introCourseGroupPath)
+	if err != nil {
+		return err
+	}
+
+	// Push template files with demo-specific substitutions
+	err = createProjectFiles(git, project.ID, demoProjectName, templateVars{
+		StudentName: "Demo",
+	})
+	if err != nil {
+		return err
+	}
+
+	// Protect main branch (same as student repos)
+	_, _, err = git.ProtectedBranches.ProtectRepositoryBranches(project.ID, &gitlab.ProtectRepositoryBranchesOptions{
+		Name:             gitlab.Ptr("main"),
+		PushAccessLevel:  gitlab.Ptr(gitlab.MaintainerPermissions),
+		MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
+	})
+	if err != nil && !isAlreadyExistsError(err) {
+		return fmt.Errorf("protect branch for %q: %w", demoProjectName, err)
+	}
+
+	// Issue board (same as student repos)
+	err = ensureIssueBoard(git, project.ID, demoProjectName)
+	if err != nil {
+		return err
 	}
 
 	return nil

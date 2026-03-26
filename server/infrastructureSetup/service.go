@@ -15,9 +15,11 @@ import (
 )
 
 type InfrastructureService struct {
-	queries      db.Queries
-	conn         *pgxpool.Pool
-	gitlabClient *gitlab.Client
+	queries                   db.Queries
+	conn                      *pgxpool.Pool
+	gitlabClient              *gitlab.Client
+	teachingMaterialProjectID string
+	templates                 templateCache
 }
 
 var InfrastructureServiceSingleton *InfrastructureService
@@ -37,7 +39,7 @@ func CreateCourseInfrastructure(coursePhaseID uuid.UUID, semesterTag string) err
 		return err
 	}
 
-	// Steps 2-5 are independent — collect all errors instead of failing fast
+	// Steps 2-4 are independent — collect all errors instead of failing fast
 	var errs []error
 
 	// 2.) Create the developer group
@@ -55,13 +57,23 @@ func CreateCourseInfrastructure(coursePhaseID uuid.UUID, semesterTag string) err
 		errs = append(errs, fmt.Errorf("create coaches group: %w", err))
 	}
 
-	// 5.) Create the introCourse group
-	if _, err = createTeachingGroup(courseGroup.ID, "Introcourse"); err != nil {
-		errs = append(errs, fmt.Errorf("create Introcourse group: %w", err))
-	}
-
 	if len(errs) > 0 {
 		return errors.Join(errs...)
+	}
+
+	// 5.) Create the introCourse group (fail-fast: demo project depends on it)
+	introCourseGroup, err := createTeachingGroup(courseGroup.ID, "Introcourse")
+	if err != nil {
+		return fmt.Errorf("create Introcourse group: %w", err)
+	}
+
+	// 6.) Create demo project for instructors (depends on Introcourse group)
+	git, err := getClient()
+	if err != nil {
+		return err
+	}
+	if err = createDemoProject(git, introCourseGroup.ID, introCourseGroup.FullPath); err != nil {
+		return fmt.Errorf("create demo project: %w", err)
 	}
 
 	return nil
