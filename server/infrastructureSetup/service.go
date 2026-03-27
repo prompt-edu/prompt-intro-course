@@ -25,8 +25,8 @@ type InfrastructureService struct {
 
 var InfrastructureServiceSingleton *InfrastructureService
 
-const TOP_LEVEL_GROUP_NAME = "ASE"
-const I_PRAKTIKUM_GROUP_NAME = "iPraktikum"
+const topLevelGroupName = "ASE"
+const iPraktikumGroupName = "iPraktikum"
 
 func CreateCourseInfrastructure(coursePhaseID uuid.UUID, semesterTag string) error {
 	// 1.) Get Top Level Group
@@ -111,16 +111,22 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 	if !tutor.GitlabUsername.Valid || tutor.GitlabUsername.String == "" {
 		return fmt.Errorf("cannot create student repo: missing tutor GitLab username for participation %s", courseParticipationID)
 	}
+	if !tutor.AssignedTutor.Valid {
+		return fmt.Errorf("cannot create student repo: no tutor assigned for participation %s", courseParticipationID)
+	}
 
-	log.Info("Creating student repo for student: ", devProfile.GitlabUsername, " with tutor: ", tutor.AssignedTutor)
+	log.WithFields(log.Fields{
+		"student": devProfile.GitlabUsername,
+		"tutor":   tutor.GitlabUsername.String,
+	}).Info("Creating student repo")
 
 	// 3.) Get Gitlab IDs
-	studentGitlabUser, err := getUserID(devProfile.GitlabUsername)
+	studentGitlabUser, err := getUser(devProfile.GitlabUsername)
 	if err != nil {
 		return fmt.Errorf("get student GitLab ID for %q: %w", devProfile.GitlabUsername, err)
 	}
 
-	tutorGitlabUser, err := getUserID(tutor.GitlabUsername.String)
+	tutorGitlabUser, err := getUser(tutor.GitlabUsername.String)
 	if err != nil {
 		return fmt.Errorf("get tutor GitLab ID for %q: %w", tutor.GitlabUsername.String, err)
 	}
@@ -158,7 +164,17 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 	}
 
 	// 6.) Create the student project in tutor's subgroup (fully idempotent)
-	err = CreateStudentProject(repoName, studentGitlabUser.ID, tutorGitlabUser.ID, tutorSubgroupID, tutorSubgroupPath, developerGroup.ID, introCourseGroup.FullPath, studentName, submissionDeadline)
+	err = CreateStudentProject(StudentProjectParams{
+		RepoName:             repoName,
+		DevID:                studentGitlabUser.ID,
+		TutorID:              tutorGitlabUser.ID,
+		TutorSubgroupID:      tutorSubgroupID,
+		TutorSubgroupPath:    tutorSubgroupPath,
+		DevGroupID:           developerGroup.ID,
+		IntroCourseGroupPath: introCourseGroup.FullPath,
+		StudentName:          studentName,
+		SubmissionDeadline:   submissionDeadline,
+	})
 	if err != nil {
 		log.WithField("student", repoName).Error("Failed to create student project: ", err)
 		// store error in the db
@@ -186,7 +202,7 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 }
 
 func getiPraktikumGroup() (*gitlab.Group, error) {
-	ipraktikumGroup, err := getSubGroup(I_PRAKTIKUM_GROUP_NAME, ASE_GROUP_ID)
+	ipraktikumGroup, err := getSubGroup(iPraktikumGroupName, aseGroupID)
 	if err != nil {
 		return nil, fmt.Errorf("get iPraktikum group: %w", err)
 	}

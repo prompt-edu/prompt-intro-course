@@ -38,8 +38,11 @@ type templateCache struct {
 	files []templateFile
 }
 
-const templateDir = "student_repo_template"
-const templateRef = "main"
+const (
+	templateDir      = "student_repo_template"
+	templateRef      = "main"
+	maxTemplateBytes = 1 << 20 // 1 MiB — guard against accidental binary commits
+)
 
 // get returns cached template files, fetching them on first call.
 // Thread-safe: concurrent callers block until the first fetch completes.
@@ -93,6 +96,9 @@ func fetchTemplateFiles(client *gitlab.Client, projectID string) ([]templateFile
 		if err != nil {
 			return nil, fmt.Errorf("fetch file %q from project %q: %w", node.Path, projectID, err)
 		}
+		if len(raw) > maxTemplateBytes {
+			return nil, fmt.Errorf("file %q in project %q exceeds max size (%d bytes > %d)", node.Path, projectID, len(raw), maxTemplateBytes)
+		}
 
 		relPath := strings.TrimPrefix(node.Path, templateDir+"/")
 
@@ -113,14 +119,10 @@ func fetchTemplateFiles(client *gitlab.Client, projectID string) ([]templateFile
 // applyTemplateVars replaces {{.VarName}} placeholders in content with the
 // corresponding values from vars. Files without placeholders are unchanged.
 func applyTemplateVars(content string, vars templateVars) string {
-	replacements := map[string]string{
-		"{{.StudentName}}":        vars.StudentName,
-		"{{.SubmissionDeadline}}": vars.SubmissionDeadline,
-	}
-	for placeholder, value := range replacements {
-		content = strings.ReplaceAll(content, placeholder, value)
-	}
-	return content
+	return strings.NewReplacer(
+		"{{.StudentName}}", vars.StudentName,
+		"{{.SubmissionDeadline}}", vars.SubmissionDeadline,
+	).Replace(content)
 }
 
 // --- Daily Issue Templates ---

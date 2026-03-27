@@ -924,8 +924,8 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 				{
 					"id": 1, "name": "Issue Board",
 					"lists": []map[string]interface{}{
-						{"id": 10, "label": map[string]interface{}{"id": IN_PROGRESS_LABEL_ID}},
-						{"id": 11, "label": map[string]interface{}{"id": IN_REVIEW_LABEL_ID}},
+						{"id": 10, "label": map[string]interface{}{"id": inProgressLabelID}},
+						{"id": 11, "label": map[string]interface{}{"id": inReviewLabelID}},
 					},
 				},
 			})
@@ -1203,4 +1203,152 @@ func TestIssueCacheThreadSafety(t *testing.T) {
 	wg.Wait()
 
 	assert.Equal(t, int32(1), fetchCount.Load(), "issue tree should be fetched exactly once")
+}
+
+func TestCreateCICDProject(t *testing.T) {
+	t.Run("creates new CI/CD project", func(t *testing.T) {
+		var createProjectBody map[string]interface{}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+
+			if r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects" {
+				_ = json.NewDecoder(r.Body).Decode(&createProjectBody)
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"id": 500, "name": "ci-cd",
+				})
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+
+		err = createCICDProject(client, 1, "ase/ipraktikum/introcourse")
+		require.NoError(t, err)
+
+		assert.Equal(t, "ci-cd", createProjectBody["name"])
+		assert.Equal(t, true, createProjectBody["initialize_with_readme"])
+		assert.Equal(t, true, createProjectBody["shared_runners_enabled"])
+	})
+
+	t.Run("idempotent on existing project", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+
+			if r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects" {
+				w.WriteHeader(http.StatusConflict)
+				_, _ = fmt.Fprint(w, `{"message":"conflict"}`)
+				return
+			}
+			if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v4/projects/") {
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"id": 500, "name": "ci-cd",
+				})
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+
+		err = createCICDProject(client, 1, "ase/ipraktikum/introcourse")
+		assert.NoError(t, err)
+	})
+}
+
+func TestEnsureApprovalRule(t *testing.T) {
+	t.Run("creates rule when none exists", func(t *testing.T) {
+		var ruleCreated bool
+		var ruleBody map[string]interface{}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+
+			// GetProjectApprovalRules — no rules yet
+			if r.URL.Path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodGet {
+				_ = json.NewEncoder(w).Encode([]interface{}{})
+				return
+			}
+			// CreateProjectApprovalRule
+			if r.URL.Path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodPost {
+				ruleCreated = true
+				_ = json.NewDecoder(r.Body).Decode(&ruleBody)
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"id": 1, "name": "Tutor Approval",
+				})
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+
+		err = ensureApprovalRule(client, 300, "test-repo", 42)
+		require.NoError(t, err)
+		assert.True(t, ruleCreated, "should create approval rule")
+		assert.Equal(t, "Tutor Approval", ruleBody["name"])
+	})
+
+	t.Run("skips when rule already exists", func(t *testing.T) {
+		var ruleCreated bool
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+
+			if r.URL.Path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodGet {
+				_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+					{"id": 1, "name": "Tutor Approval", "approvals_required": 1},
+				})
+				return
+			}
+			if r.URL.Path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodPost {
+				ruleCreated = true
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+
+		err = ensureApprovalRule(client, 300, "test-repo", 42)
+		assert.NoError(t, err)
+		assert.False(t, ruleCreated, "should not create duplicate rule")
+	})
+}
+
+func TestEnsureApprovalConfiguration(t *testing.T) {
+	var configBody map[string]interface{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/api/v4/projects/300/approvals" && r.Method == http.MethodPost {
+			_ = json.NewDecoder(r.Body).Decode(&configBody)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+
+	err = ensureApprovalConfiguration(client, 300, "test-repo")
+	require.NoError(t, err)
+
+	assert.Equal(t, true, configBody["reset_approvals_on_push"])
+	assert.Equal(t, false, configBody["merge_requests_author_approval"])
+	assert.Equal(t, true, configBody["merge_requests_disable_committers_approval"])
 }

@@ -8,15 +8,16 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/prompt-edu/prompt-intro-course/server/db/sqlc"
 	log "github.com/sirupsen/logrus"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
-const IN_PROGRESS_LABEL_ID int64 = 53319
-const IN_REVIEW_LABEL_ID int64 = 53320
-const ASE_GROUP_ID int64 = 186940
+const inProgressLabelID int64 = 53319
+const inReviewLabelID int64 = 53320
+const aseGroupID int64 = 186940
 
 var errGitLabClientNotInitialized = errors.New("gitlab client not initialized")
 
@@ -131,7 +132,7 @@ func createDeveloperTopLevelGroup(parentGroupID int64) (*gitlab.Group, error) {
 	return createGitlabGroup(parentGroupID, "developer", gitlab.NoOneProjectCreation, gitlab.OwnerSubGroupCreationLevelValue)
 }
 
-// create Groups for tutors and coaches
+// createTeachingGroup creates a subgroup for tutors or coaches.
 func createTeachingGroup(parentGroupID int64, groupName string) (*gitlab.Group, error) {
 	return createGitlabGroup(parentGroupID, groupName, gitlab.DeveloperProjectCreation, gitlab.OwnerSubGroupCreationLevelValue)
 }
@@ -175,7 +176,7 @@ func createGitlabGroup(parentGroupID int64, groupName string, projectCreationLev
 	return group, nil
 }
 
-func getUserID(username string) (*gitlab.User, error) {
+func getUser(username string) (*gitlab.User, error) {
 	git, err := getClient()
 	if err != nil {
 		return nil, fmt.Errorf("get client for user lookup %q: %w", username, err)
@@ -298,37 +299,51 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 	return nil
 }
 
-func CreateStudentProject(repoName string, devID, tutorID, tutorSubgroupID int64, tutorSubgroupPath string, devGroupID int64, introCourseGroupPath, studentName, submissionDeadline string) error {
+// StudentProjectParams bundles the parameters for CreateStudentProject to
+// avoid a long positional parameter list with multiple same-typed values.
+type StudentProjectParams struct {
+	RepoName             string
+	DevID                int64
+	TutorID              int64
+	TutorSubgroupID      int64
+	TutorSubgroupPath    string
+	DevGroupID           int64
+	IntroCourseGroupPath string
+	StudentName          string
+	SubmissionDeadline   string
+}
+
+func CreateStudentProject(p StudentProjectParams) error {
 	git, err := getClient()
 	if err != nil {
-		return fmt.Errorf("get client for project %q: %w", repoName, err)
+		return fmt.Errorf("get client for project %q: %w", p.RepoName, err)
 	}
 
-	ciCDRepoPath := introCourseGroupPath + "/ci-cd"
+	ciCDRepoPath := p.IntroCourseGroupPath + "/ci-cd"
 
 	// 1. Create project (idempotent: handle conflict by fetching existing)
-	project, err := createOrGetProject(git, newCourseProjectOptions(repoName, tutorSubgroupID, ciCDRepoPath), tutorSubgroupPath)
+	project, err := createOrGetProject(git, newCourseProjectOptions(p.RepoName, p.TutorSubgroupID, ciCDRepoPath), p.TutorSubgroupPath)
 	if err != nil {
 		return err
 	}
 
 	// 2. Shared project setup (files, branch protection, board, approvals, issues)
-	err = configureProject(git, project.ID, repoName, templateVars{
-		StudentName:        studentName,
-		SubmissionDeadline: submissionDeadline,
+	err = configureProject(git, project.ID, p.RepoName, templateVars{
+		StudentName:        p.StudentName,
+		SubmissionDeadline: p.SubmissionDeadline,
 	})
 	if err != nil {
 		return err
 	}
 
 	// 3. Members (idempotent: skip if already a member)
-	err = addProjectMembers(git, project.ID, repoName, devID, devGroupID)
+	err = addProjectMembers(git, project.ID, p.RepoName, p.DevID, p.DevGroupID)
 	if err != nil {
 		return err
 	}
 
 	// 4. Approval rule (idempotent: skip if "Tutor Approval" rule exists)
-	err = ensureApprovalRule(git, project.ID, repoName, tutorID)
+	err = ensureApprovalRule(git, project.ID, p.RepoName, p.TutorID)
 	if err != nil {
 		return err
 	}
@@ -395,18 +410,18 @@ func ensureIssueBoard(git *gitlab.Client, projectID int64, repoName string) erro
 		return false
 	}
 
-	if !hasLabel(IN_PROGRESS_LABEL_ID) {
+	if !hasLabel(inProgressLabelID) {
 		_, _, err = git.Boards.CreateIssueBoardList(projectID, board.ID, &gitlab.CreateIssueBoardListOptions{
-			LabelID: gitlab.Ptr(IN_PROGRESS_LABEL_ID),
+			LabelID: gitlab.Ptr(inProgressLabelID),
 		})
 		if err != nil && !isAlreadyExistsError(err) {
 			return fmt.Errorf("create 'In Progress' board list for %q: %w", repoName, err)
 		}
 	}
 
-	if !hasLabel(IN_REVIEW_LABEL_ID) {
+	if !hasLabel(inReviewLabelID) {
 		_, _, err = git.Boards.CreateIssueBoardList(projectID, board.ID, &gitlab.CreateIssueBoardListOptions{
-			LabelID: gitlab.Ptr(IN_REVIEW_LABEL_ID),
+			LabelID: gitlab.Ptr(inReviewLabelID),
 		})
 		if err != nil && !isAlreadyExistsError(err) {
 			return fmt.Errorf("create 'In Review' board list for %q: %w", repoName, err)
@@ -515,6 +530,9 @@ func getOrCreateTutorSubgroup(ctx context.Context, coursePhaseID uuid.UUID, tuto
 	if err == nil {
 		return subgroup.GitlabGroupID, subgroup.GitlabGroupPath, nil
 	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return 0, "", fmt.Errorf("check tutor subgroup cache for %q: %w", tutorGitlabUsername, err)
+	}
 
 	git, err := getClient()
 	if err != nil {
@@ -570,13 +588,16 @@ func getOrCreateTutorSubgroup(ctx context.Context, coursePhaseID uuid.UUID, tuto
 		}
 	}
 
-	// 5. Store in DB for future lookups
-	_ = svc.queries.CreateTutorGitlabSubgroup(ctx, db.CreateTutorGitlabSubgroupParams{
+	// 5. Store in DB for future lookups (non-fatal: GitLab state is consistent,
+	// DB is just a cache — will retry via GitLab on next call if this fails)
+	if err := svc.queries.CreateTutorGitlabSubgroup(ctx, db.CreateTutorGitlabSubgroupParams{
 		CoursePhaseID:   coursePhaseID,
 		TutorID:         uuid.UUID(tutorID.Bytes),
 		GitlabGroupID:   groupID,
 		GitlabGroupPath: groupPath,
-	})
+	}); err != nil {
+		log.WithError(err).WithField("tutor", tutorGitlabUsername).Warn("Failed to cache tutor subgroup in DB; will retry via GitLab on next call")
+	}
 
 	return groupID, groupPath, nil
 }
