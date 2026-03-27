@@ -653,10 +653,12 @@ func TestCreateOrGetProject(t *testing.T) {
 
 func TestCreateDemoProject(t *testing.T) {
 	var (
-		projectCreated  atomic.Bool
-		branchProtected atomic.Bool
-		boardCreated    atomic.Bool
-		commitBody      map[string]interface{}
+		projectCreated     atomic.Bool
+		branchProtected    atomic.Bool
+		boardCreated       atomic.Bool
+		sharedWithGroup    atomic.Bool
+		dailyIssuesCreated atomic.Int32
+		commitBody         map[string]interface{}
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -675,6 +677,13 @@ func TestCreateDemoProject(t *testing.T) {
 
 		// Template tree listing (teaching material repo)
 		if path == "/api/v4/projects/100/repository/tree" {
+			dirPath := r.URL.Query().Get("path")
+			if dirPath == "daily_issues" {
+				_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+					{"id": "i1", "name": "day1_intro.md", "type": "blob", "path": "daily_issues/day1_intro.md", "mode": "100644"},
+				})
+				return
+			}
 			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"id": "a1", "name": "README.md", "type": "blob", "path": "student_repo_template/README.md", "mode": "100644"},
 			})
@@ -683,6 +692,12 @@ func TestCreateDemoProject(t *testing.T) {
 
 		// Raw file content
 		if strings.HasPrefix(path, "/api/v4/projects/100/repository/files/") && strings.HasSuffix(path, "/raw") {
+			filePath := strings.TrimPrefix(path, "/api/v4/projects/100/repository/files/")
+			filePath = strings.TrimSuffix(filePath, "/raw")
+			if strings.HasPrefix(filePath, "daily_issues") {
+				_, _ = fmt.Fprint(w, "# Day 1: Introduction\n\nWelcome to the course.")
+				return
+			}
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = fmt.Fprint(w, "# {{.StudentName}}'s Demo")
 			return
@@ -724,6 +739,28 @@ func TestCreateDemoProject(t *testing.T) {
 			return
 		}
 
+		// ShareProjectWithGroup
+		if strings.HasSuffix(path, "/share") && r.Method == http.MethodPost {
+			sharedWithGroup.Store(true)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 1})
+			return
+		}
+
+		// ListProjectIssues (for daily issues idempotency check)
+		if path == "/api/v4/projects/300/issues" && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode([]interface{}{})
+			return
+		}
+
+		// CreateIssue (daily issues)
+		if path == "/api/v4/projects/300/issues" && r.Method == http.MethodPost {
+			dailyIssuesCreated.Add(1)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 1, "title": "test"})
+			return
+		}
+
 		http.NotFound(w, r)
 	}))
 	defer server.Close()
@@ -739,13 +776,14 @@ func TestCreateDemoProject(t *testing.T) {
 		teachingMaterialProjectID: "100",
 	}
 
-	err = createDemoProject(client, 1, "ase/ipraktikum/introcourse")
+	err = createDemoProject(client, 1, "ase/ipraktikum/introcourse", 50)
 	require.NoError(t, err)
 
 	// Verify all setup steps executed
 	assert.True(t, projectCreated.Load(), "project should be created")
 	assert.True(t, branchProtected.Load(), "main branch should be protected")
 	assert.True(t, boardCreated.Load(), "issue board should be created")
+	assert.True(t, sharedWithGroup.Load(), "demo should be shared with tutors group")
 
 	// Verify commit payload: template vars substituted correctly
 	require.NotNil(t, commitBody, "commit should have been created")
@@ -758,6 +796,9 @@ func TestCreateDemoProject(t *testing.T) {
 	assert.Equal(t, "README.md", action["file_path"])
 	assert.Contains(t, action["content"], "Demo")
 	assert.NotContains(t, action["content"], "{{.StudentName}}")
+
+	// Verify daily issues were created
+	assert.Equal(t, int32(1), dailyIssuesCreated.Load(), "should create 1 daily issue")
 }
 
 func TestFetchTemplateFilesPartialFailure(t *testing.T) {
@@ -817,7 +858,7 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 		}
 
 		// GetProject (fetches existing project after conflict)
-		if r.Method == http.MethodGet && strings.HasPrefix(path, "/api/v4/projects/") && !strings.Contains(path, "/repository") && !strings.Contains(path, "/boards") && !strings.Contains(path, "/protected_branches") && !strings.Contains(path, "/approval_rules") {
+		if r.Method == http.MethodGet && strings.HasPrefix(path, "/api/v4/projects/") && !strings.Contains(path, "/repository") && !strings.Contains(path, "/boards") && !strings.Contains(path, "/protected_branches") && !strings.Contains(path, "/approval_rules") && !strings.Contains(path, "/issues") {
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id": 300, "name": "demo",
 			})
@@ -826,6 +867,13 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 
 		// Template tree listing
 		if path == "/api/v4/projects/100/repository/tree" {
+			dirPath := r.URL.Query().Get("path")
+			if dirPath == "daily_issues" {
+				_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+					{"id": "i1", "name": "day1_intro.md", "type": "blob", "path": "daily_issues/day1_intro.md", "mode": "100644"},
+				})
+				return
+			}
 			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"id": "a1", "name": "README.md", "type": "blob", "path": "student_repo_template/README.md", "mode": "100644"},
 			})
@@ -834,6 +882,12 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 
 		// Raw file content
 		if strings.HasPrefix(path, "/api/v4/projects/100/repository/files/") && strings.HasSuffix(path, "/raw") {
+			filePath := strings.TrimPrefix(path, "/api/v4/projects/100/repository/files/")
+			filePath = strings.TrimSuffix(filePath, "/raw")
+			if strings.HasPrefix(filePath, "daily_issues") {
+				_, _ = fmt.Fprint(w, "# Day 1: Introduction\n\nWelcome.")
+				return
+			}
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = fmt.Fprint(w, "# Demo content")
 			return
@@ -867,6 +921,21 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			return
 		}
 
+		// ShareProjectWithGroup returns "already shared" (idempotent)
+		if strings.HasSuffix(path, "/share") && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = fmt.Fprint(w, `{"message":"already a member"}`)
+			return
+		}
+
+		// ListProjectIssues — issue already exists (idempotent)
+		if path == "/api/v4/projects/300/issues" && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"id": 1, "title": "Day 1: Introduction"},
+			})
+			return
+		}
+
 		http.NotFound(w, r)
 	}))
 	defer server.Close()
@@ -883,6 +952,238 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 	}
 
 	// Should succeed even though everything already exists
-	err = createDemoProject(client, 1, "ase/ipraktikum/introcourse")
+	err = createDemoProject(client, 1, "ase/ipraktikum/introcourse", 50)
 	assert.NoError(t, err)
+}
+
+func TestParseIssueContent(t *testing.T) {
+	tests := []struct {
+		name        string
+		content     string
+		wantTitle   string
+		wantDesc    string
+	}{
+		{
+			name:      "standard heading and description",
+			content:   "# Day 1: Git Basics\n\nLearn git commands.\n\n## Tasks\n- Clone repo",
+			wantTitle: "Day 1: Git Basics",
+			wantDesc:  "Learn git commands.\n\n## Tasks\n- Clone repo",
+		},
+		{
+			name:      "heading with leading whitespace lines",
+			content:   "\n\n# My Title\n\nBody here",
+			wantTitle: "My Title",
+			wantDesc:  "Body here",
+		},
+		{
+			name:      "no heading returns empty title",
+			content:   "Just a paragraph\nwith no heading",
+			wantTitle: "",
+			wantDesc:  "Just a paragraph\nwith no heading",
+		},
+		{
+			name:      "heading only, no body",
+			content:   "# Only Title",
+			wantTitle: "Only Title",
+			wantDesc:  "",
+		},
+		{
+			name:      "empty content",
+			content:   "",
+			wantTitle: "",
+			wantDesc:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			title, desc := parseIssueContent(tt.content)
+			assert.Equal(t, tt.wantTitle, title)
+			assert.Equal(t, tt.wantDesc, desc)
+		})
+	}
+}
+
+func TestFetchIssueTemplates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		if path == "/api/v4/projects/42/repository/tree" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"id": "i1", "name": "day1_git_basics.md", "type": "blob", "path": "daily_issues/day1_git_basics.md", "mode": "100644"},
+				{"id": "i2", "name": "day2_swiftui.md", "type": "blob", "path": "daily_issues/day2_swiftui.md", "mode": "100644"},
+				{"id": "i3", "name": "not_markdown.txt", "type": "blob", "path": "daily_issues/not_markdown.txt", "mode": "100644"},
+			})
+			return
+		}
+
+		prefix := "/api/v4/projects/42/repository/files/"
+		suffix := "/raw"
+		if strings.HasPrefix(path, prefix) && strings.HasSuffix(path, suffix) {
+			filePath := strings.TrimPrefix(path, prefix)
+			filePath = strings.TrimSuffix(filePath, suffix)
+			contents := map[string]string{
+				"daily_issues/day1_git_basics.md": "# Day 1: Git Basics\n\nLearn git.\n\n## Tasks\n- Clone",
+				"daily_issues/day2_swiftui.md":    "# Day 2: SwiftUI\n\nBuild your first view.",
+			}
+			if content, ok := contents[filePath]; ok {
+				_, _ = fmt.Fprint(w, content)
+				return
+			}
+		}
+
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+
+	issues, err := fetchIssueTemplates(client, "42")
+	require.NoError(t, err)
+	require.Len(t, issues, 2, "should skip non-.md files")
+
+	// Verify sorted by filename (day1 before day2)
+	assert.Equal(t, "Day 1: Git Basics", issues[0].Title)
+	assert.Contains(t, issues[0].Description, "Learn git.")
+	assert.Equal(t, "Day 2: SwiftUI", issues[1].Title)
+	assert.Contains(t, issues[1].Description, "Build your first view.")
+}
+
+func TestFetchIssueTemplatesEmptyDir(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v4/projects/42/repository/tree" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]interface{}{})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+
+	// Empty directory should return empty slice (not error), since daily issues are optional
+	issues, err := fetchIssueTemplates(client, "42")
+	assert.NoError(t, err)
+	assert.Empty(t, issues)
+}
+
+func TestCreateDailyIssues(t *testing.T) {
+	var createdIssues []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+
+		// Issue template tree listing
+		if path == "/api/v4/projects/100/repository/tree" {
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"id": "i1", "name": "day1.md", "type": "blob", "path": "daily_issues/day1.md", "mode": "100644"},
+				{"id": "i2", "name": "day2.md", "type": "blob", "path": "daily_issues/day2.md", "mode": "100644"},
+			})
+			return
+		}
+
+		// Raw file content
+		prefix := "/api/v4/projects/100/repository/files/"
+		suffix := "/raw"
+		if strings.HasPrefix(path, prefix) && strings.HasSuffix(path, suffix) {
+			contents := map[string]string{
+				"daily_issues/day1.md": "# Day 1: Setup\n\nSet up your environment.",
+				"daily_issues/day2.md": "# Day 2: Basics\n\nLearn the basics.",
+			}
+			filePath := strings.TrimPrefix(path, prefix)
+			filePath = strings.TrimSuffix(filePath, suffix)
+			if content, ok := contents[filePath]; ok {
+				_, _ = fmt.Fprint(w, content)
+				return
+			}
+		}
+
+		// ListProjectIssues (existing issues — Day 1 already exists)
+		if path == "/api/v4/projects/200/issues" && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"id": 1, "title": "Day 1: Setup"},
+			})
+			return
+		}
+
+		// CreateIssue
+		if path == "/api/v4/projects/200/issues" && r.Method == http.MethodPost {
+			var body map[string]interface{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			createdIssues = append(createdIssues, body["title"].(string))
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": 2, "title": body["title"],
+			})
+			return
+		}
+
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+
+	originalSingleton := InfrastructureServiceSingleton
+	defer func() { InfrastructureServiceSingleton = originalSingleton }()
+
+	InfrastructureServiceSingleton = &InfrastructureService{
+		gitlabClient:              client,
+		teachingMaterialProjectID: "100",
+	}
+
+	err = createDailyIssues(client, 200, "test-repo")
+	require.NoError(t, err)
+
+	// Only Day 2 should be created (Day 1 already exists)
+	require.Len(t, createdIssues, 1)
+	assert.Equal(t, "Day 2: Basics", createdIssues[0])
+}
+
+func TestIssueCacheThreadSafety(t *testing.T) {
+	var fetchCount atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v4/projects/42/repository/tree" {
+			fetchCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"id": "i1", "name": "day1.md", "type": "blob", "path": "daily_issues/day1.md", "mode": "100644"},
+			})
+			return
+		}
+
+		if strings.Contains(r.URL.Path, "/repository/files/") && strings.HasSuffix(r.URL.Path, "/raw") {
+			_, _ = fmt.Fprint(w, "# Day 1\n\nContent")
+			return
+		}
+
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+
+	cache := &issueCache{}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			issues, err := cache.get(client, "42")
+			assert.NoError(t, err)
+			assert.Len(t, issues, 1)
+		}()
+	}
+	wg.Wait()
+
+	assert.Equal(t, int32(1), fetchCount.Load(), "issue tree should be fetched exactly once")
 }

@@ -1,11 +1,15 @@
 package infrastructureSetup
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/prompt-edu/prompt-intro-course/server/db/sqlc"
 	log "github.com/sirupsen/logrus"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
@@ -277,8 +281,7 @@ func CreateStudentProject(repoName string, devID, tutorID, introCourseID int64, 
 	}
 
 	// 5. Members (idempotent: skip if already a member)
-	// Last step before approval rule as this might fail if the tutor is already a member of a "higher" group
-	err = addProjectMembers(git, project.ID, repoName, tutorID, devID, devGroupID)
+	err = addProjectMembers(git, project.ID, repoName, devID, devGroupID)
 	if err != nil {
 		return err
 	}
@@ -289,10 +292,15 @@ func CreateStudentProject(repoName string, devID, tutorID, introCourseID int64, 
 		return err
 	}
 
+	// 7. Daily issues (non-fatal: log and continue)
+	if err = createDailyIssues(git, project.ID, repoName); err != nil {
+		log.WithError(err).WithField("project", repoName).Warn("Failed to create daily issues (non-fatal)")
+	}
+
 	return nil
 }
 
-func addProjectMembers(git *gitlab.Client, projectID int64, repoName string, tutorID, devID, devGroupID int64) error {
+func addProjectMembers(git *gitlab.Client, projectID int64, repoName string, devID, devGroupID int64) error {
 	// Add student to the project
 	_, _, err := git.ProjectMembers.AddProjectMember(projectID, &gitlab.AddProjectMemberOptions{
 		UserID:      gitlab.Ptr(devID),
@@ -311,14 +319,7 @@ func addProjectMembers(git *gitlab.Client, projectID int64, repoName string, tut
 		return fmt.Errorf("add student %d to developer group for %q: %w", devID, repoName, err)
 	}
 
-	// Add tutor to the project
-	_, _, err = git.ProjectMembers.AddProjectMember(projectID, &gitlab.AddProjectMemberOptions{
-		UserID:      gitlab.Ptr(tutorID),
-		AccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
-	})
-	if err != nil && !isAlreadyExistsError(err) {
-		return fmt.Errorf("add tutor %d to project %q: %w", tutorID, repoName, err)
-	}
+	// Tutor access is inherited from the tutor subgroup (Maintainer permission)
 
 	return nil
 }
@@ -446,11 +447,145 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 	return nil
 }
 
+// getOrCreateTutorSubgroup returns the GitLab group ID and path for a tutor's
+// subgroup inside the Introcourse group. Creates the subgroup and adds the
+// tutor as Maintainer if it doesn't exist yet. The mapping is cached in the DB
+// for fast lookups on subsequent calls.
+func getOrCreateTutorSubgroup(ctx context.Context, coursePhaseID uuid.UUID, tutorID pgtype.UUID, tutorGitlabUsername, tutorFirstName, tutorLastName string, tutorGitlabUserID, introCourseGroupID int64) (int64, string, error) {
+	svc := InfrastructureServiceSingleton
+
+	// 1. Check DB for existing mapping
+	subgroup, err := svc.queries.GetTutorGitlabSubgroup(ctx, db.GetTutorGitlabSubgroupParams{
+		CoursePhaseID: coursePhaseID,
+		TutorID:       uuid.UUID(tutorID.Bytes),
+	})
+	if err == nil {
+		return subgroup.GitlabGroupID, subgroup.GitlabGroupPath, nil
+	}
+
+	git, err := getClient()
+	if err != nil {
+		return 0, "", err
+	}
+
+	// 2. Check if subgroup already exists in GitLab
+	existing, err := findSubGroup(tutorGitlabUsername, introCourseGroupID)
+	if err != nil {
+		return 0, "", fmt.Errorf("check tutor subgroup %q: %w", tutorGitlabUsername, err)
+	}
+
+	var groupID int64
+	var groupPath string
+
+	if existing != nil {
+		groupID = existing.ID
+		groupPath = existing.FullPath
+	} else {
+		// 3. Create subgroup (display name = "FirstName LastName", path = gitlab_username)
+		displayName := tutorFirstName + " " + tutorLastName
+		group, _, createErr := git.Groups.CreateGroup(&gitlab.CreateGroupOptions{
+			Name:                  gitlab.Ptr(displayName),
+			Path:                  gitlab.Ptr(tutorGitlabUsername),
+			ParentID:              gitlab.Ptr(introCourseGroupID),
+			ProjectCreationLevel:  gitlab.Ptr(gitlab.MaintainerProjectCreation),
+			SubGroupCreationLevel: gitlab.Ptr(gitlab.OwnerSubGroupCreationLevelValue),
+			AutoDevopsEnabled:     gitlab.Ptr(false),
+		})
+		if createErr != nil {
+			if !isAlreadyExistsError(createErr) {
+				return 0, "", fmt.Errorf("create tutor subgroup %q: %w", tutorGitlabUsername, createErr)
+			}
+			// Race: another request created it between our check and create
+			raceGroup, findErr := findSubGroup(tutorGitlabUsername, introCourseGroupID)
+			if findErr != nil || raceGroup == nil {
+				return 0, "", fmt.Errorf("tutor subgroup %q conflict but not found: %w", tutorGitlabUsername, createErr)
+			}
+			groupID = raceGroup.ID
+			groupPath = raceGroup.FullPath
+		} else {
+			groupID = group.ID
+			groupPath = group.FullPath
+		}
+
+		// 4. Add tutor as Maintainer on subgroup (inherits to all projects)
+		_, _, err = git.GroupMembers.AddGroupMember(groupID, &gitlab.AddGroupMemberOptions{
+			UserID:      gitlab.Ptr(tutorGitlabUserID),
+			AccessLevel: gitlab.Ptr(gitlab.MaintainerPermissions),
+		})
+		if err != nil && !isAlreadyExistsError(err) {
+			return 0, "", fmt.Errorf("add tutor as maintainer on subgroup %q: %w", tutorGitlabUsername, err)
+		}
+	}
+
+	// 5. Store in DB for future lookups
+	_ = svc.queries.CreateTutorGitlabSubgroup(ctx, db.CreateTutorGitlabSubgroupParams{
+		CoursePhaseID:   coursePhaseID,
+		TutorID:         uuid.UUID(tutorID.Bytes),
+		GitlabGroupID:   groupID,
+		GitlabGroupPath: groupPath,
+	})
+
+	return groupID, groupPath, nil
+}
+
+// createDailyIssues creates all daily issues from the teaching material repo's
+// daily_issues/ directory. Each .md file becomes a GitLab issue (title from
+// first # heading, description from remaining content). Existing issues with
+// matching titles are skipped for idempotency.
+func createDailyIssues(git *gitlab.Client, projectID int64, repoName string) error {
+	svc := InfrastructureServiceSingleton
+	if svc.teachingMaterialProjectID == "" {
+		return nil // no teaching material configured, skip silently
+	}
+
+	templates, err := svc.issues.get(git, svc.teachingMaterialProjectID)
+	if err != nil {
+		return fmt.Errorf("fetch issue templates: %w", err)
+	}
+
+	if len(templates) == 0 {
+		return nil
+	}
+
+	// Fetch existing issue titles for idempotency check
+	existingTitles := make(map[string]bool)
+	existingIssues, _, err := git.Issues.ListProjectIssues(projectID, &gitlab.ListProjectIssuesOptions{
+		ListOptions: gitlab.ListOptions{PerPage: 100},
+	})
+	if err != nil {
+		return fmt.Errorf("list existing issues for %q: %w", repoName, err)
+	}
+	for _, issue := range existingIssues {
+		existingTitles[issue.Title] = true
+	}
+
+	for _, tmpl := range templates {
+		if existingTitles[tmpl.Title] {
+			continue
+		}
+		_, _, err := git.Issues.CreateIssue(projectID, &gitlab.CreateIssueOptions{
+			Title:       gitlab.Ptr(tmpl.Title),
+			Description: gitlab.Ptr(tmpl.Description),
+		})
+		if err != nil {
+			// Log and continue — one failed issue should not block the others
+			log.WithFields(log.Fields{
+				"issue":   tmpl.Title,
+				"project": repoName,
+			}).WithError(err).Warn("Failed to create daily issue")
+			continue
+		}
+	}
+
+	return nil
+}
+
 // createDemoProject creates a "demo" project in the Introcourse group,
 // initialized from the same template as student repos. This gives
 // instructors a reference repository for live demonstrations and testing.
+// The project is shared with the tutors group so all tutors have access.
 // Fully idempotent: safe to re-run on an existing course.
-func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourseGroupPath string) error {
+func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourseGroupPath string, tutorsGroupID int64) error {
 	const demoProjectName = "demo"
 
 	project, err := createOrGetProject(git, newCourseProjectOptions(demoProjectName, introCourseGroupID), introCourseGroupPath)
@@ -480,6 +615,20 @@ func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 	err = ensureIssueBoard(git, project.ID, demoProjectName)
 	if err != nil {
 		return err
+	}
+
+	// Share with tutors group so all tutors can access the demo
+	_, err = git.Projects.ShareProjectWithGroup(project.ID, &gitlab.ShareWithGroupOptions{
+		GroupID:     gitlab.Ptr(tutorsGroupID),
+		GroupAccess: gitlab.Ptr(gitlab.DeveloperPermissions),
+	})
+	if err != nil && !isAlreadyExistsError(err) {
+		return fmt.Errorf("share %q with tutors group: %w", demoProjectName, err)
+	}
+
+	// Daily issues (non-fatal)
+	if err = createDailyIssues(git, project.ID, demoProjectName); err != nil {
+		log.WithError(err).WithField("project", demoProjectName).Warn("Failed to create daily issues for demo (non-fatal)")
 	}
 
 	return nil

@@ -20,6 +20,7 @@ type InfrastructureService struct {
 	gitlabClient              *gitlab.Client
 	teachingMaterialProjectID string
 	templates                 templateCache
+	issues                    issueCache
 }
 
 var InfrastructureServiceSingleton *InfrastructureService
@@ -48,8 +49,9 @@ func CreateCourseInfrastructure(coursePhaseID uuid.UUID, semesterTag string) err
 	}
 
 	// 3.) Create the tutor groups
-	if _, err = createTeachingGroup(courseGroup.ID, "tutors"); err != nil {
-		errs = append(errs, fmt.Errorf("create tutors group: %w", err))
+	tutorsGroup, tutorsErr := createTeachingGroup(courseGroup.ID, "tutors")
+	if tutorsErr != nil {
+		errs = append(errs, fmt.Errorf("create tutors group: %w", tutorsErr))
 	}
 
 	// 4.) Create the coach group
@@ -67,13 +69,13 @@ func CreateCourseInfrastructure(coursePhaseID uuid.UUID, semesterTag string) err
 		return fmt.Errorf("create Introcourse group: %w", err)
 	}
 
-	// 6.) Create demo project for instructors (depends on Introcourse group)
+	// 6.) Create demo project for instructors (non-fatal: course setup can succeed without it)
 	git, err := getClient()
 	if err != nil {
 		return err
 	}
-	if err = createDemoProject(git, introCourseGroup.ID, introCourseGroup.FullPath); err != nil {
-		return fmt.Errorf("create demo project: %w", err)
+	if err = createDemoProject(git, introCourseGroup.ID, introCourseGroup.FullPath, tutorsGroup.ID); err != nil {
+		log.WithError(err).Error("Failed to create demo project (non-fatal)")
 	}
 
 	return nil
@@ -138,8 +140,19 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 		return fmt.Errorf("get developer group: %w", err)
 	}
 
-	// 5.) Create the student project (fully idempotent — safe to re-run)
-	err = CreateStudentProject(repoName, studentGitlabUser.ID, tutorGitlabUser.ID, introCourseGroup.ID, introCourseGroup.FullPath, developerGroup.ID, studentName, submissionDeadline)
+	// 5.) Get or create tutor subgroup inside Introcourse
+	tutorSubgroupID, tutorSubgroupPath, err := getOrCreateTutorSubgroup(
+		ctx, coursePhaseID,
+		tutor.AssignedTutor,
+		tutor.GitlabUsername.String, tutor.FirstName, tutor.LastName,
+		tutorGitlabUser.ID, introCourseGroup.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("get/create tutor subgroup: %w", err)
+	}
+
+	// 6.) Create the student project in tutor's subgroup (fully idempotent)
+	err = CreateStudentProject(repoName, studentGitlabUser.ID, tutorGitlabUser.ID, tutorSubgroupID, tutorSubgroupPath, developerGroup.ID, studentName, submissionDeadline)
 	if err != nil {
 		log.WithField("student", repoName).Error("Failed to create student project: ", err)
 		// store error in the db

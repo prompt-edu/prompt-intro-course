@@ -2,6 +2,7 @@ package infrastructureSetup
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -120,5 +121,103 @@ func applyTemplateVars(content string, vars templateVars) string {
 		content = strings.ReplaceAll(content, placeholder, value)
 	}
 	return content
+}
+
+// --- Daily Issue Templates ---
+
+const dailyIssuesDir = "daily_issues"
+
+// issueTemplate represents a parsed issue from the teaching material repo.
+type issueTemplate struct {
+	Title       string
+	Description string
+}
+
+// issueCache provides thread-safe, fetch-once caching of issue templates.
+// Same retry-on-failure semantics as templateCache.
+type issueCache struct {
+	mu     sync.Mutex
+	issues []issueTemplate
+}
+
+// get returns cached issue templates, fetching them on first call.
+func (ic *issueCache) get(client *gitlab.Client, projectID string) ([]issueTemplate, error) {
+	ic.mu.Lock()
+	defer ic.mu.Unlock()
+
+	if ic.issues != nil {
+		return ic.issues, nil
+	}
+
+	issues, err := fetchIssueTemplates(client, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	ic.issues = issues
+	log.WithField("count", len(issues)).Info("issue templates cached from teaching material repo")
+	return ic.issues, nil
+}
+
+// fetchIssueTemplates lists all .md files under daily_issues/ and parses each
+// into a title (from the first # heading) and description (the rest).
+func fetchIssueTemplates(client *gitlab.Client, projectID string) ([]issueTemplate, error) {
+	opts := &gitlab.ListTreeOptions{
+		Path:      gitlab.Ptr(dailyIssuesDir),
+		Ref:       gitlab.Ptr(templateRef),
+		Recursive: gitlab.Ptr(false),
+		ListOptions: gitlab.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	nodes, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.TreeNode, *gitlab.Response, error) {
+		return client.Repositories.ListTree(projectID, opts, p)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list issue templates in project %q: %w", projectID, err)
+	}
+
+	// Sort by path for deterministic ordering (day1_* before day2_*)
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Path < nodes[j].Path
+	})
+
+	var issues []issueTemplate
+	for _, node := range nodes {
+		if node.Type != "blob" || !strings.HasSuffix(node.Name, ".md") {
+			continue
+		}
+
+		raw, _, err := client.RepositoryFiles.GetRawFile(projectID, node.Path, &gitlab.GetRawFileOptions{
+			Ref: gitlab.Ptr(templateRef),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("fetch issue file %q: %w", node.Path, err)
+		}
+
+		title, description := parseIssueContent(string(raw))
+		if title == "" {
+			continue
+		}
+		issues = append(issues, issueTemplate{Title: title, Description: description})
+	}
+
+	return issues, nil
+}
+
+// parseIssueContent extracts the title from the first # heading and the
+// description from the remaining content.
+func parseIssueContent(content string) (title, description string) {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "# ") {
+			title = strings.TrimSpace(strings.TrimPrefix(line, "# "))
+			rest := strings.Join(lines[i+1:], "\n")
+			description = strings.TrimSpace(rest)
+			return
+		}
+	}
+	return "", strings.TrimSpace(content)
 }
 
