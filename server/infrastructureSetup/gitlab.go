@@ -199,7 +199,9 @@ func getUserID(username string) (*gitlab.User, error) {
 // newCourseProjectOptions returns the shared project configuration for all
 // course projects (student repos and the demo repo). Features unrelated to
 // the intro course workflow are disabled to keep the UI clean for students.
-func newCourseProjectOptions(name string, namespaceID int64) *gitlab.CreateProjectOptions {
+// ciCDRepoPath is the full GitLab path to the shared CI/CD repo (e.g.
+// "ase/ipraktikum/IOS25/introcourse/ci-cd"), used to set CIConfigPath.
+func newCourseProjectOptions(name string, namespaceID int64, ciCDRepoPath string) *gitlab.CreateProjectOptions {
 	return &gitlab.CreateProjectOptions{
 		Name:        gitlab.Ptr(name),
 		NamespaceID: gitlab.Ptr(namespaceID),
@@ -212,9 +214,10 @@ func newCourseProjectOptions(name string, namespaceID int64) *gitlab.CreateProje
 		OnlyAllowMergeIfPipelineSucceeds:              gitlab.Ptr(true),
 		OnlyAllowMergeIfAllDiscussionsAreResolved:     gitlab.Ptr(true),
 
-		// CI/CD
+		// CI/CD — pipeline config lives in a shared repo
+		CIConfigPath:         gitlab.Ptr(".gitlab-ci.yml@" + ciCDRepoPath),
 		SharedRunnersEnabled: gitlab.Ptr(true),
-		BuildsAccessLevel:   gitlab.Ptr(gitlab.PrivateAccessControl),
+		BuildsAccessLevel:    gitlab.Ptr(gitlab.PrivateAccessControl),
 
 		// Disable unneeded features to keep the UI clean for students
 		ContainerRegistryAccessLevel:     gitlab.Ptr(gitlab.DisabledAccessControl),
@@ -295,14 +298,16 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 	return nil
 }
 
-func CreateStudentProject(repoName string, devID, tutorID, introCourseID int64, introCourseGroupPath string, devGroupID int64, studentName, submissionDeadline string) error {
+func CreateStudentProject(repoName string, devID, tutorID, tutorSubgroupID int64, tutorSubgroupPath string, devGroupID int64, introCourseGroupPath, studentName, submissionDeadline string) error {
 	git, err := getClient()
 	if err != nil {
 		return fmt.Errorf("get client for project %q: %w", repoName, err)
 	}
 
+	ciCDRepoPath := introCourseGroupPath + "/ci-cd"
+
 	// 1. Create project (idempotent: handle conflict by fetching existing)
-	project, err := createOrGetProject(git, newCourseProjectOptions(repoName, introCourseID), introCourseGroupPath)
+	project, err := createOrGetProject(git, newCourseProjectOptions(repoName, tutorSubgroupID, ciCDRepoPath), tutorSubgroupPath)
 	if err != nil {
 		return err
 	}
@@ -628,6 +633,30 @@ func createDailyIssues(git *gitlab.Client, projectID int64, repoName string) err
 	return nil
 }
 
+// createCICDProject creates the shared CI/CD project in the Introcourse group.
+// All course projects reference this project's .gitlab-ci.yml via CIConfigPath.
+// The pipeline configuration itself (SwiftLint, build steps, etc.) is managed
+// by instructors — this function only ensures the project exists.
+// Fully idempotent: safe to re-run on an existing course.
+func createCICDProject(git *gitlab.Client, introCourseGroupID int64, introCourseGroupPath string) error {
+	const cicdProjectName = "ci-cd"
+
+	_, err := createOrGetProject(git, &gitlab.CreateProjectOptions{
+		Name:                 gitlab.Ptr(cicdProjectName),
+		NamespaceID:          gitlab.Ptr(introCourseGroupID),
+		Visibility:           gitlab.Ptr(gitlab.PrivateVisibility),
+		SharedRunnersEnabled: gitlab.Ptr(true),
+		BuildsAccessLevel:    gitlab.Ptr(gitlab.PrivateAccessControl),
+		// Initialize with an empty repo so the default branch exists
+		InitializeWithReadme: gitlab.Ptr(true),
+	}, introCourseGroupPath)
+	if err != nil {
+		return fmt.Errorf("create CI/CD project: %w", err)
+	}
+
+	return nil
+}
+
 // createDemoProject creates a "demo" project in the Introcourse group,
 // initialized from the same template as student repos. This gives
 // instructors a reference repository for live demonstrations and testing.
@@ -635,8 +664,9 @@ func createDailyIssues(git *gitlab.Client, projectID int64, repoName string) err
 // Fully idempotent: safe to re-run on an existing course.
 func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourseGroupPath string, tutorsGroupID int64) error {
 	const demoProjectName = "demo"
+	ciCDRepoPath := introCourseGroupPath + "/ci-cd"
 
-	project, err := createOrGetProject(git, newCourseProjectOptions(demoProjectName, introCourseGroupID), introCourseGroupPath)
+	project, err := createOrGetProject(git, newCourseProjectOptions(demoProjectName, introCourseGroupID, ciCDRepoPath), introCourseGroupPath)
 	if err != nil {
 		return err
 	}

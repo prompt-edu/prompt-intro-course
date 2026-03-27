@@ -659,6 +659,7 @@ func TestCreateDemoProject(t *testing.T) {
 		sharedWithGroup    atomic.Bool
 		dailyIssuesCreated atomic.Int32
 		commitBody         map[string]interface{}
+		createProjectBody  map[string]interface{}
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -668,6 +669,7 @@ func TestCreateDemoProject(t *testing.T) {
 		// CreateProject
 		if r.Method == http.MethodPost && path == "/api/v4/projects" {
 			projectCreated.Store(true)
+			_ = json.NewDecoder(r.Body).Decode(&createProjectBody)
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id": 300, "name": "demo",
@@ -790,6 +792,9 @@ func TestCreateDemoProject(t *testing.T) {
 	assert.True(t, branchProtected.Load(), "main branch should be protected")
 	assert.True(t, boardCreated.Load(), "issue board should be created")
 	assert.True(t, sharedWithGroup.Load(), "demo should be shared with tutors group")
+
+	// Verify CI/CD config path points to shared repo
+	assert.Equal(t, ".gitlab-ci.yml@ase/ipraktikum/introcourse/ci-cd", createProjectBody["ci_config_path"])
 
 	// Verify commit payload: template vars substituted correctly
 	require.NotNil(t, commitBody, "commit should have been created")

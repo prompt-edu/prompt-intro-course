@@ -69,11 +69,17 @@ func CreateCourseInfrastructure(coursePhaseID uuid.UUID, semesterTag string) err
 		return fmt.Errorf("create Introcourse group: %w", err)
 	}
 
-	// 6.) Create demo project for instructors (non-fatal: course setup can succeed without it)
 	git, err := getClient()
 	if err != nil {
 		return err
 	}
+
+	// 6.) Create CI/CD project (shared pipeline config referenced by all course projects)
+	if err = createCICDProject(git, introCourseGroup.ID, introCourseGroup.FullPath); err != nil {
+		log.WithError(err).Error("Failed to create CI/CD project (non-fatal)")
+	}
+
+	// 7.) Create demo project for instructors (non-fatal: course setup can succeed without it)
 	if err = createDemoProject(git, introCourseGroup.ID, introCourseGroup.FullPath, tutorsGroup.ID); err != nil {
 		log.WithError(err).Error("Failed to create demo project (non-fatal)")
 	}
@@ -152,7 +158,7 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 	}
 
 	// 6.) Create the student project in tutor's subgroup (fully idempotent)
-	err = CreateStudentProject(repoName, studentGitlabUser.ID, tutorGitlabUser.ID, tutorSubgroupID, tutorSubgroupPath, developerGroup.ID, studentName, submissionDeadline)
+	err = CreateStudentProject(repoName, studentGitlabUser.ID, tutorGitlabUser.ID, tutorSubgroupID, tutorSubgroupPath, developerGroup.ID, introCourseGroup.FullPath, studentName, submissionDeadline)
 	if err != nil {
 		log.WithField("student", repoName).Error("Failed to create student project: ", err)
 		// store error in the db
