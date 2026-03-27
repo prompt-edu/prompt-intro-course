@@ -1,16 +1,11 @@
 package infrastructureSetup
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	db "github.com/prompt-edu/prompt-intro-course/server/db/sqlc"
 	log "github.com/sirupsen/logrus"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
@@ -517,89 +512,55 @@ func ensureApprovalConfiguration(git *gitlab.Client, projectID int64, repoName s
 
 // getOrCreateTutorSubgroup returns the GitLab group ID and path for a tutor's
 // subgroup inside the Introcourse group. Creates the subgroup and adds the
-// tutor as Maintainer if it doesn't exist yet. The mapping is cached in the DB
-// for fast lookups on subsequent calls.
-func getOrCreateTutorSubgroup(ctx context.Context, coursePhaseID uuid.UUID, tutorID pgtype.UUID, tutorGitlabUsername, tutorFirstName, tutorLastName string, tutorGitlabUserID, introCourseGroupID int64) (int64, string, error) {
-	svc := InfrastructureServiceSingleton
-
-	// 1. Check DB for existing mapping
-	subgroup, err := svc.queries.GetTutorGitlabSubgroup(ctx, db.GetTutorGitlabSubgroupParams{
-		CoursePhaseID: coursePhaseID,
-		TutorID:       uuid.UUID(tutorID.Bytes),
-	})
-	if err == nil {
-		return subgroup.GitlabGroupID, subgroup.GitlabGroupPath, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return 0, "", fmt.Errorf("check tutor subgroup cache for %q: %w", tutorGitlabUsername, err)
-	}
-
+// tutor as Maintainer if it doesn't exist yet. GitLab is the sole source of
+// truth — no DB caching needed since this runs once per student setup.
+func getOrCreateTutorSubgroup(tutorGitlabUsername, tutorFirstName, tutorLastName string, tutorGitlabUserID, introCourseGroupID int64) (int64, string, error) {
 	git, err := getClient()
 	if err != nil {
 		return 0, "", err
 	}
 
-	// 2. Check if subgroup already exists in GitLab
+	// 1. Check if subgroup already exists in GitLab
 	existing, err := findSubGroup(tutorGitlabUsername, introCourseGroupID)
 	if err != nil {
 		return 0, "", fmt.Errorf("check tutor subgroup %q: %w", tutorGitlabUsername, err)
 	}
-
-	var groupID int64
-	var groupPath string
-
 	if existing != nil {
-		groupID = existing.ID
-		groupPath = existing.FullPath
-	} else {
-		// 3. Create subgroup (display name = "FirstName LastName", path = gitlab_username)
-		displayName := tutorFirstName + " " + tutorLastName
-		group, _, createErr := git.Groups.CreateGroup(&gitlab.CreateGroupOptions{
-			Name:                  gitlab.Ptr(displayName),
-			Path:                  gitlab.Ptr(tutorGitlabUsername),
-			ParentID:              gitlab.Ptr(introCourseGroupID),
-			ProjectCreationLevel:  gitlab.Ptr(gitlab.MaintainerProjectCreation),
-			SubGroupCreationLevel: gitlab.Ptr(gitlab.OwnerSubGroupCreationLevelValue),
-			AutoDevopsEnabled:     gitlab.Ptr(false),
-		})
-		if createErr != nil {
-			if !isAlreadyExistsError(createErr) {
-				return 0, "", fmt.Errorf("create tutor subgroup %q: %w", tutorGitlabUsername, createErr)
-			}
-			// Race: another request created it between our check and create
-			raceGroup, findErr := findSubGroup(tutorGitlabUsername, introCourseGroupID)
-			if findErr != nil || raceGroup == nil {
-				return 0, "", fmt.Errorf("tutor subgroup %q conflict but not found: %w", tutorGitlabUsername, createErr)
-			}
-			groupID = raceGroup.ID
-			groupPath = raceGroup.FullPath
-		} else {
-			groupID = group.ID
-			groupPath = group.FullPath
-		}
-
-		// 4. Add tutor as Maintainer on subgroup (inherits to all projects)
-		_, _, err = git.GroupMembers.AddGroupMember(groupID, &gitlab.AddGroupMemberOptions{
-			UserID:      gitlab.Ptr(tutorGitlabUserID),
-			AccessLevel: gitlab.Ptr(gitlab.MaintainerPermissions),
-		})
-		if err != nil && !isAlreadyExistsError(err) {
-			return 0, "", fmt.Errorf("add tutor as maintainer on subgroup %q: %w", tutorGitlabUsername, err)
-		}
+		return existing.ID, existing.FullPath, nil
 	}
 
-	// 5. Store in DB for future lookups (non-fatal: GitLab state is consistent,
-	// DB is just a cache — will retry via GitLab on next call if this fails)
-	if err := svc.queries.CreateTutorGitlabSubgroup(ctx, db.CreateTutorGitlabSubgroupParams{
-		CoursePhaseID:   coursePhaseID,
-		TutorID:         uuid.UUID(tutorID.Bytes),
-		GitlabGroupID:   groupID,
-		GitlabGroupPath: groupPath,
-	}); err != nil {
-		log.WithError(err).WithField("tutor", tutorGitlabUsername).Warn("Failed to cache tutor subgroup in DB; will retry via GitLab on next call")
+	// 2. Create subgroup (display name = "FirstName LastName", path = gitlab_username)
+	displayName := tutorFirstName + " " + tutorLastName
+	group, _, err := git.Groups.CreateGroup(&gitlab.CreateGroupOptions{
+		Name:                  gitlab.Ptr(displayName),
+		Path:                  gitlab.Ptr(tutorGitlabUsername),
+		ParentID:              gitlab.Ptr(introCourseGroupID),
+		ProjectCreationLevel:  gitlab.Ptr(gitlab.MaintainerProjectCreation),
+		SubGroupCreationLevel: gitlab.Ptr(gitlab.OwnerSubGroupCreationLevelValue),
+		AutoDevopsEnabled:     gitlab.Ptr(false),
+	})
+	if err != nil {
+		if !isAlreadyExistsError(err) {
+			return 0, "", fmt.Errorf("create tutor subgroup %q: %w", tutorGitlabUsername, err)
+		}
+		// Race: another request created it between our check and create
+		raceGroup, findErr := findSubGroup(tutorGitlabUsername, introCourseGroupID)
+		if findErr != nil || raceGroup == nil {
+			return 0, "", fmt.Errorf("tutor subgroup %q conflict but not found: %w", tutorGitlabUsername, err)
+		}
+		return raceGroup.ID, raceGroup.FullPath, nil
 	}
 
-	return groupID, groupPath, nil
+	// 3. Add tutor as Maintainer on subgroup (inherits to all projects)
+	_, _, err = git.GroupMembers.AddGroupMember(group.ID, &gitlab.AddGroupMemberOptions{
+		UserID:      gitlab.Ptr(tutorGitlabUserID),
+		AccessLevel: gitlab.Ptr(gitlab.MaintainerPermissions),
+	})
+	if err != nil && !isAlreadyExistsError(err) {
+		return 0, "", fmt.Errorf("add tutor as maintainer on subgroup %q: %w", tutorGitlabUsername, err)
+	}
+
+	return group.ID, group.FullPath, nil
 }
 
 // createDailyIssues creates all daily issues from the teaching material repo's

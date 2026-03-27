@@ -154,8 +154,6 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 
 	// 5.) Get or create tutor subgroup inside Introcourse
 	tutorSubgroupID, tutorSubgroupPath, err := getOrCreateTutorSubgroup(
-		ctx, coursePhaseID,
-		tutor.AssignedTutor,
 		tutor.GitlabUsername.String, tutor.FirstName, tutor.LastName,
 		tutorGitlabUser.ID, introCourseGroup.ID,
 	)

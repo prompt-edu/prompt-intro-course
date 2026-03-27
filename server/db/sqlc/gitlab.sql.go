@@ -53,29 +53,6 @@ func (q *Queries) AddGitlabStatus(ctx context.Context, arg AddGitlabStatusParams
 	return err
 }
 
-const createTutorGitlabSubgroup = `-- name: CreateTutorGitlabSubgroup :exec
-INSERT INTO tutor_gitlab_subgroup (course_phase_id, tutor_id, gitlab_group_id, gitlab_group_path)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (course_phase_id, tutor_id) DO NOTHING
-`
-
-type CreateTutorGitlabSubgroupParams struct {
-	CoursePhaseID   uuid.UUID `json:"course_phase_id"`
-	TutorID         uuid.UUID `json:"tutor_id"`
-	GitlabGroupID   int64     `json:"gitlab_group_id"`
-	GitlabGroupPath string    `json:"gitlab_group_path"`
-}
-
-func (q *Queries) CreateTutorGitlabSubgroup(ctx context.Context, arg CreateTutorGitlabSubgroupParams) error {
-	_, err := q.db.Exec(ctx, createTutorGitlabSubgroup,
-		arg.CoursePhaseID,
-		arg.TutorID,
-		arg.GitlabGroupID,
-		arg.GitlabGroupPath,
-	)
-	return err
-}
-
 const getAllGitlabStatus = `-- name: GetAllGitlabStatus :many
 SELECT course_phase_id, course_participation_id, gitlab_success, error_message, created_at, updated_at FROM student_gitlab_processes WHERE course_phase_id = $1
 `
@@ -105,28 +82,4 @@ func (q *Queries) GetAllGitlabStatus(ctx context.Context, coursePhaseID uuid.UUI
 		return nil, err
 	}
 	return items, nil
-}
-
-const getTutorGitlabSubgroup = `-- name: GetTutorGitlabSubgroup :one
-SELECT gitlab_group_id, gitlab_group_path
-FROM tutor_gitlab_subgroup
-WHERE course_phase_id = $1
-  AND tutor_id = $2
-`
-
-type GetTutorGitlabSubgroupParams struct {
-	CoursePhaseID uuid.UUID `json:"course_phase_id"`
-	TutorID       uuid.UUID `json:"tutor_id"`
-}
-
-type GetTutorGitlabSubgroupRow struct {
-	GitlabGroupID   int64  `json:"gitlab_group_id"`
-	GitlabGroupPath string `json:"gitlab_group_path"`
-}
-
-func (q *Queries) GetTutorGitlabSubgroup(ctx context.Context, arg GetTutorGitlabSubgroupParams) (GetTutorGitlabSubgroupRow, error) {
-	row := q.db.QueryRow(ctx, getTutorGitlabSubgroup, arg.CoursePhaseID, arg.TutorID)
-	var i GetTutorGitlabSubgroupRow
-	err := row.Scan(&i.GitlabGroupID, &i.GitlabGroupPath)
-	return i, err
 }

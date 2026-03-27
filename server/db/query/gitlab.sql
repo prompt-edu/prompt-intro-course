@@ -19,14 +19,3 @@ DO UPDATE SET
 
 -- name: GetAllGitlabStatus :many
 SELECT * FROM student_gitlab_processes WHERE course_phase_id = $1;
-
--- name: GetTutorGitlabSubgroup :one
-SELECT gitlab_group_id, gitlab_group_path
-FROM tutor_gitlab_subgroup
-WHERE course_phase_id = $1
-  AND tutor_id = $2;
-
--- name: CreateTutorGitlabSubgroup :exec
-INSERT INTO tutor_gitlab_subgroup (course_phase_id, tutor_id, gitlab_group_id, gitlab_group_path)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (course_phase_id, tutor_id) DO NOTHING;
