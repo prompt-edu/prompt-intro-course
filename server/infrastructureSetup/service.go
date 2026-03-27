@@ -28,7 +28,7 @@ var InfrastructureServiceSingleton *InfrastructureService
 
 const iPraktikumGroupName = "iPraktikum"
 
-func CreateCourseInfrastructure(coursePhaseID uuid.UUID, semesterTag string) error {
+func CreateCourseInfrastructure(semesterTag string) error {
 	// 1.) Get Top Level Group
 	ipraktikumGroup, err := getiPraktikumGroup()
 	if err != nil {

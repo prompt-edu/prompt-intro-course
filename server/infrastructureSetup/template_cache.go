@@ -2,6 +2,7 @@ package infrastructureSetup
 
 import (
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -170,12 +171,27 @@ func fetchCICDFiles(client *gitlab.Client, projectID string) ([]templateFile, er
 		},
 	}
 
-	nodes, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.TreeNode, *gitlab.Response, error) {
-		return client.Repositories.ListTree(projectID, opts, p)
-	})
+	// Attempt to list ci_cd/ directory. If it doesn't exist, GitLab returns
+	// 404. We must check via the raw response since ScanAndCollect wraps errors
+	// as plain strings, stripping the gitlab.ErrorResponse type.
+	firstPage, resp, err := client.Repositories.ListTree(projectID, opts)
 	if err != nil {
-		// If the directory doesn't exist, GitLab returns 404 — treat as empty
-		return nil, nil //nolint:nilerr // missing ci_cd/ dir is valid (optional)
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list ci_cd/ tree in project %q: %w", projectID, err)
+	}
+
+	// Collect remaining pages if any
+	nodes := firstPage
+	for resp.NextPage > 0 {
+		opts.Page = resp.NextPage
+		page, pageResp, pageErr := client.Repositories.ListTree(projectID, opts)
+		if pageErr != nil {
+			return nil, fmt.Errorf("list ci_cd/ tree page %d in project %q: %w", resp.NextPage, projectID, pageErr)
+		}
+		nodes = append(nodes, page...)
+		resp = pageResp
 	}
 
 	var files []templateFile

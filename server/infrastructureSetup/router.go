@@ -39,8 +39,7 @@ func setupInfrastructureRouter(router *gin.RouterGroup, authMiddleware func(allo
 // @Security ApiKeyAuth
 // @Router /course_phase/{coursePhaseID}/infrastructure/gitlab/course-setup [post]
 func createCourseSetup(c *gin.Context) {
-	coursePhaseID, err := uuid.Parse(c.Param("coursePhaseID"))
-	if err != nil {
+	if _, err := uuid.Parse(c.Param("coursePhaseID")); err != nil {
 		log.Error("Error parsing coursePhaseID: ", err)
 		handleError(c, http.StatusBadRequest, err)
 		return
@@ -56,8 +55,7 @@ func createCourseSetup(c *gin.Context) {
 	// TODO: remove this later - but parts of the infrastructure for ios25 were already done
 	semesterTag := strings.ToUpper(infrastructureRequest.SemesterTag)
 
-	err = CreateCourseInfrastructure(coursePhaseID, semesterTag)
-	if err != nil {
+	if err := CreateCourseInfrastructure(semesterTag); err != nil {
 		handleError(c, http.StatusInternalServerError, err)
 		return
 	}

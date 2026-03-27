@@ -50,6 +50,18 @@ func isAlreadyExistsError(err error) bool {
 	return false
 }
 
+// isNotFoundError checks whether a GitLab API error is a 404 Not Found.
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var errResp *gitlab.ErrorResponse
+	if errors.As(err, &errResp) && errResp.Response != nil {
+		return errResp.Response.StatusCode == http.StatusNotFound
+	}
+	return false
+}
+
 // findSubGroup searches for a subgroup by name under the given parent.
 // Returns the group if found, nil if not found, or an error on API failure.
 func findSubGroup(groupName string, parentGroupID int64) (*gitlab.Group, error) {
@@ -266,7 +278,10 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 	// Branch protection — GitLab auto-protects 'main' with default settings
 	// when the first commit is pushed, so we must unprotect first to apply our
 	// desired access levels (push=Maintainer, merge=Developer).
-	_, _ = git.ProtectedBranches.UnprotectRepositoryBranches(projectID, "main") //nolint:errcheck // may not exist yet
+	_, unprotectErr := git.ProtectedBranches.UnprotectRepositoryBranches(projectID, "main")
+	if unprotectErr != nil && !isNotFoundError(unprotectErr) {
+		return fmt.Errorf("unprotect branch for %q: %w", projectName, unprotectErr)
+	}
 	_, _, err = git.ProtectedBranches.ProtectRepositoryBranches(projectID, &gitlab.ProtectRepositoryBranchesOptions{
 		Name:             gitlab.Ptr("main"),
 		PushAccessLevel:  gitlab.Ptr(gitlab.MaintainerPermissions),
