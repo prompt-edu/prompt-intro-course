@@ -26,7 +26,6 @@ type InfrastructureService struct {
 
 var InfrastructureServiceSingleton *InfrastructureService
 
-const topLevelGroupName = "ASE"
 const iPraktikumGroupName = "iPraktikum"
 
 func CreateCourseInfrastructure(coursePhaseID uuid.UUID, semesterTag string) error {
