@@ -263,14 +263,17 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 		return err
 	}
 
-	// Branch protection (idempotent: skip if already protected)
+	// Branch protection — GitLab auto-protects 'main' with default settings
+	// when the first commit is pushed, so we must unprotect first to apply our
+	// desired access levels (push=Maintainer, merge=Developer).
+	_, _ = git.ProtectedBranches.UnprotectRepositoryBranches(projectID, "main") //nolint:errcheck // may not exist yet
 	_, _, err = git.ProtectedBranches.ProtectRepositoryBranches(projectID, &gitlab.ProtectRepositoryBranchesOptions{
 		Name:             gitlab.Ptr("main"),
 		PushAccessLevel:  gitlab.Ptr(gitlab.MaintainerPermissions),
 		MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
 		AllowForcePush:   gitlab.Ptr(false),
 	})
-	if err != nil && !isAlreadyExistsError(err) {
+	if err != nil {
 		return fmt.Errorf("protect branch for %q: %w", projectName, err)
 	}
 

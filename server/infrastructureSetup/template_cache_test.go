@@ -713,6 +713,12 @@ func TestCreateDemoProject(t *testing.T) {
 			return
 		}
 
+		// UnprotectBranch (called before re-protecting)
+		if path == "/api/v4/projects/300/protected_branches/main" && r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
 		// ProtectBranch
 		if path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodPost {
 			branchProtected.Store(true)
@@ -911,10 +917,17 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			return
 		}
 
-		// ProtectBranch returns "already exists" (already protected)
+		// UnprotectBranch (idempotent: may not exist)
+		if path == "/api/v4/projects/300/protected_branches/main" && r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// ProtectBranch succeeds after unprotect
 		if path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodPost {
-			w.WriteHeader(http.StatusConflict)
-			_, _ = fmt.Fprint(w, `{"message":"Protected branch already exists"}`)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"name": "main", "push_access_levels": []map[string]interface{}{{"access_level": 40}},
+			})
 			return
 		}
 
