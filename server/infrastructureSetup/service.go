@@ -152,6 +152,11 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 		return fmt.Errorf("get developer group: %w", err)
 	}
 
+	tutorsGroup, err := getSubGroup("tutors", semesterGroup.ID)
+	if err != nil {
+		return fmt.Errorf("get tutors group: %w", err)
+	}
+
 	// 5.) Get or create tutor subgroup inside Introcourse
 	tutorSubgroupID, tutorSubgroupPath, err := getOrCreateTutorSubgroup(
 		tutor.GitlabUsername.String, tutor.FirstName, tutor.LastName,
@@ -165,9 +170,9 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 	err = CreateStudentProject(StudentProjectParams{
 		RepoName:             repoName,
 		DevID:                studentGitlabUser.ID,
-		TutorID:              tutorGitlabUser.ID,
 		TutorSubgroupID:      tutorSubgroupID,
 		TutorSubgroupPath:    tutorSubgroupPath,
+		TutorsGroupID:        tutorsGroup.ID,
 		DevGroupID:           developerGroup.ID,
 		IntroCourseGroupPath: introCourseGroup.FullPath,
 		StudentName:          studentName,

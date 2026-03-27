@@ -302,9 +302,9 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 type StudentProjectParams struct {
 	RepoName             string
 	DevID                int64
-	TutorID              int64
 	TutorSubgroupID      int64
 	TutorSubgroupPath    string
+	TutorsGroupID        int64
 	DevGroupID           int64
 	IntroCourseGroupPath string
 	StudentName          string
@@ -341,7 +341,7 @@ func CreateStudentProject(p StudentProjectParams) error {
 	}
 
 	// 4. Approval rule (idempotent: skip if "Tutor Approval" rule exists)
-	err = ensureApprovalRule(git, project.ID, p.RepoName, p.TutorID)
+	err = ensureApprovalRule(git, project.ID, p.RepoName, p.TutorsGroupID)
 	if err != nil {
 		return err
 	}
@@ -471,9 +471,11 @@ func createProjectFiles(git *gitlab.Client, projectID int64, repoName string, va
 }
 
 // ensureApprovalRule creates the "Tutor Approval" rule if it doesn't exist.
-// GitLab does not enforce uniqueness on approval rule names, so we must
-// check first — create-then-handle-conflict is not possible for this resource.
-func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tutorID int64) error {
+// The rule uses the tutors group so that any tutor can approve any student's MR,
+// not just the assigned tutor. GitLab does not enforce uniqueness on approval
+// rule names, so we must check first — create-then-handle-conflict is not
+// possible for this resource.
+func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tutorsGroupID int64) error {
 	rules, _, err := git.Projects.GetProjectApprovalRules(projectID, nil)
 	if err != nil {
 		return fmt.Errorf("list approval rules for %q: %w", repoName, err)
@@ -487,7 +489,7 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 	_, _, err = git.Projects.CreateProjectApprovalRule(projectID, &gitlab.CreateProjectLevelRuleOptions{
 		Name:              gitlab.Ptr("Tutor Approval"),
 		ApprovalsRequired: gitlab.Ptr(int64(1)),
-		UserIDs:           gitlab.Ptr([]int64{tutorID}),
+		GroupIDs:          gitlab.Ptr([]int64{tutorsGroupID}),
 	})
 	if err != nil {
 		return fmt.Errorf("create approval rule for %q: %w", repoName, err)

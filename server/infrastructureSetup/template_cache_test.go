@@ -1429,7 +1429,7 @@ func TestFetchCICDFiles(t *testing.T) {
 }
 
 func TestEnsureApprovalRule(t *testing.T) {
-	t.Run("creates rule when none exists", func(t *testing.T) {
+	t.Run("creates rule with tutors group", func(t *testing.T) {
 		var ruleCreated bool
 		var ruleBody map[string]interface{}
 
@@ -1462,6 +1462,9 @@ func TestEnsureApprovalRule(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, ruleCreated, "should create approval rule")
 		assert.Equal(t, "Tutor Approval", ruleBody["name"])
+		// Verify group_ids is used (not user_ids)
+		assert.NotNil(t, ruleBody["group_ids"], "should use group_ids for tutors group")
+		assert.Nil(t, ruleBody["user_ids"], "should not use user_ids")
 	})
 
 	t.Run("skips when rule already exists", func(t *testing.T) {
