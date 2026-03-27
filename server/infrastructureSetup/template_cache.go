@@ -125,6 +125,84 @@ func applyTemplateVars(content string, vars templateVars) string {
 	).Replace(content)
 }
 
+// --- CI/CD Pipeline Templates ---
+
+const cicdDir = "ci_cd"
+
+// cicdCache provides thread-safe, fetch-once caching of CI/CD pipeline files
+// from the teaching material repo. Same retry-on-failure semantics as templateCache.
+type cicdCache struct {
+	mu    sync.Mutex
+	files []templateFile
+}
+
+// get returns cached CI/CD files, fetching them on first call.
+func (cc *cicdCache) get(client *gitlab.Client, projectID string) ([]templateFile, error) {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	if cc.files != nil {
+		return cc.files, nil
+	}
+
+	files, err := fetchCICDFiles(client, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	cc.files = files
+	log.WithField("count", len(files)).Info("CI/CD pipeline files cached from teaching material repo")
+	return cc.files, nil
+}
+
+// fetchCICDFiles lists all files under ci_cd/ in the teaching material repo
+// and fetches their content. Returns an empty slice (no error) if the directory
+// does not exist — CI/CD pipeline config is optional.
+func fetchCICDFiles(client *gitlab.Client, projectID string) ([]templateFile, error) {
+	opts := &gitlab.ListTreeOptions{
+		Path:      gitlab.Ptr(cicdDir),
+		Ref:       gitlab.Ptr(templateRef),
+		Recursive: gitlab.Ptr(true),
+		ListOptions: gitlab.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	nodes, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.TreeNode, *gitlab.Response, error) {
+		return client.Repositories.ListTree(projectID, opts, p)
+	})
+	if err != nil {
+		// If the directory doesn't exist, GitLab returns 404 — treat as empty
+		return nil, nil //nolint:nilerr // missing ci_cd/ dir is valid (optional)
+	}
+
+	var files []templateFile
+	for _, node := range nodes {
+		if node.Type != "blob" {
+			continue
+		}
+
+		raw, _, err := client.RepositoryFiles.GetRawFile(projectID, node.Path, &gitlab.GetRawFileOptions{
+			Ref: gitlab.Ptr(templateRef),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("fetch CI/CD file %q from project %q: %w", node.Path, projectID, err)
+		}
+		if len(raw) > maxTemplateBytes {
+			return nil, fmt.Errorf("CI/CD file %q in project %q exceeds max size (%d bytes > %d)", node.Path, projectID, len(raw), maxTemplateBytes)
+		}
+
+		relPath := strings.TrimPrefix(node.Path, cicdDir+"/")
+		files = append(files, templateFile{
+			Path:            relPath,
+			Content:         string(raw),
+			ExecuteFilemode: node.Mode == "100755",
+		})
+	}
+
+	return files, nil
+}
+
 // --- Daily Issue Templates ---
 
 const dailyIssuesDir = "daily_issues"

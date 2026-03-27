@@ -1206,12 +1206,14 @@ func TestIssueCacheThreadSafety(t *testing.T) {
 }
 
 func TestCreateCICDProject(t *testing.T) {
-	t.Run("creates new CI/CD project", func(t *testing.T) {
+	t.Run("creates project and pushes CI/CD files", func(t *testing.T) {
 		var createProjectBody map[string]interface{}
+		var commitBody map[string]interface{}
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 
+			// CreateProject
 			if r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects" {
 				_ = json.NewDecoder(r.Body).Decode(&createProjectBody)
 				w.WriteHeader(http.StatusCreated)
@@ -1220,6 +1222,26 @@ func TestCreateCICDProject(t *testing.T) {
 				})
 				return
 			}
+			// ListTree for ci_cd/
+			if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/repository/tree") {
+				_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+					{"name": ".gitlab-ci.yml", "path": "ci_cd/.gitlab-ci.yml", "type": "blob", "mode": "100644"},
+				})
+				return
+			}
+			// GetRawFile
+			if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/repository/files/") {
+				w.Header().Set("Content-Type", "application/octet-stream")
+				_, _ = fmt.Fprint(w, "stages:\n  - lint\n")
+				return
+			}
+			// CreateCommit for CI/CD files
+			if r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects/500/repository/commits" {
+				_ = json.NewDecoder(r.Body).Decode(&commitBody)
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "abc123"})
+				return
+			}
 			http.NotFound(w, r)
 		}))
 		defer server.Close()
@@ -1227,15 +1249,31 @@ func TestCreateCICDProject(t *testing.T) {
 		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
 		require.NoError(t, err)
 
+		origSvc := InfrastructureServiceSingleton
+		InfrastructureServiceSingleton = &InfrastructureService{
+			teachingMaterialProjectID: "test-teaching-project",
+		}
+		defer func() { InfrastructureServiceSingleton = origSvc }()
+
 		err = createCICDProject(client, 1, "ase/ipraktikum/introcourse")
 		require.NoError(t, err)
 
+		// Verify project creation
 		assert.Equal(t, "ci-cd", createProjectBody["name"])
 		assert.Equal(t, true, createProjectBody["initialize_with_readme"])
-		assert.Equal(t, true, createProjectBody["shared_runners_enabled"])
+
+		// Verify CI/CD files were pushed
+		require.NotNil(t, commitBody, "should push CI/CD files via commit")
+		assert.Equal(t, "Initialize CI/CD pipeline from course template", commitBody["commit_message"])
+		actions, ok := commitBody["actions"].([]interface{})
+		require.True(t, ok, "commit should have actions")
+		require.Len(t, actions, 1)
+		action := actions[0].(map[string]interface{})
+		assert.Equal(t, ".gitlab-ci.yml", action["file_path"])
+		assert.Equal(t, "stages:\n  - lint\n", action["content"])
 	})
 
-	t.Run("idempotent on existing project", func(t *testing.T) {
+	t.Run("idempotent on existing project with existing files", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 
@@ -1244,10 +1282,29 @@ func TestCreateCICDProject(t *testing.T) {
 				_, _ = fmt.Fprint(w, `{"message":"conflict"}`)
 				return
 			}
-			if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v4/projects/") {
+			if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v4/projects/ase") {
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"id": 500, "name": "ci-cd",
 				})
+				return
+			}
+			// ListTree for ci_cd/
+			if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/repository/tree") {
+				_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+					{"name": ".gitlab-ci.yml", "path": "ci_cd/.gitlab-ci.yml", "type": "blob", "mode": "100644"},
+				})
+				return
+			}
+			// GetRawFile
+			if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/repository/files/") {
+				w.Header().Set("Content-Type", "application/octet-stream")
+				_, _ = fmt.Fprint(w, "stages:\n  - lint\n")
+				return
+			}
+			// CreateCommit — files already exist
+			if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/repository/commits") {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = fmt.Fprint(w, `{"message":"A file with this name already exists"}`)
 				return
 			}
 			http.NotFound(w, r)
@@ -1257,8 +1314,104 @@ func TestCreateCICDProject(t *testing.T) {
 		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
 		require.NoError(t, err)
 
+		origSvc := InfrastructureServiceSingleton
+		InfrastructureServiceSingleton = &InfrastructureService{
+			teachingMaterialProjectID: "test-teaching-project",
+		}
+		defer func() { InfrastructureServiceSingleton = origSvc }()
+
 		err = createCICDProject(client, 1, "ase/ipraktikum/introcourse")
 		assert.NoError(t, err)
+	})
+
+	t.Run("succeeds with no CI/CD files in teaching material", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+
+			if r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects" {
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"id": 500, "name": "ci-cd",
+				})
+				return
+			}
+			// ListTree for ci_cd/ — 404 (directory doesn't exist)
+			if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/repository/tree") {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = fmt.Fprint(w, `{"message":"404 Tree Not Found"}`)
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+
+		origSvc := InfrastructureServiceSingleton
+		InfrastructureServiceSingleton = &InfrastructureService{
+			teachingMaterialProjectID: "test-teaching-project",
+		}
+		defer func() { InfrastructureServiceSingleton = origSvc }()
+
+		err = createCICDProject(client, 1, "ase/ipraktikum/introcourse")
+		assert.NoError(t, err)
+	})
+}
+
+func TestFetchCICDFiles(t *testing.T) {
+	t.Run("fetches files from ci_cd directory", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+
+			if strings.Contains(r.URL.Path, "/repository/tree") {
+				_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+					{"name": ".gitlab-ci.yml", "path": "ci_cd/.gitlab-ci.yml", "type": "blob", "mode": "100644"},
+					{"name": "lint.sh", "path": "ci_cd/scripts/lint.sh", "type": "blob", "mode": "100755"},
+				})
+				return
+			}
+			if strings.Contains(r.URL.Path, "/repository/files/") {
+				w.Header().Set("Content-Type", "application/octet-stream")
+				if strings.Contains(r.URL.Path, "gitlab-ci") {
+					_, _ = fmt.Fprint(w, "stages:\n  - lint\n")
+				} else {
+					_, _ = fmt.Fprint(w, "#!/bin/bash\nswiftlint\n")
+				}
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+
+		files, err := fetchCICDFiles(client, "test-project")
+		require.NoError(t, err)
+		require.Len(t, files, 2)
+
+		assert.Equal(t, ".gitlab-ci.yml", files[0].Path)
+		assert.Equal(t, "stages:\n  - lint\n", files[0].Content)
+		assert.False(t, files[0].ExecuteFilemode)
+
+		assert.Equal(t, "scripts/lint.sh", files[1].Path)
+		assert.True(t, files[1].ExecuteFilemode)
+	})
+
+	t.Run("returns empty slice when directory missing", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = fmt.Fprint(w, `{"message":"404 Tree Not Found"}`)
+		}))
+		defer server.Close()
+
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+
+		files, err := fetchCICDFiles(client, "test-project")
+		assert.NoError(t, err)
+		assert.Nil(t, files)
 	})
 }
 

@@ -42,6 +42,9 @@ func InitInfrastructureModule(routerGroup *gin.RouterGroup, queries db.Queries, 
 		if _, err := service.issues.get(gitlabClient, teachingMaterialProjectID); err != nil {
 			log.WithError(err).Warn("Failed to warm issue template cache; daily issues will retry on first request")
 		}
+		if _, err := service.cicd.get(gitlabClient, teachingMaterialProjectID); err != nil {
+			log.WithError(err).Warn("Failed to warm CI/CD cache; CI/CD files will retry on first request")
+		}
 	} else if teachingMaterialProjectID == "" {
 		log.Warn("GITLAB_TEACHING_MATERIAL_PROJECT_ID not set — student repo setup will fail")
 	}

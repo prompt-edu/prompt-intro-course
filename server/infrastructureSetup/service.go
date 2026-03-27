@@ -21,6 +21,7 @@ type InfrastructureService struct {
 	teachingMaterialProjectID string
 	templates                 templateCache
 	issues                    issueCache
+	cicd                      cicdCache
 }
 
 var InfrastructureServiceSingleton *InfrastructureService

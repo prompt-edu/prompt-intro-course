@@ -615,15 +615,14 @@ func createDailyIssues(git *gitlab.Client, projectID int64, repoName string) err
 	return nil
 }
 
-// createCICDProject creates the shared CI/CD project in the Introcourse group.
-// All course projects reference this project's .gitlab-ci.yml via CIConfigPath.
-// The pipeline configuration itself (SwiftLint, build steps, etc.) is managed
-// by instructors — this function only ensures the project exists.
-// Fully idempotent: safe to re-run on an existing course.
+// createCICDProject creates the shared CI/CD project in the Introcourse group
+// and populates it with pipeline config files from the teaching material repo's
+// ci_cd/ directory. All course projects reference this project's .gitlab-ci.yml
+// via CIConfigPath. Fully idempotent: safe to re-run on an existing course.
 func createCICDProject(git *gitlab.Client, introCourseGroupID int64, introCourseGroupPath string) error {
 	const cicdProjectName = "ci-cd"
 
-	_, err := createOrGetProject(git, &gitlab.CreateProjectOptions{
+	project, err := createOrGetProject(git, &gitlab.CreateProjectOptions{
 		Name:                 gitlab.Ptr(cicdProjectName),
 		NamespaceID:          gitlab.Ptr(introCourseGroupID),
 		Visibility:           gitlab.Ptr(gitlab.PrivateVisibility),
@@ -634,6 +633,43 @@ func createCICDProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 	}, introCourseGroupPath)
 	if err != nil {
 		return fmt.Errorf("create CI/CD project: %w", err)
+	}
+
+	// Push pipeline config files from teaching material repo
+	svc := InfrastructureServiceSingleton
+	if svc.teachingMaterialProjectID == "" {
+		return nil // no teaching material configured, skip
+	}
+
+	cicdFiles, err := svc.cicd.get(git, svc.teachingMaterialProjectID)
+	if err != nil {
+		return fmt.Errorf("fetch CI/CD files: %w", err)
+	}
+	if len(cicdFiles) == 0 {
+		log.Warn("No CI/CD files found in teaching material repo ci_cd/ directory; CI/CD project will be empty")
+		return nil
+	}
+
+	var actions []*gitlab.CommitActionOptions
+	for _, f := range cicdFiles {
+		action := &gitlab.CommitActionOptions{
+			Action:   gitlab.Ptr(gitlab.FileCreate),
+			FilePath: gitlab.Ptr(f.Path),
+			Content:  gitlab.Ptr(f.Content),
+		}
+		if f.ExecuteFilemode {
+			action.ExecuteFilemode = gitlab.Ptr(true)
+		}
+		actions = append(actions, action)
+	}
+
+	_, _, err = git.Commits.CreateCommit(project.ID, &gitlab.CreateCommitOptions{
+		Branch:        gitlab.Ptr("main"),
+		CommitMessage: gitlab.Ptr("Initialize CI/CD pipeline from course template"),
+		Actions:       actions,
+	})
+	if err != nil && !isAlreadyExistsError(err) {
+		return fmt.Errorf("push CI/CD files to project: %w", err)
 	}
 
 	return nil
