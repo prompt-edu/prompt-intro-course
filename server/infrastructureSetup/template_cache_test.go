@@ -739,6 +739,12 @@ func TestCreateDemoProject(t *testing.T) {
 			return
 		}
 
+		// Approval configuration
+		if path == "/api/v4/projects/300/approvals" && r.Method == http.MethodPost {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
+			return
+		}
+
 		// ShareProjectWithGroup
 		if strings.HasSuffix(path, "/share") && r.Method == http.MethodPost {
 			sharedWithGroup.Store(true)
@@ -918,6 +924,12 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 					},
 				},
 			})
+			return
+		}
+
+		// Approval configuration (idempotent — always succeeds)
+		if path == "/api/v4/projects/300/approvals" && r.Method == http.MethodPost {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 			return
 		}
 

@@ -201,11 +201,22 @@ func getUserID(username string) (*gitlab.User, error) {
 // the intro course workflow are disabled to keep the UI clean for students.
 func newCourseProjectOptions(name string, namespaceID int64) *gitlab.CreateProjectOptions {
 	return &gitlab.CreateProjectOptions{
-		Name:                             gitlab.Ptr(name),
-		NamespaceID:                      gitlab.Ptr(namespaceID),
-		SharedRunnersEnabled:             gitlab.Ptr(true),
-		OnlyAllowMergeIfPipelineSucceeds: gitlab.Ptr(true),
-		BuildsAccessLevel:                gitlab.Ptr(gitlab.PrivateAccessControl),
+		Name:        gitlab.Ptr(name),
+		NamespaceID: gitlab.Ptr(namespaceID),
+
+		// Git & merge settings
+		Visibility:                                    gitlab.Ptr(gitlab.PrivateVisibility),
+		MergeMethod:                                   gitlab.Ptr(gitlab.NoFastForwardMerge),
+		SquashOption:                                  gitlab.Ptr(gitlab.SquashOptionDefaultOff),
+		RemoveSourceBranchAfterMerge:                  gitlab.Ptr(true),
+		OnlyAllowMergeIfPipelineSucceeds:              gitlab.Ptr(true),
+		OnlyAllowMergeIfAllDiscussionsAreResolved:     gitlab.Ptr(true),
+
+		// CI/CD
+		SharedRunnersEnabled: gitlab.Ptr(true),
+		BuildsAccessLevel:   gitlab.Ptr(gitlab.PrivateAccessControl),
+
+		// Disable unneeded features to keep the UI clean for students
 		ContainerRegistryAccessLevel:     gitlab.Ptr(gitlab.DisabledAccessControl),
 		EnvironmentsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl),
 		FeatureFlagsAccessLevel:          gitlab.Ptr(gitlab.DisabledAccessControl),
@@ -243,6 +254,47 @@ func createOrGetProject(git *gitlab.Client, opts *gitlab.CreateProjectOptions, g
 	return project, nil
 }
 
+// configureProject applies the shared setup steps to any course project:
+// template files, branch protection, issue board, approval config, daily issues.
+// All steps are idempotent — safe to call on both new and existing projects.
+func configureProject(git *gitlab.Client, projectID int64, projectName string, vars templateVars) error {
+	// Template files (idempotent: skip files that already exist)
+	err := createProjectFiles(git, projectID, projectName, vars)
+	if err != nil {
+		return err
+	}
+
+	// Branch protection (idempotent: skip if already protected)
+	_, _, err = git.ProtectedBranches.ProtectRepositoryBranches(projectID, &gitlab.ProtectRepositoryBranchesOptions{
+		Name:             gitlab.Ptr("main"),
+		PushAccessLevel:  gitlab.Ptr(gitlab.MaintainerPermissions),
+		MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
+		AllowForcePush:   gitlab.Ptr(false),
+	})
+	if err != nil && !isAlreadyExistsError(err) {
+		return fmt.Errorf("protect branch for %q: %w", projectName, err)
+	}
+
+	// Issue board (idempotent: reuse existing board, add missing lists)
+	err = ensureIssueBoard(git, projectID, projectName)
+	if err != nil {
+		return err
+	}
+
+	// Approval configuration (reset approvals on push, prevent self-approval)
+	err = ensureApprovalConfiguration(git, projectID, projectName)
+	if err != nil {
+		return err
+	}
+
+	// Daily issues (non-fatal: log and continue)
+	if err = createDailyIssues(git, projectID, projectName); err != nil {
+		log.WithError(err).WithField("project", projectName).Warn("Failed to create daily issues (non-fatal)")
+	}
+
+	return nil
+}
+
 func CreateStudentProject(repoName string, devID, tutorID, introCourseID int64, introCourseGroupPath string, devGroupID int64, studentName, submissionDeadline string) error {
 	git, err := getClient()
 	if err != nil {
@@ -255,8 +307,8 @@ func CreateStudentProject(repoName string, devID, tutorID, introCourseID int64, 
 		return err
 	}
 
-	// 2. Create project files (idempotent: skip files that already exist)
-	err = createProjectFiles(git, project.ID, repoName, templateVars{
+	// 2. Shared project setup (files, branch protection, board, approvals, issues)
+	err = configureProject(git, project.ID, repoName, templateVars{
 		StudentName:        studentName,
 		SubmissionDeadline: submissionDeadline,
 	})
@@ -264,37 +316,16 @@ func CreateStudentProject(repoName string, devID, tutorID, introCourseID int64, 
 		return err
 	}
 
-	// 3. Branch protection (idempotent: skip if already protected)
-	_, _, err = git.ProtectedBranches.ProtectRepositoryBranches(project.ID, &gitlab.ProtectRepositoryBranchesOptions{
-		Name:             gitlab.Ptr("main"),
-		PushAccessLevel:  gitlab.Ptr(gitlab.MaintainerPermissions),
-		MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
-	})
-	if err != nil && !isAlreadyExistsError(err) {
-		return fmt.Errorf("protect branch for %q: %w", repoName, err)
-	}
-
-	// 4. Issue board (idempotent: reuse existing board, add missing lists)
-	err = ensureIssueBoard(git, project.ID, repoName)
-	if err != nil {
-		return err
-	}
-
-	// 5. Members (idempotent: skip if already a member)
+	// 3. Members (idempotent: skip if already a member)
 	err = addProjectMembers(git, project.ID, repoName, devID, devGroupID)
 	if err != nil {
 		return err
 	}
 
-	// 6. Approval rule (idempotent: skip if "Tutor Approval" rule exists)
+	// 4. Approval rule (idempotent: skip if "Tutor Approval" rule exists)
 	err = ensureApprovalRule(git, project.ID, repoName, tutorID)
 	if err != nil {
 		return err
-	}
-
-	// 7. Daily issues (non-fatal: log and continue)
-	if err = createDailyIssues(git, project.ID, repoName); err != nil {
-		log.WithError(err).WithField("project", repoName).Warn("Failed to create daily issues (non-fatal)")
 	}
 
 	return nil
@@ -447,6 +478,23 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 	return nil
 }
 
+// ensureApprovalConfiguration sets project-level approval policies:
+// - Reset approvals when new commits are pushed (prevents stale approvals)
+// - Prevent MR authors from approving their own MRs
+// - Prevent committers from approving MRs they contributed to
+// Idempotent: safe to call multiple times.
+func ensureApprovalConfiguration(git *gitlab.Client, projectID int64, repoName string) error {
+	_, _, err := git.Projects.ChangeApprovalConfiguration(projectID, &gitlab.ChangeApprovalConfigurationOptions{
+		ResetApprovalsOnPush:                   gitlab.Ptr(true),
+		MergeRequestsAuthorApproval:            gitlab.Ptr(false),
+		MergeRequestsDisableCommittersApproval: gitlab.Ptr(true),
+	})
+	if err != nil {
+		return fmt.Errorf("configure approval settings for %q: %w", repoName, err)
+	}
+	return nil
+}
+
 // getOrCreateTutorSubgroup returns the GitLab group ID and path for a tutor's
 // subgroup inside the Introcourse group. Creates the subgroup and adds the
 // tutor as Maintainer if it doesn't exist yet. The mapping is cached in the DB
@@ -593,26 +641,10 @@ func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 		return err
 	}
 
-	// Push template files with demo-specific substitutions
-	err = createProjectFiles(git, project.ID, demoProjectName, templateVars{
+	// Shared project setup (files, branch protection, board, approvals, issues)
+	err = configureProject(git, project.ID, demoProjectName, templateVars{
 		StudentName: "Demo",
 	})
-	if err != nil {
-		return err
-	}
-
-	// Protect main branch (same as student repos)
-	_, _, err = git.ProtectedBranches.ProtectRepositoryBranches(project.ID, &gitlab.ProtectRepositoryBranchesOptions{
-		Name:             gitlab.Ptr("main"),
-		PushAccessLevel:  gitlab.Ptr(gitlab.MaintainerPermissions),
-		MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
-	})
-	if err != nil && !isAlreadyExistsError(err) {
-		return fmt.Errorf("protect branch for %q: %w", demoProjectName, err)
-	}
-
-	// Issue board (same as student repos)
-	err = ensureIssueBoard(git, project.ID, demoProjectName)
 	if err != nil {
 		return err
 	}
@@ -624,11 +656,6 @@ func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 	})
 	if err != nil && !isAlreadyExistsError(err) {
 		return fmt.Errorf("share %q with tutors group: %w", demoProjectName, err)
-	}
-
-	// Daily issues (non-fatal)
-	if err = createDailyIssues(git, project.ID, demoProjectName); err != nil {
-		log.WithError(err).WithField("project", demoProjectName).Warn("Failed to create daily issues for demo (non-fatal)")
 	}
 
 	return nil
