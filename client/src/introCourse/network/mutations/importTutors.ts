@@ -10,11 +10,6 @@ export const importTutors = async (
     await introCourseAxiosInstance.post(
       `intro-course/api/course_phase/${coursePhaseID}/tutor/course/${courseID}`,
       tutors,
-      {
-        headers: {
-          'Content-Type': 'application/json-path+json',
-        },
-      },
     )
   } catch (err) {
     console.error(err)

@@ -3,8 +3,8 @@ package coreRequests
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
-	"net/http"
+	"fmt"
+	"io"
 
 	"github.com/google/uuid"
 	"github.com/prompt-edu/prompt-intro-course/server/coreRequests/coreRequestDTOs"
@@ -36,9 +36,13 @@ func SendAddStudentsToKeycloakGroup(authHeader string, courseID uuid.UUID, stude
 		}
 	}()
 
-	if resp.StatusCode != http.StatusOK {
-		log.Error("Received non-OK response:", resp.Status)
-		return errors.New("non-OK response received")
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			log.Error("Failed to read error response body: ", readErr)
+		}
+		log.Errorf("Received non-2xx response from core server: status=%s body=%s", resp.Status, string(respBody))
+		return fmt.Errorf("core server returned %s: %s", resp.Status, string(respBody))
 	}
 
 	return nil
