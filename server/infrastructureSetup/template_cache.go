@@ -132,8 +132,9 @@ const cicdDir = "ci_cd"
 // cicdCache provides thread-safe, fetch-once caching of CI/CD pipeline files
 // from the teaching material repo. Same retry-on-failure semantics as templateCache.
 type cicdCache struct {
-	mu    sync.Mutex
-	files []templateFile
+	mu      sync.Mutex
+	files   []templateFile
+	fetched bool
 }
 
 // get returns cached CI/CD files, fetching them on first call.
@@ -141,7 +142,7 @@ func (cc *cicdCache) get(client *gitlab.Client, projectID string) ([]templateFil
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
-	if cc.files != nil {
+	if cc.fetched {
 		return cc.files, nil
 	}
 
@@ -151,6 +152,7 @@ func (cc *cicdCache) get(client *gitlab.Client, projectID string) ([]templateFil
 	}
 
 	cc.files = files
+	cc.fetched = true
 	log.WithField("count", len(files)).Info("CI/CD pipeline files cached from teaching material repo")
 	return cc.files, nil
 }
@@ -216,8 +218,9 @@ type issueTemplate struct {
 // issueCache provides thread-safe, fetch-once caching of issue templates.
 // Same retry-on-failure semantics as templateCache.
 type issueCache struct {
-	mu     sync.Mutex
-	issues []issueTemplate
+	mu      sync.Mutex
+	issues  []issueTemplate
+	fetched bool
 }
 
 // get returns cached issue templates, fetching them on first call.
@@ -225,7 +228,7 @@ func (ic *issueCache) get(client *gitlab.Client, projectID string) ([]issueTempl
 	ic.mu.Lock()
 	defer ic.mu.Unlock()
 
-	if ic.issues != nil {
+	if ic.fetched {
 		return ic.issues, nil
 	}
 
@@ -235,6 +238,7 @@ func (ic *issueCache) get(client *gitlab.Client, projectID string) ([]issueTempl
 	}
 
 	ic.issues = issues
+	ic.fetched = true
 	log.WithField("count", len(issues)).Info("issue templates cached from teaching material repo")
 	return ic.issues, nil
 }
