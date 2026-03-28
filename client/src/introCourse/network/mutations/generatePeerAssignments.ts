@@ -7,7 +7,7 @@ export const generatePeerAssignments = async (
   try {
     return (
       await introCourseAxiosInstance.post(
-        `intro-course/api/course_phase/${coursePhaseID}/peer-assignments/generate`,
+        `intro-course/api/course_phase/${coursePhaseID}/peer_assignments/generate`,
         {},
         {
           headers: {

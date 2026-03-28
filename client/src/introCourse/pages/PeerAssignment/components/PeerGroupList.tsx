@@ -68,8 +68,8 @@ export const PeerGroupList = ({
     // Build adjacency: for each student, collect all their peers
     const adjacency = new Map<string, Set<string>>()
     for (const a of peerAssignments) {
-      if (!adjacency.has(a.studentId)) adjacency.set(a.studentId, new Set())
-      adjacency.get(a.studentId)!.add(a.peerId)
+      if (!adjacency.has(a.studentID)) adjacency.set(a.studentID, new Set())
+      adjacency.get(a.studentID)!.add(a.peerID)
     }
 
     // Find connected components (pairs/triples)

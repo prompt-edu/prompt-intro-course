@@ -7,7 +7,7 @@ export const updatePeerAssignments = async (
 ): Promise<void> => {
   try {
     await introCourseAxiosInstance.put(
-      `intro-course/api/course_phase/${coursePhaseID}/peer-assignments`,
+      `intro-course/api/course_phase/${coursePhaseID}/peer_assignments`,
       assignments,
       {
         headers: {

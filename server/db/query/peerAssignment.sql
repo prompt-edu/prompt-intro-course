@@ -37,7 +37,7 @@ WHERE pa.course_phase_id = $1
 -- name: CreatePeerAssignment :exec
 INSERT INTO peer_assignment (course_phase_id, student_id, peer_id)
 VALUES ($1, $2, $3)
-ON CONFLICT DO NOTHING;
+ON CONFLICT ON CONSTRAINT peer_assignment_pkey DO NOTHING;
 
 -- name: DeletePeerAssignments :exec
 DELETE FROM peer_assignment

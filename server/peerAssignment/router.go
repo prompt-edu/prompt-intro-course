@@ -3,17 +3,20 @@ package peerAssignment
 import (
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/prompt-edu/prompt-intro-course/server/peerAssignment/peerAssignmentDTO"
 	promptSDK "github.com/prompt-edu/prompt-sdk"
+	"github.com/prompt-edu/prompt-intro-course/server/peerAssignment/peerAssignmentDTO"
 	log "github.com/sirupsen/logrus"
 )
 
+var semesterTagPattern = regexp.MustCompile(`^[A-Z0-9]+$`)
+
 func setupPeerAssignmentRouter(router *gin.RouterGroup, authMiddleware func(allowedRoles ...string) gin.HandlerFunc) {
-	peerRouter := router.Group("/peer-assignments")
+	peerRouter := router.Group("/peer_assignments")
 
 	peerRouter.GET("", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), getPeerAssignments)
 	peerRouter.POST("/generate", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), generatePeerAssignments)
@@ -27,23 +30,25 @@ func setupPeerAssignmentRouter(router *gin.RouterGroup, authMiddleware func(allo
 // getPeerAssignments godoc
 // @Summary Get all peer assignments
 // @Description Returns all peer assignments for the course phase.
-// @Tags peer-assignments
+// @Tags peer-assignment
 // @Produce json
 // @Param coursePhaseID path string true "Course Phase UUID"
 // @Success 200 {array} peerAssignmentDTO.PeerAssignment
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security ApiKeyAuth
-// @Router /course_phase/{coursePhaseID}/peer-assignments [get]
+// @Router /course_phase/{coursePhaseID}/peer_assignments [get]
 func getPeerAssignments(c *gin.Context) {
 	coursePhaseID, err := uuid.Parse(c.Param("coursePhaseID"))
 	if err != nil {
+		log.Error("Error parsing coursePhaseID: ", err)
 		handleError(c, http.StatusBadRequest, err)
 		return
 	}
 
 	assignments, err := GetAllPeerAssignments(c, coursePhaseID)
 	if err != nil {
+		log.Error("Error getting peer assignments: ", err)
 		handleError(c, http.StatusInternalServerError, err)
 		return
 	}
@@ -53,24 +58,26 @@ func getPeerAssignments(c *gin.Context) {
 
 // generatePeerAssignments godoc
 // @Summary Generate peer assignments
-// @Description Auto-generates peer pairs within tutor groups.
-// @Tags peer-assignments
+// @Description Auto-generates peer groups within tutor groups.
+// @Tags peer-assignment
 // @Produce json
 // @Param coursePhaseID path string true "Course Phase UUID"
 // @Success 201 {array} peerAssignmentDTO.PeerAssignment
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security ApiKeyAuth
-// @Router /course_phase/{coursePhaseID}/peer-assignments/generate [post]
+// @Router /course_phase/{coursePhaseID}/peer_assignments/generate [post]
 func generatePeerAssignments(c *gin.Context) {
 	coursePhaseID, err := uuid.Parse(c.Param("coursePhaseID"))
 	if err != nil {
+		log.Error("Error parsing coursePhaseID: ", err)
 		handleError(c, http.StatusBadRequest, err)
 		return
 	}
 
 	assignments, err := GeneratePeerAssignments(c, coursePhaseID)
 	if err != nil {
+		log.Error("Error generating peer assignments: ", err)
 		handleError(c, http.StatusInternalServerError, err)
 		return
 	}
@@ -81,7 +88,7 @@ func generatePeerAssignments(c *gin.Context) {
 // updatePeerAssignments godoc
 // @Summary Update peer assignments
 // @Description Replaces all peer assignments with the provided set.
-// @Tags peer-assignments
+// @Tags peer-assignment
 // @Accept json
 // @Produce json
 // @Param coursePhaseID path string true "Course Phase UUID"
@@ -90,10 +97,11 @@ func generatePeerAssignments(c *gin.Context) {
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security ApiKeyAuth
-// @Router /course_phase/{coursePhaseID}/peer-assignments [put]
+// @Router /course_phase/{coursePhaseID}/peer_assignments [put]
 func updatePeerAssignments(c *gin.Context) {
 	coursePhaseID, err := uuid.Parse(c.Param("coursePhaseID"))
 	if err != nil {
+		log.Error("Error parsing coursePhaseID: ", err)
 		handleError(c, http.StatusBadRequest, err)
 		return
 	}
@@ -106,6 +114,7 @@ func updatePeerAssignments(c *gin.Context) {
 
 	err = UpdatePeerAssignments(c, coursePhaseID, assignments)
 	if err != nil {
+		log.Error("Error updating peer assignments: ", err)
 		handleError(c, http.StatusInternalServerError, err)
 		return
 	}
@@ -116,22 +125,24 @@ func updatePeerAssignments(c *gin.Context) {
 // deletePeerAssignments godoc
 // @Summary Delete all peer assignments
 // @Description Removes all peer assignments for the course phase.
-// @Tags peer-assignments
+// @Tags peer-assignment
 // @Param coursePhaseID path string true "Course Phase UUID"
 // @Success 200
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security ApiKeyAuth
-// @Router /course_phase/{coursePhaseID}/peer-assignments [delete]
+// @Router /course_phase/{coursePhaseID}/peer_assignments [delete]
 func deletePeerAssignments(c *gin.Context) {
 	coursePhaseID, err := uuid.Parse(c.Param("coursePhaseID"))
 	if err != nil {
+		log.Error("Error parsing coursePhaseID: ", err)
 		handleError(c, http.StatusBadRequest, err)
 		return
 	}
 
 	err = DeletePeerAssignments(c, coursePhaseID)
 	if err != nil {
+		log.Error("Error deleting peer assignments: ", err)
 		handleError(c, http.StatusInternalServerError, err)
 		return
 	}
@@ -142,7 +153,7 @@ func deletePeerAssignments(c *gin.Context) {
 // syncPeerAssignmentsToGitlab godoc
 // @Summary Sync peer assignments to GitLab
 // @Description Adds peers as Reporter members and creates approval rules on GitLab.
-// @Tags peer-assignments
+// @Tags peer-assignment
 // @Accept json
 // @Produce json
 // @Param coursePhaseID path string true "Course Phase UUID"
@@ -151,10 +162,11 @@ func deletePeerAssignments(c *gin.Context) {
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security ApiKeyAuth
-// @Router /course_phase/{coursePhaseID}/peer-assignments/sync-gitlab [post]
+// @Router /course_phase/{coursePhaseID}/peer_assignments/sync-gitlab [post]
 func syncPeerAssignmentsToGitlab(c *gin.Context) {
 	coursePhaseID, err := uuid.Parse(c.Param("coursePhaseID"))
 	if err != nil {
+		log.Error("Error parsing coursePhaseID: ", err)
 		handleError(c, http.StatusBadRequest, err)
 		return
 	}
@@ -166,8 +178,14 @@ func syncPeerAssignmentsToGitlab(c *gin.Context) {
 	}
 
 	semesterTag := strings.ToUpper(req.SemesterTag)
+	if !semesterTagPattern.MatchString(semesterTag) {
+		handleError(c, http.StatusBadRequest, errors.New("invalid semester tag format"))
+		return
+	}
+
 	results, err := SyncPeerAssignmentsToGitlab(c, coursePhaseID, semesterTag)
 	if err != nil {
+		log.Error("Error syncing peer assignments to GitLab: ", err)
 		handleError(c, http.StatusInternalServerError, err)
 		return
 	}
@@ -178,30 +196,38 @@ func syncPeerAssignmentsToGitlab(c *gin.Context) {
 // getOwnPeerAssignment godoc
 // @Summary Get own peer assignment
 // @Description Returns the peer assignments for the authenticated student.
-// @Tags peer-assignments
+// @Tags peer-assignment
 // @Produce json
 // @Param coursePhaseID path string true "Course Phase UUID"
 // @Success 200 {object} peerAssignmentDTO.OwnPeerAssignment
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security ApiKeyAuth
-// @Router /course_phase/{coursePhaseID}/peer-assignments/own [get]
+// @Router /course_phase/{coursePhaseID}/peer_assignments/own [get]
 func getOwnPeerAssignment(c *gin.Context) {
 	coursePhaseID, err := uuid.Parse(c.Param("coursePhaseID"))
 	if err != nil {
+		log.Error("Error parsing coursePhaseID: ", err)
 		handleError(c, http.StatusBadRequest, err)
 		return
 	}
 
-	courseParticipationID, ok := c.Get("courseParticipationID")
+	cpID, ok := c.Get("courseParticipationID")
 	if !ok {
 		log.Error("Error getting courseParticipationID from context")
 		handleError(c, http.StatusInternalServerError, errors.New("error getting courseParticipationID from context"))
 		return
 	}
+	courseParticipationID, ok := cpID.(uuid.UUID)
+	if !ok {
+		log.Error("courseParticipationID is not a valid UUID")
+		handleError(c, http.StatusInternalServerError, errors.New("invalid courseParticipationID type"))
+		return
+	}
 
-	assignment, err := GetOwnPeerAssignment(c, coursePhaseID, courseParticipationID.(uuid.UUID))
+	assignment, err := GetOwnPeerAssignment(c, coursePhaseID, courseParticipationID)
 	if err != nil {
+		log.Error("Error getting own peer assignment: ", err)
 		handleError(c, http.StatusInternalServerError, err)
 		return
 	}

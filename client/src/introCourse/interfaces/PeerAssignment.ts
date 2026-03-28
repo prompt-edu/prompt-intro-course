@@ -1,5 +1,5 @@
 export interface PeerInfo {
-  courseParticipationId: string
+  courseParticipationID: string
   gitlabUsername: string
   seatName: string
   tutorGitlabUsername: string
@@ -11,13 +11,13 @@ export interface OwnPeerAssignment {
 }
 
 export interface PeerAssignment {
-  studentId: string
-  peerId: string
+  studentID: string
+  peerID: string
 }
 
 export interface SyncResult {
-  studentId: string
-  peerId: string
+  studentID: string
+  peerID: string
   success: boolean
   error?: string
 }

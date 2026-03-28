@@ -8,7 +8,7 @@ export const syncPeerAssignmentsToGitlab = async (
   try {
     return (
       await introCourseAxiosInstance.post(
-        `intro-course/api/course_phase/${coursePhaseID}/peer-assignments/sync-gitlab`,
+        `intro-course/api/course_phase/${coursePhaseID}/peer_assignments/sync-gitlab`,
         { semesterTag },
         {
           headers: {

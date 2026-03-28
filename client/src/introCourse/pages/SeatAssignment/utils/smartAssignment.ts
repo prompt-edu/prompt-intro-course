@@ -91,10 +91,10 @@ export function smartAssign(
   const peerMap = new Map<string, Set<string>>()
   if (peerAssignments) {
     for (const pa of peerAssignments) {
-      if (!peerMap.has(pa.studentId)) peerMap.set(pa.studentId, new Set())
-      peerMap.get(pa.studentId)!.add(pa.peerId)
-      if (!peerMap.has(pa.peerId)) peerMap.set(pa.peerId, new Set())
-      peerMap.get(pa.peerId)!.add(pa.studentId)
+      if (!peerMap.has(pa.studentID)) peerMap.set(pa.studentID, new Set())
+      peerMap.get(pa.studentID)!.add(pa.peerID)
+      if (!peerMap.has(pa.peerID)) peerMap.set(pa.peerID, new Set())
+      peerMap.get(pa.peerID)!.add(pa.studentID)
     }
   }
 

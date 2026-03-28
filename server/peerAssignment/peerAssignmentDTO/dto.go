@@ -7,13 +7,13 @@ import (
 
 // PeerAssignment is the admin-facing DTO for a single directed assignment.
 type PeerAssignment struct {
-	StudentID uuid.UUID `json:"studentId"`
-	PeerID    uuid.UUID `json:"peerId"`
+	StudentID uuid.UUID `json:"studentID"`
+	PeerID    uuid.UUID `json:"peerID"`
 }
 
 // PeerInfo is the enriched peer info used in student-facing responses.
 type PeerInfo struct {
-	CourseParticipationID uuid.UUID `json:"courseParticipationId"`
+	CourseParticipationID uuid.UUID `json:"courseParticipationID"`
 	GitlabUsername        string    `json:"gitlabUsername"`
 	SeatName              string    `json:"seatName"`
 	TutorGitlabUsername   string    `json:"tutorGitlabUsername"`
@@ -32,8 +32,8 @@ type SyncRequest struct {
 
 // SyncResult reports per-pair sync outcome.
 type SyncResult struct {
-	StudentID uuid.UUID `json:"studentId"`
-	PeerID    uuid.UUID `json:"peerId"`
+	StudentID uuid.UUID `json:"studentID"`
+	PeerID    uuid.UUID `json:"peerID"`
 	Success   bool      `json:"success"`
 	Error     string    `json:"error,omitempty"`
 }

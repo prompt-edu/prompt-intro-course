@@ -41,7 +41,7 @@ export const PeerAssignmentActions = ({
 
   // Count unique students in peer assignments
   const uniqueStudents = new Set(
-    peerAssignments.flatMap((a) => [a.studentId, a.peerId]),
+    peerAssignments.flatMap((a) => [a.studentID, a.peerID]),
   ).size
 
   const generateMutation = useMutation({
@@ -165,7 +165,7 @@ export const PeerAssignmentActions = ({
               .filter((r) => !r.success)
               .map((r, i) => (
                 <p key={i} className='text-sm text-destructive'>
-                  Failed: {r.studentId.slice(0, 8)}... → {r.peerId.slice(0, 8)}...: {r.error}
+                  Failed: {r.studentID.slice(0, 8)}... → {r.peerID.slice(0, 8)}...: {r.error}
                 </p>
               ))}
           </AlertDescription>

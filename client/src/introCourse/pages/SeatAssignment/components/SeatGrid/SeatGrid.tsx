@@ -80,8 +80,8 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
     const map = new Map<string, Set<string>>()
     if (!peerAssignments) return map
     for (const a of peerAssignments) {
-      if (!map.has(a.studentId)) map.set(a.studentId, new Set())
-      map.get(a.studentId)!.add(a.peerId)
+      if (!map.has(a.studentID)) map.set(a.studentID, new Set())
+      map.get(a.studentID)!.add(a.peerID)
     }
     return map
   }, [peerAssignments])
@@ -98,13 +98,15 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
     [participationMap],
   )
 
+  const { mutate: swapSeats } = swapMutation
+
   const executeSwap = useCallback(
     (seatA: Seat, seatB: Seat) => {
       const updatedA = { ...seatA, assignedStudent: seatB.assignedStudent }
       const updatedB = { ...seatB, assignedStudent: seatA.assignedStudent }
-      swapMutation.mutate([updatedA, updatedB])
+      swapSeats([updatedA, updatedB])
     },
-    [swapMutation],
+    [swapSeats],
   )
 
   const handleCellClick = useCallback(

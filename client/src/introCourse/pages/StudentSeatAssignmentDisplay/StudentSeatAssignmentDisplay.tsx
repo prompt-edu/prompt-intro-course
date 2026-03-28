@@ -83,7 +83,7 @@ export const StudentSeatAssignmentDisplay = () => {
           <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'>
             {peerAssignment.peersIReview.map((peer) => (
               <div
-                key={peer.courseParticipationId}
+                key={peer.courseParticipationID}
                 className='border rounded-md p-3 flex flex-col gap-2'
               >
                 <p className='font-medium'>{peer.gitlabUsername}</p>

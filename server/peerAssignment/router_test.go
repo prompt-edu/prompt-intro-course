@@ -63,10 +63,10 @@ func TestPeerAssignmentRouterTestSuite(t *testing.T) {
 }
 
 func (suite *PeerAssignmentRouterTestSuite) basePath() string {
-	return "/intro-course/api/course_phase/" + suite.coursePhaseID.String() + "/peer-assignments"
+	return "/intro-course/api/course_phase/" + suite.coursePhaseID.String() + "/peer_assignments"
 }
 
-// --- GET /peer-assignments ---
+// --- GET /peer_assignments ---
 
 func (suite *PeerAssignmentRouterTestSuite) TestGetPeerAssignmentsSuccess() {
 	req, _ := http.NewRequest("GET", suite.basePath(), nil)
@@ -79,14 +79,14 @@ func (suite *PeerAssignmentRouterTestSuite) TestGetPeerAssignmentsSuccess() {
 }
 
 func (suite *PeerAssignmentRouterTestSuite) TestGetPeerAssignmentsInvalidUUID() {
-	req, _ := http.NewRequest("GET", "/intro-course/api/course_phase/not-a-uuid/peer-assignments", nil)
+	req, _ := http.NewRequest("GET", "/intro-course/api/course_phase/not-a-uuid/peer_assignments", nil)
 	resp := httptest.NewRecorder()
 	suite.router.ServeHTTP(resp, req)
 
 	assert.Equal(suite.T(), http.StatusBadRequest, resp.Code)
 }
 
-// --- POST /peer-assignments/generate ---
+// --- POST /peer_assignments/generate ---
 
 func (suite *PeerAssignmentRouterTestSuite) TestGeneratePeerAssignmentsSuccess() {
 	req, _ := http.NewRequest("POST", suite.basePath()+"/generate", nil)
@@ -97,14 +97,14 @@ func (suite *PeerAssignmentRouterTestSuite) TestGeneratePeerAssignmentsSuccess()
 }
 
 func (suite *PeerAssignmentRouterTestSuite) TestGeneratePeerAssignmentsInvalidUUID() {
-	req, _ := http.NewRequest("POST", "/intro-course/api/course_phase/bad-uuid/peer-assignments/generate", nil)
+	req, _ := http.NewRequest("POST", "/intro-course/api/course_phase/bad-uuid/peer_assignments/generate", nil)
 	resp := httptest.NewRecorder()
 	suite.router.ServeHTTP(resp, req)
 
 	assert.Equal(suite.T(), http.StatusBadRequest, resp.Code)
 }
 
-// --- PUT /peer-assignments ---
+// --- PUT /peer_assignments ---
 
 func (suite *PeerAssignmentRouterTestSuite) TestUpdatePeerAssignmentsSuccess() {
 	s1, s2 := uuid.New(), uuid.New()
@@ -131,7 +131,7 @@ func (suite *PeerAssignmentRouterTestSuite) TestUpdatePeerAssignmentsInvalidBody
 
 func (suite *PeerAssignmentRouterTestSuite) TestUpdatePeerAssignmentsInvalidUUID() {
 	body, _ := json.Marshal([]peerAssignmentDTO.PeerAssignment{})
-	req, _ := http.NewRequest("PUT", "/intro-course/api/course_phase/bad/peer-assignments", bytes.NewBuffer(body))
+	req, _ := http.NewRequest("PUT", "/intro-course/api/course_phase/bad/peer_assignments", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 	suite.router.ServeHTTP(resp, req)
@@ -139,7 +139,7 @@ func (suite *PeerAssignmentRouterTestSuite) TestUpdatePeerAssignmentsInvalidUUID
 	assert.Equal(suite.T(), http.StatusBadRequest, resp.Code)
 }
 
-// --- DELETE /peer-assignments ---
+// --- DELETE /peer_assignments ---
 
 func (suite *PeerAssignmentRouterTestSuite) TestDeletePeerAssignmentsSuccess() {
 	req, _ := http.NewRequest("DELETE", suite.basePath(), nil)
@@ -150,14 +150,14 @@ func (suite *PeerAssignmentRouterTestSuite) TestDeletePeerAssignmentsSuccess() {
 }
 
 func (suite *PeerAssignmentRouterTestSuite) TestDeletePeerAssignmentsInvalidUUID() {
-	req, _ := http.NewRequest("DELETE", "/intro-course/api/course_phase/bad/peer-assignments", nil)
+	req, _ := http.NewRequest("DELETE", "/intro-course/api/course_phase/bad/peer_assignments", nil)
 	resp := httptest.NewRecorder()
 	suite.router.ServeHTTP(resp, req)
 
 	assert.Equal(suite.T(), http.StatusBadRequest, resp.Code)
 }
 
-// --- GET /peer-assignments/own ---
+// --- GET /peer_assignments/own ---
 
 func (suite *PeerAssignmentRouterTestSuite) TestGetOwnPeerAssignmentSuccess() {
 	req, _ := http.NewRequest("GET", suite.basePath()+"/own", nil)
@@ -170,14 +170,14 @@ func (suite *PeerAssignmentRouterTestSuite) TestGetOwnPeerAssignmentSuccess() {
 }
 
 func (suite *PeerAssignmentRouterTestSuite) TestGetOwnPeerAssignmentInvalidUUID() {
-	req, _ := http.NewRequest("GET", "/intro-course/api/course_phase/bad/peer-assignments/own", nil)
+	req, _ := http.NewRequest("GET", "/intro-course/api/course_phase/bad/peer_assignments/own", nil)
 	resp := httptest.NewRecorder()
 	suite.router.ServeHTTP(resp, req)
 
 	assert.Equal(suite.T(), http.StatusBadRequest, resp.Code)
 }
 
-// --- POST /peer-assignments/sync-gitlab ---
+// --- POST /peer_assignments/sync-gitlab ---
 
 func (suite *PeerAssignmentRouterTestSuite) TestSyncGitlabMissingSemesterTag() {
 	body, _ := json.Marshal(map[string]string{})
@@ -192,7 +192,7 @@ func (suite *PeerAssignmentRouterTestSuite) TestSyncGitlabMissingSemesterTag() {
 
 func (suite *PeerAssignmentRouterTestSuite) TestSyncGitlabInvalidUUID() {
 	body, _ := json.Marshal(peerAssignmentDTO.SyncRequest{SemesterTag: "SS2025"})
-	req, _ := http.NewRequest("POST", "/intro-course/api/course_phase/bad/peer-assignments/sync-gitlab", bytes.NewBuffer(body))
+	req, _ := http.NewRequest("POST", "/intro-course/api/course_phase/bad/peer_assignments/sync-gitlab", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 	suite.router.ServeHTTP(resp, req)
@@ -232,7 +232,7 @@ func (suite *PeerAssignmentRouterTestSuite) TestFullRoundTrip() {
 		suite.Require().NoError(err)
 	}
 
-	basePath := "/intro-course/api/course_phase/" + phaseID.String() + "/peer-assignments"
+	basePath := "/intro-course/api/course_phase/" + phaseID.String() + "/peer_assignments"
 
 	// Step 1: Generate
 	req, _ := http.NewRequest("POST", basePath+"/generate", nil)
@@ -285,7 +285,7 @@ func (suite *PeerAssignmentRouterTestSuite) TestFullRoundTrip() {
 func (suite *PeerAssignmentRouterTestSuite) TestUpdateAndRetrieve() {
 	phaseID := uuid.New()
 	s1, s2 := uuid.New(), uuid.New()
-	basePath := "/intro-course/api/course_phase/" + phaseID.String() + "/peer-assignments"
+	basePath := "/intro-course/api/course_phase/" + phaseID.String() + "/peer_assignments"
 
 	// Update
 	body, _ := json.Marshal([]peerAssignmentDTO.PeerAssignment{

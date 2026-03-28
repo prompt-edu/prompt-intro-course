@@ -17,10 +17,13 @@ func InitPeerAssignmentModule(routerGroup *gin.RouterGroup, queries db.Queries, 
 	if gitlabAccessToken != "" {
 		client, err := gitlab.NewClient(gitlabAccessToken, gitlab.WithBaseURL(gitlabutil.GitLabBaseURL))
 		if err != nil {
-			log.Errorf("PeerAssignment: Failed to create GitLab client: %v", err)
+			log.Errorf("Failed to create GitLab client: %v — GitLab operations will fail", err)
 		} else {
+			log.Info("GitLab client initialized for peer assignment module")
 			gitlabClient = client
 		}
+	} else {
+		log.Warn("GITLAB_ACCESS_TOKEN not set — peer assignment GitLab operations will fail")
 	}
 
 	PeerAssignmentServiceSingleton = &PeerAssignmentService{

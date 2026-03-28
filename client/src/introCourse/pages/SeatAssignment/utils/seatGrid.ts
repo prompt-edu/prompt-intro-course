@@ -17,26 +17,6 @@ export function parseSeatName(seatName: string): ParsedSeat | null {
   return { room, row, position, original: seatName }
 }
 
-export function groupSeatsByRow(seats: Seat[]): Map<number, Seat[]> {
-  const rows = new Map<number, Seat[]>()
-  for (const seat of seats) {
-    const parsed = parseSeatName(seat.seatName)
-    if (!parsed) continue
-    if (!rows.has(parsed.row)) rows.set(parsed.row, [])
-    rows.get(parsed.row)!.push(seat)
-  }
-  // Sort seats within each row by position
-  for (const [row, rowSeats] of rows) {
-    rowSeats.sort((a, b) => {
-      const pa = parseSeatName(a.seatName)!
-      const pb = parseSeatName(b.seatName)!
-      return pa.position - pb.position
-    })
-    rows.set(row, rowSeats)
-  }
-  return rows
-}
-
 export function getGridDimensions(seats: Seat[]): { maxRow: number; maxPosition: number } {
   let maxRow = 0
   let maxPosition = 0

@@ -7,7 +7,7 @@ export const getOwnPeerAssignment = async (
   try {
     return (
       await introCourseAxiosInstance.get(
-        `intro-course/api/course_phase/${coursePhaseID}/peer-assignments/own`,
+        `intro-course/api/course_phase/${coursePhaseID}/peer_assignments/own`,
       )
     ).data
   } catch (err) {
