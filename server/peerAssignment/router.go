@@ -123,6 +123,13 @@ func updatePeerAssignments(c *gin.Context) {
 		return
 	}
 
+	for _, a := range assignments {
+		if a.StudentID == a.PeerID {
+			handleError(c, http.StatusBadRequest, errors.New("self-review assignment not allowed"))
+			return
+		}
+	}
+
 	err = UpdatePeerAssignments(c, coursePhaseID, assignments)
 	if err != nil {
 		log.Error("Error updating peer assignments: ", err)

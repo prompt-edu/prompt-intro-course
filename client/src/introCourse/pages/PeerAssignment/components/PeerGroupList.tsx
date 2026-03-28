@@ -128,7 +128,7 @@ export const PeerGroupList = ({
         <Users className='h-12 w-12 mx-auto text-muted-foreground mb-2' />
         <h3 className='text-lg font-medium mb-2'>No Peer Assignments</h3>
         <p className='text-muted-foreground max-w-md mx-auto'>
-          Click &quot;Generate Pairs&quot; to automatically create peer review pairs within each
+          Click &quot;Generate Groups&quot; to automatically create peer review groups within each
           tutor group.
         </p>
       </div>
