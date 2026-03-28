@@ -74,8 +74,7 @@ func GetOwnPeerAssignment(ctx context.Context, coursePhaseID uuid.UUID, coursePa
 	}, nil
 }
 
-// GeneratePeerAssignments creates peer pairs within each tutor group.
-// For odd-sized groups, the last group becomes a triple.
+// GeneratePeerAssignments creates peer groups (triples/quads) within each tutor group.
 func GeneratePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]peerAssignmentDTO.PeerAssignment, error) {
 	svc := PeerAssignmentServiceSingleton
 
@@ -127,7 +126,7 @@ func GeneratePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]pe
 		groups := createPeerGroups(students)
 
 		for _, group := range groups {
-			// Insert bidirectional assignments for each pair/triple
+			// Insert bidirectional assignments for each group
 			for i := 0; i < len(group); i++ {
 				for j := 0; j < len(group); j++ {
 					if i == j {

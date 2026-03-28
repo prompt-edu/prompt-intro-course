@@ -185,7 +185,7 @@ export const PeerGroupList = ({
                       )
                     })}
                     <Badge variant='secondary' className='text-xs ml-auto'>
-                      {group.members.length === 2 ? 'Pair' : 'Triple'}
+                      {group.members.length === 2 ? 'Pair' : group.members.length === 3 ? 'Triple' : 'Quad'}
                     </Badge>
                   </div>
                 ))}
