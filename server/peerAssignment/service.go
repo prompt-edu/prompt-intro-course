@@ -22,6 +22,7 @@ type PeerAssignmentService struct {
 
 var PeerAssignmentServiceSingleton *PeerAssignmentService
 
+// GetAllPeerAssignments returns all peer assignments for a course phase.
 func GetAllPeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]peerAssignmentDTO.PeerAssignment, error) {
 	ctxWithTimeout, cancel := db.GetTimeoutContext(ctx)
 	defer cancel()
@@ -38,6 +39,8 @@ func GetAllPeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]peer
 	return peerAssignmentDTO.GetPeerAssignmentDTOsFromDBModels(assignments), nil
 }
 
+// GetOwnPeerAssignment returns the peer assignments for a specific student, including
+// both the peers they review and the peers who review them.
 func GetOwnPeerAssignment(ctx context.Context, coursePhaseID uuid.UUID, courseParticipationID uuid.UUID) (peerAssignmentDTO.OwnPeerAssignment, error) {
 	ctxWithTimeout, cancel := db.GetTimeoutContext(ctx)
 	defer cancel()
@@ -76,10 +79,13 @@ func GetOwnPeerAssignment(ctx context.Context, coursePhaseID uuid.UUID, coursePa
 
 // GeneratePeerAssignments creates peer groups (triples/quads) within each tutor group.
 func GeneratePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]peerAssignmentDTO.PeerAssignment, error) {
+	ctxWithTimeout, cancel := db.GetTimeoutContext(ctx)
+	defer cancel()
+
 	svc := PeerAssignmentServiceSingleton
 
 	// 1. Get all seats to determine tutor groups
-	seats, err := svc.queries.GetSeatPlan(ctx, coursePhaseID)
+	seats, err := svc.queries.GetSeatPlan(ctxWithTimeout, coursePhaseID)
 	if err != nil {
 		log.WithError(err).WithField("coursePhaseID", coursePhaseID).Error("Failed to get seat plan for peer assignment generation")
 		return nil, errors.New("failed to generate peer assignments")
@@ -97,16 +103,16 @@ func GeneratePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]pe
 	}
 
 	// 3. Generate pairs within each tutor group in a transaction
-	tx, err := svc.conn.Begin(ctx)
+	tx, err := svc.conn.Begin(ctxWithTimeout)
 	if err != nil {
 		log.WithError(err).Error("Failed to begin transaction for peer assignment generation")
 		return nil, errors.New("failed to generate peer assignments")
 	}
-	defer promptSDK.DeferDBRollback(tx, ctx)
+	defer promptSDK.DeferDBRollback(tx, ctxWithTimeout)
 	qtx := svc.queries.WithTx(tx)
 
 	// Clear existing assignments
-	if err := qtx.DeletePeerAssignments(ctx, coursePhaseID); err != nil {
+	if err := qtx.DeletePeerAssignments(ctxWithTimeout, coursePhaseID); err != nil {
 		log.WithError(err).Error("Failed to clear existing peer assignments")
 		return nil, errors.New("failed to generate peer assignments")
 	}
@@ -132,7 +138,7 @@ func GeneratePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]pe
 					if i == j {
 						continue
 					}
-					err := qtx.CreatePeerAssignment(ctx, db.CreatePeerAssignmentParams{
+					err := qtx.CreatePeerAssignment(ctxWithTimeout, db.CreatePeerAssignmentParams{
 						CoursePhaseID: coursePhaseID,
 						StudentID:     group[i],
 						PeerID:        group[j],
@@ -150,7 +156,7 @@ func GeneratePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]pe
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if err := tx.Commit(ctxWithTimeout); err != nil {
 		log.WithError(err).Error("Failed to commit peer assignment generation")
 		return nil, errors.New("failed to generate peer assignments")
 	}
@@ -204,18 +210,21 @@ func createPeerGroups(students []uuid.UUID) [][]uuid.UUID {
 
 // UpdatePeerAssignments replaces all peer assignments with the provided set.
 func UpdatePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID, assignments []peerAssignmentDTO.PeerAssignment) error {
+	ctxWithTimeout, cancel := db.GetTimeoutContext(ctx)
+	defer cancel()
+
 	svc := PeerAssignmentServiceSingleton
 
-	tx, err := svc.conn.Begin(ctx)
+	tx, err := svc.conn.Begin(ctxWithTimeout)
 	if err != nil {
 		log.WithError(err).Error("Failed to begin transaction for peer assignment update")
 		return errors.New("failed to update peer assignments")
 	}
-	defer promptSDK.DeferDBRollback(tx, ctx)
+	defer promptSDK.DeferDBRollback(tx, ctxWithTimeout)
 	qtx := svc.queries.WithTx(tx)
 
 	// Clear existing
-	if err := qtx.DeletePeerAssignments(ctx, coursePhaseID); err != nil {
+	if err := qtx.DeletePeerAssignments(ctxWithTimeout, coursePhaseID); err != nil {
 		log.WithError(err).Error("Failed to clear existing peer assignments")
 		return errors.New("failed to update peer assignments")
 	}
@@ -225,7 +234,7 @@ func UpdatePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID, assignm
 		if a.StudentID == a.PeerID {
 			continue // skip self-review
 		}
-		err := qtx.CreatePeerAssignment(ctx, db.CreatePeerAssignmentParams{
+		err := qtx.CreatePeerAssignment(ctxWithTimeout, db.CreatePeerAssignmentParams{
 			CoursePhaseID: coursePhaseID,
 			StudentID:     a.StudentID,
 			PeerID:        a.PeerID,
@@ -236,7 +245,7 @@ func UpdatePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID, assignm
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if err := tx.Commit(ctxWithTimeout); err != nil {
 		log.WithError(err).Error("Failed to commit peer assignment update")
 		return errors.New("failed to update peer assignments")
 	}
@@ -244,6 +253,7 @@ func UpdatePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID, assignm
 	return nil
 }
 
+// DeletePeerAssignments removes all peer assignments for a course phase.
 func DeletePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) error {
 	ctxWithTimeout, cancel := db.GetTimeoutContext(ctx)
 	defer cancel()

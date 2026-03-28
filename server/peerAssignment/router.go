@@ -112,6 +112,17 @@ func updatePeerAssignments(c *gin.Context) {
 		return
 	}
 
+	if len(assignments) == 0 {
+		handleError(c, http.StatusBadRequest, errors.New("assignments list must not be empty"))
+		return
+	}
+
+	// Limit payload to prevent abuse — a course phase cannot have more than 1000 assignments
+	if len(assignments) > 1000 {
+		handleError(c, http.StatusBadRequest, errors.New("too many assignments"))
+		return
+	}
+
 	err = UpdatePeerAssignments(c, coursePhaseID, assignments)
 	if err != nil {
 		log.Error("Error updating peer assignments: ", err)

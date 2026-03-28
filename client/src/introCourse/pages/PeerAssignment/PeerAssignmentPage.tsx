@@ -1,77 +1,23 @@
 import { ManagementPageHeader, ErrorPage } from '@tumaet/prompt-ui-components'
-import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { useParams } from 'react-router-dom'
-import { Tutor } from '../../interfaces/Tutor'
-import { Seat } from '../../interfaces/Seat'
-import { DeveloperProfile } from '../../interfaces/DeveloperProfile'
-import { PeerAssignment } from '../../interfaces/PeerAssignment'
-import { getAllTutors } from '../../network/queries/getAllTutors'
-import { getSeatPlan } from '../../network/queries/getSeatPlan'
-import { getAllDeveloperProfiles } from '../../network/queries/getAllDeveloperProfiles'
-import { getPeerAssignments } from '../../network/queries/getPeerAssignments'
-import { getCoursePhaseParticipations } from '@/network/queries/getCoursePhaseParticipations'
-import { CoursePhaseParticipationsWithResolution } from '@tumaet/prompt-shared-state'
 import { PeerAssignmentActions } from './components/PeerAssignmentActions'
 import { PeerGroupList } from './components/PeerGroupList'
+import { usePeerAssignmentData } from './hooks/usePeerAssignmentData'
 
 export const PeerAssignmentPage = () => {
   const { phaseId } = useParams<{ phaseId: string }>()
 
   const {
-    data: tutors,
-    isPending: isPendingTutors,
-    isError: isTutorsError,
-    refetch: refetchTutors,
-  } = useQuery<Tutor[]>({
-    queryKey: ['tutors', phaseId],
-    queryFn: () => getAllTutors(phaseId ?? ''),
-  })
-
-  const {
-    data: seats,
-    isPending: isSeatsPending,
-    isError: isSeatsError,
-    refetch: refetchSeats,
-  } = useQuery<Seat[]>({
-    queryKey: ['seatPlan', phaseId],
-    queryFn: () => getSeatPlan(phaseId ?? ''),
-  })
-
-  const {
-    data: developerProfiles,
-    isPending: isProfilesPending,
-    isError: isProfilesError,
-    refetch: refetchProfiles,
-  } = useQuery<DeveloperProfile[]>({
-    queryKey: ['developerProfiles', phaseId],
-    queryFn: () => getAllDeveloperProfiles(phaseId ?? ''),
-  })
-
-  const {
-    data: peerAssignments,
-    isPending: isPeersPending,
-    isError: isPeersError,
-    refetch: refetchPeers,
-  } = useQuery<PeerAssignment[]>({
-    queryKey: ['peerAssignments', phaseId],
-    queryFn: () => getPeerAssignments(phaseId ?? ''),
-  })
-
-  const {
-    data: participations,
-    isPending: isParticipationsPending,
-    isError: isParticipationsError,
-    refetch: refetchParticipations,
-  } = useQuery<CoursePhaseParticipationsWithResolution>({
-    queryKey: ['participants', phaseId],
-    queryFn: () => getCoursePhaseParticipations(phaseId ?? ''),
-  })
-
-  const isPending =
-    isPendingTutors || isSeatsPending || isProfilesPending || isPeersPending || isParticipationsPending
-  const isError =
-    isTutorsError || isSeatsError || isProfilesError || isPeersError || isParticipationsError
+    tutors,
+    seats,
+    developerProfiles,
+    peerAssignments,
+    participations,
+    isPending,
+    isError,
+    refetchAll,
+  } = usePeerAssignmentData(phaseId)
 
   if (isPending) {
     return (
@@ -82,17 +28,7 @@ export const PeerAssignmentPage = () => {
   }
 
   if (isError) {
-    return (
-      <ErrorPage
-        onRetry={() => {
-          refetchTutors()
-          refetchSeats()
-          refetchProfiles()
-          refetchPeers()
-          refetchParticipations()
-        }}
-      />
-    )
+    return <ErrorPage onRetry={refetchAll} />
   }
 
   // Count assigned students
