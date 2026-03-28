@@ -23,7 +23,7 @@ DELETE FROM seat
 WHERE course_phase_id = $1;
 
 -- name: GetAssignedTutor :one
-SELECT s.assigned_tutor, t.gitlab_username
+SELECT s.assigned_tutor, t.gitlab_username, t.first_name, t.last_name
 FROM seat s
 JOIN tutor t ON s.assigned_tutor = t.id AND s.course_phase_id = t.course_phase_id
 WHERE s.course_phase_id = $1
