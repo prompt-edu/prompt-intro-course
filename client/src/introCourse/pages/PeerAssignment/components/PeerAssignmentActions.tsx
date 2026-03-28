@@ -82,7 +82,7 @@ export const PeerAssignmentActions = ({
     <div className='space-y-4'>
       <div className='flex flex-wrap items-center gap-3'>
         <Badge variant={statusVariant}>
-          {uniqueStudents} of {totalStudents} students paired
+          {uniqueStudents} of {totalStudents} students grouped
         </Badge>
 
         <Button
@@ -95,7 +95,7 @@ export const PeerAssignmentActions = ({
           ) : (
             <Shuffle className='h-4 w-4 mr-1' />
           )}
-          Generate Pairs
+          Generate Groups
         </Button>
 
         <AlertDialog>
@@ -113,7 +113,7 @@ export const PeerAssignmentActions = ({
             <AlertDialogHeader>
               <AlertDialogTitle>Clear all peer assignments?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will remove all peer pairings. GitLab access will not be revoked automatically.
+                This will remove all peer groups. GitLab access will not be revoked automatically.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

@@ -139,6 +139,32 @@ func (suite *PeerAssignmentRouterTestSuite) TestUpdatePeerAssignmentsInvalidUUID
 	assert.Equal(suite.T(), http.StatusBadRequest, resp.Code)
 }
 
+func (suite *PeerAssignmentRouterTestSuite) TestUpdatePeerAssignmentsEmptyPayload() {
+	body, _ := json.Marshal([]peerAssignmentDTO.PeerAssignment{})
+	req, _ := http.NewRequest("PUT", suite.basePath(), bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	suite.router.ServeHTTP(resp, req)
+
+	assert.Equal(suite.T(), http.StatusBadRequest, resp.Code)
+	assert.Contains(suite.T(), resp.Body.String(), "empty")
+}
+
+func (suite *PeerAssignmentRouterTestSuite) TestUpdatePeerAssignmentsTooManyAssignments() {
+	assignments := make([]peerAssignmentDTO.PeerAssignment, 1001)
+	for i := range assignments {
+		assignments[i] = peerAssignmentDTO.PeerAssignment{StudentID: uuid.New(), PeerID: uuid.New()}
+	}
+	body, _ := json.Marshal(assignments)
+	req, _ := http.NewRequest("PUT", suite.basePath(), bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	suite.router.ServeHTTP(resp, req)
+
+	assert.Equal(suite.T(), http.StatusBadRequest, resp.Code)
+	assert.Contains(suite.T(), resp.Body.String(), "too many")
+}
+
 // --- DELETE /peer_assignments ---
 
 func (suite *PeerAssignmentRouterTestSuite) TestDeletePeerAssignmentsSuccess() {

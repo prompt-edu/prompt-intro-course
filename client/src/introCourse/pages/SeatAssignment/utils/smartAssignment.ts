@@ -207,7 +207,7 @@ function redistributeMacNeedy(
 }
 
 /**
- * Reorder students so peer pairs are adjacent in the list.
+ * Reorder students so peer groups are adjacent in the list.
  * Only reorders within the given subset — does not pull students from other tiers.
  */
 function orderByPeerAdjacency(

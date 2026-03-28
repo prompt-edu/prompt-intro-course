@@ -19,6 +19,7 @@ export const usePeerAssignmentData = (phaseId: string | undefined) => {
   } = useQuery<Tutor[]>({
     queryKey: ['tutors', phaseId],
     queryFn: () => getAllTutors(phaseId ?? ''),
+    enabled: !!phaseId,
   })
 
   const {
@@ -29,6 +30,7 @@ export const usePeerAssignmentData = (phaseId: string | undefined) => {
   } = useQuery<Seat[]>({
     queryKey: ['seatPlan', phaseId],
     queryFn: () => getSeatPlan(phaseId ?? ''),
+    enabled: !!phaseId,
   })
 
   const {
@@ -39,6 +41,7 @@ export const usePeerAssignmentData = (phaseId: string | undefined) => {
   } = useQuery<DeveloperProfile[]>({
     queryKey: ['developerProfiles', phaseId],
     queryFn: () => getAllDeveloperProfiles(phaseId ?? ''),
+    enabled: !!phaseId,
   })
 
   const {
@@ -49,6 +52,7 @@ export const usePeerAssignmentData = (phaseId: string | undefined) => {
   } = useQuery<PeerAssignment[]>({
     queryKey: ['peerAssignments', phaseId],
     queryFn: () => getPeerAssignments(phaseId ?? ''),
+    enabled: !!phaseId,
   })
 
   const {
@@ -59,6 +63,7 @@ export const usePeerAssignmentData = (phaseId: string | undefined) => {
   } = useQuery<CoursePhaseParticipationsWithResolution>({
     queryKey: ['participants', phaseId],
     queryFn: () => getCoursePhaseParticipations(phaseId ?? ''),
+    enabled: !!phaseId,
   })
 
   const isPending =
