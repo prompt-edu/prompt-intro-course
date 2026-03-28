@@ -1,6 +1,12 @@
 -- name: CreateTutor :exec
 INSERT INTO tutor (course_phase_id, id, first_name, last_name, email, matriculation_number, university_login)
-VALUES ($1, $2, $3, $4, $5, $6, $7);
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (course_phase_id, id) DO UPDATE SET
+  first_name = EXCLUDED.first_name,
+  last_name = EXCLUDED.last_name,
+  email = EXCLUDED.email,
+  matriculation_number = EXCLUDED.matriculation_number,
+  university_login = EXCLUDED.university_login;
 
 -- name: GetAllTutors :many
 SELECT * 

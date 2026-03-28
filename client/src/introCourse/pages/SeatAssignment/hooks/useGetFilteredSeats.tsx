@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Tutor } from '../../../interfaces/Tutor'
 import { Seat } from '../../../interfaces/Seat'
 import { TutorAssignmentFilterOptions } from '../interfaces/TutorAssignmentFilterOptions'
@@ -9,26 +10,31 @@ export const useGetFilteredSeats = (
   filterOptions: TutorAssignmentFilterOptions,
   tutors: Tutor[],
 ): Seat[] => {
-  return seats.filter((seat) => {
-    // Search filter
-    const matchesSearch =
-      seat?.seatName?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
-      false ||
-      (seat?.assignedTutor !== null &&
-        getTutorName(seat.assignedTutor, tutors)
-          ?.toLowerCase()
-          ?.includes(searchTerm.toLowerCase())) ||
-      false
+  return useMemo(
+    () =>
+      seats.filter((seat) => {
+        // Search filter
+        const matchesSearch =
+          seat?.seatName?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
+          false ||
+          (seat?.assignedTutor !== null &&
+            getTutorName(seat.assignedTutor, tutors)
+              ?.toLowerCase()
+              ?.includes(searchTerm.toLowerCase())) ||
+          false
 
-    // Assignment filter
-    const matchesAssignmentFilter =
-      (seat.assignedTutor && filterOptions.showAssigned) ||
-      (!seat.assignedTutor && filterOptions.showUnassigned)
+        // Assignment filter
+        const matchesAssignmentFilter =
+          (seat.assignedTutor && filterOptions.showAssigned) ||
+          (!seat.assignedTutor && filterOptions.showUnassigned)
 
-    // Mac filter
-    const matchesMacFilter =
-      (seat.hasMac && filterOptions.showWithMac) || (!seat.hasMac && filterOptions.showWithoutMac)
+        // Mac filter
+        const matchesMacFilter =
+          (seat.hasMac && filterOptions.showWithMac) ||
+          (!seat.hasMac && filterOptions.showWithoutMac)
 
-    return matchesSearch && matchesAssignmentFilter && matchesMacFilter
-  })
+        return matchesSearch && matchesAssignmentFilter && matchesMacFilter
+      }),
+    [seats, searchTerm, filterOptions, tutors],
+  )
 }
