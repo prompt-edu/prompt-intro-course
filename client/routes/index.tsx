@@ -5,6 +5,7 @@ import { IntroCoursePage } from '../src/introCourse/IntroCoursePage'
 import { ExtendedRouteObject } from '@/interfaces/extendedRouteObject'
 import { Role } from '@tumaet/prompt-shared-state'
 import { SeatAssignmentPage } from '../src/introCourse/pages/SeatAssignment/SeatAssignmentPage'
+import { PeerAssignmentPage } from '../src/introCourse/pages/PeerAssignment/PeerAssignmentPage'
 import { MailingPage } from '../src/introCourse/pages/Mailing/MailingPage'
 import { IntroCourseParticipantsPage } from '../src/introCourse/pages/IntroCourseParticipantsPage/IntroCourseParticipantsPage'
 
@@ -36,6 +37,11 @@ const routes: ExtendedRouteObject[] = [
   {
     path: '/seat-assignments',
     element: <SeatAssignmentPage />,
+    requiredPermissions: [Role.PROMPT_ADMIN, Role.COURSE_LECTURER],
+  },
+  {
+    path: '/peer-assignments',
+    element: <PeerAssignmentPage />,
     requiredPermissions: [Role.PROMPT_ADMIN, Role.COURSE_LECTURER],
   },
   {

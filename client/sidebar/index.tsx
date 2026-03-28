@@ -29,6 +29,11 @@ const sidebarItems: SidebarMenuItemProps = {
       requiredPermissions: [Role.PROMPT_ADMIN, Role.COURSE_LECTURER],
     },
     {
+      title: 'Peer Assignments',
+      goToPath: '/peer-assignments',
+      requiredPermissions: [Role.PROMPT_ADMIN, Role.COURSE_LECTURER],
+    },
+    {
       title: 'Mailing',
       goToPath: '/mailing',
       requiredPermissions: [Role.PROMPT_ADMIN, Role.COURSE_LECTURER],

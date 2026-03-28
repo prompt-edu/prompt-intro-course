@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { DeveloperProfile } from '../interfaces/DeveloperProfile'
+import { OwnPeerAssignment } from '../interfaces/PeerAssignment'
 import { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
 import { SeatAssignment } from '../pages/SeatAssignment/interfaces/SeatAssignment'
 
@@ -7,6 +8,7 @@ interface IntroCourseStoreState {
   developerProfile?: DeveloperProfile
   coursePhaseParticipation?: CoursePhaseParticipationWithStudent
   seatAssignment?: SeatAssignment
+  peerAssignment?: OwnPeerAssignment
 }
 
 interface IntroCourseStoreAction {
@@ -15,6 +17,7 @@ interface IntroCourseStoreAction {
     coursePhaseParticipation: CoursePhaseParticipationWithStudent,
   ) => void
   setSeatAssignment: (seatAssignment?: SeatAssignment) => void
+  setPeerAssignment: (peerAssignment?: OwnPeerAssignment) => void
 }
 
 export const useIntroCourseStore = create<IntroCourseStoreState & IntroCourseStoreAction>(
@@ -22,8 +25,10 @@ export const useIntroCourseStore = create<IntroCourseStoreState & IntroCourseSto
     developerProfile: undefined,
     coursePhaseParticipation: undefined,
     seatAssignment: undefined,
+    peerAssignment: undefined,
     setDeveloperProfile: (developerProfile) => set({ developerProfile }),
     setCoursePhaseParticipation: (coursePhaseParticipation) => set({ coursePhaseParticipation }),
     setSeatAssignment: (seatAssignment) => set({ seatAssignment }),
+    setPeerAssignment: (peerAssignment) => set({ peerAssignment }),
   }),
 )

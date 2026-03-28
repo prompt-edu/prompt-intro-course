@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   ChevronDown,
   ChevronUp,
@@ -7,13 +7,16 @@ import {
   UserCheck,
   Users,
   Laptop,
+  Sparkles,
 } from 'lucide-react'
 import { Seat } from '../../../../interfaces/Seat'
 import { DeveloperWithProfile } from '../../interfaces/DeveloperWithProfile'
 import { Tutor } from '../../../../interfaces/Tutor'
+import { PeerAssignment } from '../../../../interfaces/PeerAssignment'
 import { useUpdateSeats } from '../../hooks/useUpdateSeats'
 import { useAssignStudents } from '../../hooks/useAssignStudents'
 import { useDownloadAssignment } from '../../hooks/useDownloadAssignment'
+import { smartAssign } from '../../utils/smartAssignment'
 import { ResetSeatAssignmentDialog } from './ResetSeatAssignmentDialog'
 import {
   Card,
@@ -37,31 +40,30 @@ interface SeatStudentAssignerProps {
   seats: Seat[]
   developerWithProfiles: DeveloperWithProfile[]
   tutors: Tutor[]
+  peerAssignments?: PeerAssignment[]
 }
 
 export const SeatStudentAssigner = ({
   seats,
   developerWithProfiles,
   tutors,
+  peerAssignments,
 }: SeatStudentAssignerProps) => {
   const [error, setError] = useState<string | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [assignmentStatus, setAssignmentStatus] = useState<'none' | 'partial' | 'complete'>('none')
   const totalStudents = developerWithProfiles.length
   const assignedStudents = seats.filter((seat) => seat.assignedStudent).length
+
+  const assignmentStatus = useMemo<'none' | 'partial' | 'complete'>(() => {
+    if (assignedStudents === 0) return 'none'
+    if (assignedStudents < totalStudents) return 'partial'
+    return 'complete'
+  }, [assignedStudents, totalStudents])
 
   const mutation = useUpdateSeats(setError)
 
   // Assign function
   const assignStudents = useAssignStudents(seats, developerWithProfiles, setError)
-
-  // Updates assignment status based on number of assigned students
-  useEffect(() => {
-    const assignedCount = seats.filter((seat) => seat.assignedStudent).length
-    if (assignedCount === 0) setAssignmentStatus('none')
-    else if (assignedCount < developerWithProfiles.length) setAssignmentStatus('partial')
-    else setAssignmentStatus('complete')
-  }, [developerWithProfiles.length, seats])
 
   // Reset student assignments
   const resetAssignments = useCallback(() => {
@@ -69,8 +71,21 @@ export const SeatStudentAssigner = ({
       .filter((seat) => seat.assignedStudent != null)
       .map((seat) => ({ ...seat, assignedStudent: null }))
     mutation.mutate(updatedSeats)
-    setAssignmentStatus('none')
   }, [seats, mutation])
+
+  // Smart assign function
+  const smartAssignStudents = useCallback(() => {
+    const seatsWithTutors = seats.filter((seat) => seat.assignedTutor).length
+    if (seatsWithTutors < developerWithProfiles.length) {
+      setError(
+        `Not enough seats with tutors assigned. Need ${developerWithProfiles.length} seats with tutors, but only have ${seatsWithTutors}.`,
+      )
+      return
+    }
+    setError(null)
+    const updatedSeats = smartAssign(seats, developerWithProfiles, peerAssignments)
+    mutation.mutate(updatedSeats)
+  }, [seats, developerWithProfiles, tutors, peerAssignments, mutation])
 
   // Download assignments as CSV
   const downloadAssignments = useDownloadAssignment(seats, developerWithProfiles, tutors)
@@ -144,7 +159,15 @@ export const SeatStudentAssigner = ({
                 disabled={mutation.isPending || assignedStudents > 0}
               >
                 <UserCheck className='mr-2 h-4 w-4' />
-                {mutation.isPending ? 'Assigning...' : 'Assign Students'}
+                Assign Random
+              </Button>
+              <Button
+                variant='secondary'
+                onClick={smartAssignStudents}
+                disabled={mutation.isPending || assignedStudents > 0}
+              >
+                <Sparkles className='mr-2 h-4 w-4' />
+                Smart Assign
               </Button>
             </div>
           </div>

@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	db "github.com/prompt-edu/prompt-intro-course/server/db/sqlc"
+	"github.com/prompt-edu/prompt-intro-course/server/gitlabutil"
 	promptSDK "github.com/prompt-edu/prompt-sdk"
 	log "github.com/sirupsen/logrus"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -14,7 +15,7 @@ func InitInfrastructureModule(routerGroup *gin.RouterGroup, queries db.Queries, 
 
 	var gitlabClient *gitlab.Client
 	if gitlabAccessToken != "" {
-		client, err := gitlab.NewClient(gitlabAccessToken, gitlab.WithBaseURL("https://gitlab.lrz.de/api/v4"))
+		client, err := gitlab.NewClient(gitlabAccessToken, gitlab.WithBaseURL(gitlabutil.GitLabBaseURL))
 		if err != nil {
 			log.Errorf("Failed to create GitLab client: %v — GitLab operations will fail", err)
 		} else {

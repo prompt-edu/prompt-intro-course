@@ -1,20 +1,16 @@
 import { useIntroCourseStore } from '../../zustand/useIntroCourseStore'
-import { Monitor, User } from 'lucide-react'
+import { Monitor, User, Users, ExternalLink } from 'lucide-react'
 import { getGravatarUrl } from '@/lib/getGravatarUrl'
-import { Avatar, AvatarFallback, AvatarImage, Badge } from '@tumaet/prompt-ui-components'
-
-export type SeatAssignment = {
-  seatName: string
-  hasMac: boolean
-  deviceID: string
-  studentCourseParticipationID: string
-  tutorFirstName: string
-  tutorLastName: string
-  tutorEmail: string
-}
+import { Avatar, AvatarFallback, AvatarImage, Badge, Button } from '@tumaet/prompt-ui-components'
+import { GITLAB_INTROCOURSE_BASE_URL } from '../../network/introCourseServerConfig'
+import { useCourseStore } from '@tumaet/prompt-shared-state'
+import { useParams } from 'react-router-dom'
 
 export const StudentSeatAssignmentDisplay = () => {
-  const { seatAssignment } = useIntroCourseStore()
+  const { seatAssignment, peerAssignment } = useIntroCourseStore()
+  const { courses } = useCourseStore()
+  const { courseId } = useParams<{ courseId: string }>()
+  const semesterTag = courses.find((c) => c.id === courseId)?.semesterTag ?? ''
 
   if (!seatAssignment) {
     return (
@@ -31,6 +27,8 @@ export const StudentSeatAssignmentDisplay = () => {
   const { seatName, hasMac, deviceID, tutorFirstName, tutorLastName, tutorEmail } = seatAssignment
   const tutorFullName = `${tutorFirstName} ${tutorLastName}`
   const tutorInitial = tutorFirstName.charAt(0)
+
+  const hasPeers = peerAssignment && peerAssignment.peersIReview.length > 0
 
   return (
     <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
@@ -70,6 +68,49 @@ export const StudentSeatAssignmentDisplay = () => {
           </div>
         </div>
       </section>
+
+      {/* Peer Review Information Card */}
+      {hasPeers && (
+        <section className='p-4 bg-muted/20 rounded-lg shadow md:col-span-2'>
+          <div className='flex items-center gap-2 mb-3'>
+            <Users className='h-5 w-5 text-primary' />
+            <h2 className='text-lg font-medium'>Your Review Peers</h2>
+          </div>
+          <p className='text-sm text-muted-foreground mb-4'>
+            You review each other&apos;s merge requests. Follow the testing steps in the MR
+            description and verify functionality.
+          </p>
+          <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'>
+            {peerAssignment.peersIReview.map((peer) => (
+              <div
+                key={peer.courseParticipationId}
+                className='border rounded-md p-3 flex flex-col gap-2'
+              >
+                <p className='font-medium'>{peer.gitlabUsername}</p>
+                {peer.seatName && (
+                  <p className='text-sm text-muted-foreground'>Seat: {peer.seatName}</p>
+                )}
+                {peer.gitlabUsername && peer.tutorGitlabUsername && (
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    className='w-fit'
+                    onClick={() =>
+                      window.open(
+                        `${GITLAB_INTROCOURSE_BASE_URL}/ase/iPraktikum/${semesterTag}/Introcourse/${peer.tutorGitlabUsername}/${peer.gitlabUsername}`,
+                        '_blank',
+                      )
+                    }
+                  >
+                    <ExternalLink className='h-3 w-3 mr-1' />
+                    GitLab Repo
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

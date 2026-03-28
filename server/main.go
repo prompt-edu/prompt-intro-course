@@ -19,6 +19,7 @@ import (
 	db "github.com/prompt-edu/prompt-intro-course/server/db/sqlc"
 	"github.com/prompt-edu/prompt-intro-course/server/developerProfile"
 	"github.com/prompt-edu/prompt-intro-course/server/infrastructureSetup"
+	"github.com/prompt-edu/prompt-intro-course/server/peerAssignment"
 	"github.com/prompt-edu/prompt-intro-course/server/seatPlan"
 	"github.com/prompt-edu/prompt-intro-course/server/tutor"
 	"github.com/prompt-edu/prompt-intro-course/server/utils"
@@ -155,6 +156,7 @@ func main() {
 	gitlabAccessToken := utils.GetEnv("GITLAB_ACCESS_TOKEN", "")
 	teachingMaterialProjectID := utils.GetEnv("GITLAB_TEACHING_MATERIAL_PROJECT_ID", "")
 	infrastructureSetup.InitInfrastructureModule(api, *query, conn, gitlabAccessToken, teachingMaterialProjectID)
+	peerAssignment.InitPeerAssignmentModule(api, *query, conn, gitlabAccessToken)
 
 	copyApi := router.Group("intro-course/api")
 	copy.InitCopyModule(copyApi, *query, conn)
