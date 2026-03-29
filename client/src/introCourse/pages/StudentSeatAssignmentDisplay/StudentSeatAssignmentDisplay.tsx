@@ -76,9 +76,14 @@ export const StudentSeatAssignmentDisplay = () => {
             <Users className='h-5 w-5 text-primary' />
             <h2 className='text-lg font-medium'>Your Review Peers</h2>
           </div>
+          <p className='text-sm text-muted-foreground mb-2'>
+            Your main task is to <strong>manually test</strong> your peer&apos;s application: follow
+            the testing steps in the MR description and verify that the functionality works as
+            described.
+          </p>
           <p className='text-sm text-muted-foreground mb-4'>
-            You review each other&apos;s merge requests. Follow the testing steps in the MR
-            description and verify functionality.
+            Code reviewing is optional but encouraged — reading your peers&apos; code is a great way
+            to learn and support each other.
           </p>
           <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'>
             {peerAssignment.peersIReview.map((peer) => (
