@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { Shuffle, Trash2, GitBranch, Loader2 } from 'lucide-react'
@@ -40,9 +40,10 @@ export const PeerAssignmentActions = ({
   const [semesterTag, setSemesterTag] = useState('')
 
   // Count unique students in peer assignments
-  const uniqueStudents = new Set(
-    peerAssignments.flatMap((a) => [a.studentID, a.peerID]),
-  ).size
+  const uniqueStudents = useMemo(
+    () => new Set(peerAssignments.flatMap((a) => [a.studentID, a.peerID])).size,
+    [peerAssignments],
+  )
 
   const generateMutation = useMutation({
     mutationFn: () => generatePeerAssignments(phaseId ?? ''),

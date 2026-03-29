@@ -76,6 +76,9 @@ func (suite *PeerAssignmentRouterTestSuite) TestGetPeerAssignmentsSuccess() {
 	assert.Equal(suite.T(), http.StatusOK, resp.Code)
 	var assignments []peerAssignmentDTO.PeerAssignment
 	assert.NoError(suite.T(), json.Unmarshal(resp.Body.Bytes(), &assignments))
+	// No peer assignments are seeded for this course phase, so the result must be empty.
+	assert.NotNil(suite.T(), assignments)
+	assert.Len(suite.T(), assignments, 0)
 }
 
 func (suite *PeerAssignmentRouterTestSuite) TestGetPeerAssignmentsInvalidUUID() {
@@ -94,6 +97,14 @@ func (suite *PeerAssignmentRouterTestSuite) TestGeneratePeerAssignmentsSuccess()
 	suite.router.ServeHTTP(resp, req)
 
 	assert.Equal(suite.T(), http.StatusCreated, resp.Code)
+
+	// The seeded course phase has 2 students in separate tutor groups (1 each),
+	// so generate succeeds but produces no assignments. Verify the response
+	// deserializes cleanly and is empty.
+	var generated []peerAssignmentDTO.PeerAssignment
+	err := json.Unmarshal(resp.Body.Bytes(), &generated)
+	assert.NoError(suite.T(), err)
+	assert.Empty(suite.T(), generated, "expected no assignments when each tutor group has fewer than 2 students")
 }
 
 func (suite *PeerAssignmentRouterTestSuite) TestGeneratePeerAssignmentsInvalidUUID() {
@@ -181,11 +192,33 @@ func (suite *PeerAssignmentRouterTestSuite) TestUpdatePeerAssignmentsSelfReview(
 // --- DELETE /peer_assignments ---
 
 func (suite *PeerAssignmentRouterTestSuite) TestDeletePeerAssignmentsSuccess() {
+	// Precondition: insert some assignments via PUT so delete has data to remove.
+	s1, s2 := uuid.New(), uuid.New()
+	body, _ := json.Marshal([]peerAssignmentDTO.PeerAssignment{
+		{StudentID: s1, PeerID: s2},
+		{StudentID: s2, PeerID: s1},
+	})
+	putReq, _ := http.NewRequest("PUT", suite.basePath(), bytes.NewBuffer(body))
+	putReq.Header.Set("Content-Type", "application/json")
+	putResp := httptest.NewRecorder()
+	suite.router.ServeHTTP(putResp, putReq)
+	assert.Equal(suite.T(), http.StatusOK, putResp.Code)
+
+	// Perform DELETE.
 	req, _ := http.NewRequest("DELETE", suite.basePath(), nil)
 	resp := httptest.NewRecorder()
 	suite.router.ServeHTTP(resp, req)
-
 	assert.Equal(suite.T(), http.StatusOK, resp.Code)
+
+	// Follow-up GET: verify assignments are now empty.
+	getReq, _ := http.NewRequest("GET", suite.basePath(), nil)
+	getResp := httptest.NewRecorder()
+	suite.router.ServeHTTP(getResp, getReq)
+	assert.Equal(suite.T(), http.StatusOK, getResp.Code)
+
+	var remaining []peerAssignmentDTO.PeerAssignment
+	assert.NoError(suite.T(), json.Unmarshal(getResp.Body.Bytes(), &remaining))
+	assert.Empty(suite.T(), remaining, "expected no assignments after delete")
 }
 
 func (suite *PeerAssignmentRouterTestSuite) TestDeletePeerAssignmentsInvalidUUID() {

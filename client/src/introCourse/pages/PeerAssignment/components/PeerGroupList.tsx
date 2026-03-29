@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { ArrowLeftRight, Users } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, Badge } from '@tumaet/prompt-ui-components'
 import { PeerAssignment } from '../../../interfaces/PeerAssignment'
@@ -108,19 +108,22 @@ export const PeerGroupList = ({
     return byTutor
   }, [peerAssignments, studentSeatMap])
 
-  const getStudentLabel = (studentId: string) => {
-    const participation = participationMap.get(studentId)
-    const profile = profileMap.get(studentId)
-    const seat = studentSeatMap.get(studentId)
+  const getStudentLabel = useCallback(
+    (studentId: string) => {
+      const participation = participationMap.get(studentId)
+      const profile = profileMap.get(studentId)
+      const seat = studentSeatMap.get(studentId)
 
-    const name = participation
-      ? `${participation.student?.firstName ?? ''} ${participation.student?.lastName ?? ''}`.trim()
-      : studentId.slice(0, 8)
-    const gitlab = profile?.gitLabUsername ?? ''
-    const seatName = seat?.seatName ?? ''
+      const name = participation
+        ? `${participation.student?.firstName ?? ''} ${participation.student?.lastName ?? ''}`.trim()
+        : studentId.slice(0, 8)
+      const gitlab = profile?.gitLabUsername ?? ''
+      const seatName = seat?.seatName ?? ''
 
-    return { name, gitlab, seatName }
-  }
+      return { name, gitlab, seatName }
+    },
+    [participationMap, profileMap, studentSeatMap],
+  )
 
   if (peerAssignments.length === 0) {
     return (
