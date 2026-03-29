@@ -22,7 +22,7 @@ import { useGetParticipationsWithDevProfile } from './hooks/useGetParticipationW
 
 export const SeatAssignmentPage = () => {
   const { phaseId } = useParams<{ phaseId: string }>()
-  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid')
 
   // Data fetching
   const {
