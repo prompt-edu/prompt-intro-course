@@ -33,6 +33,7 @@ export const SeatAssignmentPage = () => {
   } = useQuery<Tutor[]>({
     queryKey: ['tutors', phaseId],
     queryFn: () => getAllTutors(phaseId ?? ''),
+    enabled: !!phaseId,
   })
 
   const {
@@ -43,6 +44,7 @@ export const SeatAssignmentPage = () => {
   } = useQuery<CoursePhaseParticipationsWithResolution>({
     queryKey: ['participants', phaseId],
     queryFn: () => getCoursePhaseParticipations(phaseId ?? ''),
+    enabled: !!phaseId,
   })
 
   const {
@@ -53,6 +55,7 @@ export const SeatAssignmentPage = () => {
   } = useQuery<DeveloperProfile[]>({
     queryKey: ['developerProfiles', phaseId],
     queryFn: () => getAllDeveloperProfiles(phaseId ?? ''),
+    enabled: !!phaseId,
   })
 
   const {
@@ -63,11 +66,13 @@ export const SeatAssignmentPage = () => {
   } = useQuery<Seat[]>({
     queryKey: ['seatPlan', phaseId],
     queryFn: () => getSeatPlan(phaseId ?? ''),
+    enabled: !!phaseId,
   })
 
   const { data: peerAssignments } = useQuery<PeerAssignment[]>({
     queryKey: ['peerAssignments', phaseId],
     queryFn: () => getPeerAssignments(phaseId ?? ''),
+    enabled: !!phaseId,
   })
 
   const isPending =
