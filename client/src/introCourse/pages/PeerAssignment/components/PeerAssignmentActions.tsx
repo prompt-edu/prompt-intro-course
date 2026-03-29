@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
-import { Shuffle, Trash2, GitBranch, Loader2 } from 'lucide-react'
+import { Shuffle, Trash2, GitBranch, Unlink, Loader2 } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -23,6 +23,7 @@ import { PeerAssignment, SyncResult } from '../../../interfaces/PeerAssignment'
 import { generatePeerAssignments } from '../../../network/mutations/generatePeerAssignments'
 import { deletePeerAssignments } from '../../../network/mutations/deletePeerAssignments'
 import { syncPeerAssignmentsToGitlab } from '../../../network/mutations/syncPeerAssignmentsToGitlab'
+import { unsyncPeerAssignmentsFromGitlab } from '../../../network/mutations/unsyncPeerAssignmentsFromGitlab'
 
 interface PeerAssignmentActionsProps {
   peerAssignments: PeerAssignment[]
@@ -74,10 +75,23 @@ export const PeerAssignmentActions = ({
     onError: () => setError('Failed to sync to GitLab. Is the GitLab token configured?'),
   })
 
+  const unsyncMutation = useMutation({
+    mutationFn: () => unsyncPeerAssignmentsFromGitlab(phaseId ?? '', semesterTag),
+    onSuccess: (results) => {
+      setSyncResults(results)
+      setError(null)
+    },
+    onError: () => setError('Failed to unsync from GitLab. Is the GitLab token configured?'),
+  })
+
   const statusVariant =
     uniqueStudents === 0 ? 'secondary' : uniqueStudents >= totalStudents ? 'default' : 'outline'
 
-  const isLoading = generateMutation.isPending || deleteMutation.isPending || syncMutation.isPending
+  const isLoading =
+    generateMutation.isPending ||
+    deleteMutation.isPending ||
+    syncMutation.isPending ||
+    unsyncMutation.isPending
 
   return (
     <div className='space-y-4'>
@@ -114,7 +128,8 @@ export const PeerAssignmentActions = ({
             <AlertDialogHeader>
               <AlertDialogTitle>Clear all peer assignments?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will remove all peer groups. GitLab access will not be revoked automatically.
+                This will remove all peer groups. Use &quot;Unsync from GitLab&quot; first to revoke
+                Reporter access and approval rules.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -145,6 +160,19 @@ export const PeerAssignmentActions = ({
               <GitBranch className='h-4 w-4 mr-1' />
             )}
             Sync to GitLab
+          </Button>
+          <Button
+            onClick={() => unsyncMutation.mutate()}
+            disabled={isLoading || peerAssignments.length === 0 || !semesterTag}
+            size='sm'
+            variant='outline'
+          >
+            {unsyncMutation.isPending ? (
+              <Loader2 className='h-4 w-4 animate-spin mr-1' />
+            ) : (
+              <Unlink className='h-4 w-4 mr-1' />
+            )}
+            Unsync from GitLab
           </Button>
         </div>
       </div>

@@ -23,6 +23,7 @@ func setupPeerAssignmentRouter(router *gin.RouterGroup, authMiddleware func(allo
 	peerRouter.PUT("", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), updatePeerAssignments)
 	peerRouter.DELETE("", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), deletePeerAssignments)
 	peerRouter.POST("/sync-gitlab", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), syncPeerAssignmentsToGitlab)
+	peerRouter.POST("/unsync-gitlab", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), unsyncPeerAssignmentsFromGitlab)
 
 	peerRouter.GET("/own", authMiddleware(promptSDK.CourseStudent), getOwnPeerAssignment)
 }
@@ -204,6 +205,49 @@ func syncPeerAssignmentsToGitlab(c *gin.Context) {
 	results, err := SyncPeerAssignmentsToGitlab(c, coursePhaseID, semesterTag)
 	if err != nil {
 		log.Error("Error syncing peer assignments to GitLab: ", err)
+		handleError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, results)
+}
+
+// unsyncPeerAssignmentsFromGitlab godoc
+// @Summary Unsync peer assignments from GitLab
+// @Description Revokes Reporter access and removes approval rules for all current peer assignments.
+// @Tags peer-assignment
+// @Accept json
+// @Produce json
+// @Param coursePhaseID path string true "Course Phase UUID"
+// @Param request body peerAssignmentDTO.SyncRequest true "Sync request with semester tag"
+// @Success 200 {array} peerAssignmentDTO.SyncResult
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security ApiKeyAuth
+// @Router /course_phase/{coursePhaseID}/peer_assignments/unsync-gitlab [post]
+func unsyncPeerAssignmentsFromGitlab(c *gin.Context) {
+	coursePhaseID, err := uuid.Parse(c.Param("coursePhaseID"))
+	if err != nil {
+		log.Error("Error parsing coursePhaseID: ", err)
+		handleError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	var req peerAssignmentDTO.SyncRequest
+	if err := c.BindJSON(&req); err != nil {
+		handleError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	semesterTag := strings.ToUpper(req.SemesterTag)
+	if !semesterTagPattern.MatchString(semesterTag) {
+		handleError(c, http.StatusBadRequest, errors.New("invalid semester tag format"))
+		return
+	}
+
+	results, err := UnsyncPeerAssignmentsFromGitlab(c, coursePhaseID, semesterTag)
+	if err != nil {
+		log.Error("Error unsyncing peer assignments from GitLab: ", err)
 		handleError(c, http.StatusInternalServerError, err)
 		return
 	}
