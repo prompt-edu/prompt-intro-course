@@ -17,9 +17,8 @@ import { Seat } from '../../../../interfaces/Seat'
 import { Tutor } from '../../../../interfaces/Tutor'
 import { PeerAssignment } from '../../../../interfaces/PeerAssignment'
 import { updateSeatPlan } from '../../../../network/mutations/updateSeatPlan'
-import { buildSeatLookup, getGridDimensions, parseSeatName } from '../../utils/seatGrid'
+import { parseSeatName, TUTOR_COLORS } from '../../utils/seatGrid'
 import { SeatCell } from './SeatCell'
-import { SeatGridLegend } from './SeatGridLegend'
 import { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
 
 interface SeatGridProps {
@@ -50,13 +49,40 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
   })
 
   // Build lookup maps
-  const seatLookup = useMemo(() => buildSeatLookup(seats), [seats])
   const seatByName = useMemo(() => {
     const map = new Map<string, Seat>()
     for (const s of seats) map.set(s.seatName, s)
     return map
   }, [seats])
-  const { maxRow, maxPosition } = useMemo(() => getGridDimensions(seats), [seats])
+
+  // Group seats by tutor, sorted within each group by row then position
+  const seatsByTutor = useMemo(() => {
+    const map = new Map<string, Seat[]>()
+    for (const seat of seats) {
+      const tutorId = seat.assignedTutor ?? 'unassigned'
+      if (!map.has(tutorId)) map.set(tutorId, [])
+      map.get(tutorId)!.push(seat)
+    }
+    for (const [, tutorSeats] of map) {
+      tutorSeats.sort((a, b) => {
+        const pa = parseSeatName(a.seatName)
+        const pb = parseSeatName(b.seatName)
+        if (!pa || !pb) return a.seatName.localeCompare(b.seatName)
+        if (pa.row !== pb.row) return pa.row - pb.row
+        return pa.position - pb.position
+      })
+    }
+    return map
+  }, [seats])
+
+  // Max seats in any tutor group (for uniform grid columns)
+  const maxSeatsPerTutor = useMemo(() => {
+    let max = 0
+    for (const [, tutorSeats] of seatsByTutor) {
+      max = Math.max(max, tutorSeats.length)
+    }
+    return max
+  }, [seatsByTutor])
 
   const participationMap = useMemo(() => {
     const map = new Map<string, CoursePhaseParticipationWithStudent>()
@@ -150,6 +176,14 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
     return peerMap.get(seat.assignedStudent) ?? new Set<string>()
   }, [selectedSeat, seatByName, peerMap])
 
+  // Ordered tutor IDs (sorted by color index for stable rendering)
+  const orderedTutorIds = useMemo(() => {
+    const ids = Array.from(seatsByTutor.keys()).filter((id) => id !== 'unassigned')
+    ids.sort((a, b) => (tutorColorMap.get(a) ?? 0) - (tutorColorMap.get(b) ?? 0))
+    if (seatsByTutor.has('unassigned')) ids.push('unassigned')
+    return ids
+  }, [seatsByTutor, tutorColorMap])
+
   return (
     <div>
       {selectedSeat && (
@@ -169,55 +203,62 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
       <div
         className='grid gap-1'
         style={{
-          gridTemplateColumns: `2.5rem repeat(${maxPosition}, minmax(0, 1fr))`,
+          gridTemplateColumns: `10rem repeat(${maxSeatsPerTutor}, minmax(0, 1fr))`,
         }}
       >
-        {/* Header row: position numbers */}
-        <div /> {/* empty corner */}
-        {Array.from({ length: maxPosition }, (_, i) => i + 1).map((pos) => (
-          <div key={pos} className='text-center text-xs text-muted-foreground font-mono'>
-            {pos}
-          </div>
-        ))}
+        {orderedTutorIds.map((tutorId) => {
+          const tutorSeats = seatsByTutor.get(tutorId) ?? []
+          const tutor = tutors.find((t) => t.id === tutorId)
+          const colorIdx = tutorColorMap.get(tutorId) ?? -1
+          const color = colorIdx >= 0 ? TUTOR_COLORS[colorIdx % TUTOR_COLORS.length] : null
+          const label = tutor
+            ? `${tutor.firstName} ${tutor.lastName}`
+            : tutorId === 'unassigned'
+              ? 'Unassigned'
+              : tutorId.slice(0, 8)
+          const studentCount = tutorSeats.filter((s) => s.assignedStudent).length
 
-        {/* Seat rows */}
-        {Array.from({ length: maxRow }, (_, i) => i + 1).map((row) => (
-          <Fragment key={row}>
-            {/* Row label */}
-            <div
-              className='flex items-center justify-center text-xs font-medium text-muted-foreground'
-            >
-              R{row}
-            </div>
-            {/* Seat cells */}
-            {Array.from({ length: maxPosition }, (_, i) => i + 1).map((pos) => {
-              const key = `${row}-${pos}`
-              const seat = seatLookup.get(key)
+          return (
+            <Fragment key={tutorId}>
+              {/* Tutor row label */}
+              <div className='flex items-center text-sm font-medium truncate pr-2'>
+                {color && (
+                  <div className={`w-3 h-3 rounded-full mr-2 flex-shrink-0 ${color.dot}`} />
+                )}
+                <span className='truncate'>{label}</span>
+                <span className='text-muted-foreground ml-1 flex-shrink-0 text-xs'>
+                  ({studentCount})
+                </span>
+              </div>
 
-              if (!seat) {
-                return <div key={key} className='aspect-square' />
-              }
+              {/* Tutor's seats */}
+              {tutorSeats.map((seat) => {
+                const isPeerOfSelected =
+                  seat.assignedStudent != null && selectedPeers.has(seat.assignedStudent)
 
-              const isPeerOfSelected =
-                seat.assignedStudent != null && selectedPeers.has(seat.assignedStudent)
+                return (
+                  <SeatCell
+                    key={seat.seatName}
+                    seat={seat}
+                    tutorColorIndex={
+                      seat.assignedTutor ? (tutorColorMap.get(seat.assignedTutor) ?? -1) : -1
+                    }
+                    studentLabel={getStudentInitials(seat.assignedStudent)}
+                    isSelected={selectedSeat === seat.seatName}
+                    isPeerOfSelected={isPeerOfSelected}
+                    onClick={() => handleCellClick(seat.seatName)}
+                  />
+                )
+              })}
 
-              return (
-                <SeatCell
-                  key={key}
-                  seat={seat}
-                  tutorColorIndex={seat.assignedTutor ? (tutorColorMap.get(seat.assignedTutor) ?? -1) : -1}
-                  studentLabel={getStudentInitials(seat.assignedStudent)}
-                  isSelected={selectedSeat === seat.seatName}
-                  isPeerOfSelected={isPeerOfSelected}
-                  onClick={() => handleCellClick(seat.seatName)}
-                />
-              )
-            })}
-          </Fragment>
-        ))}
+              {/* Pad remaining columns for uniform grid */}
+              {Array.from({ length: maxSeatsPerTutor - tutorSeats.length }, (_, i) => (
+                <div key={`pad-${i}`} className='aspect-square' />
+              ))}
+            </Fragment>
+          )
+        })}
       </div>
-
-      <SeatGridLegend tutors={tutors} seats={seats} tutorColorMap={tutorColorMap} />
 
       {/* Cross-tutor swap dialog */}
       <AlertDialog open={!!crossTutorSwap} onOpenChange={() => setCrossTutorSwap(null)}>
