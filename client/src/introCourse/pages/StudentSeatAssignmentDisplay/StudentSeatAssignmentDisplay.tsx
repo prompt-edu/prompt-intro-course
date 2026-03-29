@@ -45,7 +45,7 @@ export const StudentSeatAssignmentDisplay = () => {
         <div className='mt-4'>
           <p className='text-sm text-muted-foreground'>Device Type</p>
           <div className='flex items-center gap-2 mt-1'>
-            <Badge className='outline'>{hasMac ? 'Chair Mac' : 'Own MacBook'}</Badge>
+            <Badge variant='outline'>{hasMac ? 'Chair Mac' : 'Own MacBook'}</Badge>
             {deviceID && <span className='text-sm'>ID: {deviceID}</span>}
           </div>
         </div>

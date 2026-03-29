@@ -28,7 +28,9 @@ func SyncPeerAssignmentsToGitlab(ctx context.Context, coursePhaseID uuid.UUID, s
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 
-	assignments, err := svc.queries.GetPeerAssignments(ctx, coursePhaseID)
+	dbCtx, dbCancel := db.GetTimeoutContext(ctx)
+	defer dbCancel()
+	assignments, err := svc.queries.GetPeerAssignments(dbCtx, coursePhaseID)
 	if err != nil {
 		return nil, fmt.Errorf("get peer assignments: %w", err)
 	}

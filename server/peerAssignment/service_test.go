@@ -92,7 +92,7 @@ func (suite *PeerAssignmentServiceTestSuite) TestUpdatePeerAssignments() {
 	assert.Len(suite.T(), result, 2)
 }
 
-func (suite *PeerAssignmentServiceTestSuite) TestUpdatePeerAssignmentsSkipsSelfReview() {
+func (suite *PeerAssignmentServiceTestSuite) TestUpdatePeerAssignmentsRejectsSelfReview() {
 	phaseID := uuid.New()
 
 	assignments := []peerAssignmentDTO.PeerAssignment{
@@ -101,11 +101,8 @@ func (suite *PeerAssignmentServiceTestSuite) TestUpdatePeerAssignmentsSkipsSelfR
 	}
 
 	err := UpdatePeerAssignments(suite.ctx, phaseID, assignments)
-	assert.NoError(suite.T(), err)
-
-	result, err := GetAllPeerAssignments(suite.ctx, phaseID)
-	assert.NoError(suite.T(), err)
-	assert.Len(suite.T(), result, 1) // self-review should be skipped
+	assert.Error(suite.T(), err)
+	assert.Equal(suite.T(), "self-review assignment not allowed", err.Error())
 }
 
 func (suite *PeerAssignmentServiceTestSuite) TestDeletePeerAssignments() {
@@ -285,15 +282,12 @@ func (suite *PeerAssignmentServiceTestSuite) TestGeneratePeerAssignments56Studen
 	}
 
 	// Create 56 students distributed across tutors via seats
-	// Distribution: tutors get 10, 10, 10, 10, 9, 7 students respectively
+	// Distribution: tutors 0-1 get 10 students, tutors 2-5 get 9 students (56 = 2*10 + 4*9)
 	studentIDs := make([]uuid.UUID, numStudents)
 	tutorStudentCounts := make([]int, numTutors)
 	for i := 0; i < numStudents; i++ {
 		studentIDs[i] = uuid.New()
 		tutorIdx := i % numTutors
-		if tutorIdx >= numTutors {
-			tutorIdx = numTutors - 1
-		}
 		tutorStudentCounts[tutorIdx]++
 		seatName := fmt.Sprintf("S-%d-%d", tutorIdx+1, tutorStudentCounts[tutorIdx])
 

@@ -232,7 +232,7 @@ func UpdatePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID, assignm
 	// Insert new assignments
 	for _, a := range assignments {
 		if a.StudentID == a.PeerID {
-			continue // skip self-review
+			return errors.New("self-review assignment not allowed")
 		}
 		err := qtx.CreatePeerAssignment(ctxWithTimeout, db.CreatePeerAssignmentParams{
 			CoursePhaseID: coursePhaseID,
