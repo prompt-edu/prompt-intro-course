@@ -76,7 +76,7 @@ func updateSeatPlanHandler(q *db.Queries, conn *pgxpool.Pool) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		defer tx.Rollback(c)
+		defer func() { _ = tx.Rollback(c) }()
 		qtx := q.WithTx(tx)
 		for _, s := range seats {
 			params := db.UpdateSeatParams{
