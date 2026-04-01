@@ -56,7 +56,7 @@ export const SeatCell = ({
     >
       {/* Peer group badge — top right */}
       {peerGroupLabel && !isTutor && (
-        <span className='absolute top-0 right-0.5 text-[7px] font-semibold text-muted-foreground leading-none mt-px'>
+        <span className='absolute -top-0.5 -right-0.5 text-[8px] font-bold leading-none bg-background rounded-sm px-0.5 text-muted-foreground border border-muted-foreground/20'>
           {peerGroupLabel}
         </span>
       )}
