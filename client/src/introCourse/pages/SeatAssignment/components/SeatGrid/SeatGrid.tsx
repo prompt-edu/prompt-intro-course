@@ -1,6 +1,7 @@
 import { Fragment, useState, useMemo, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
+import { Users, GraduationCap, Armchair } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -12,12 +13,19 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  Button,
 } from '@tumaet/prompt-ui-components'
 import { Seat } from '../../../../interfaces/Seat'
 import { Tutor } from '../../../../interfaces/Tutor'
 import { PeerAssignment } from '../../../../interfaces/PeerAssignment'
 import { updateSeatPlan } from '../../../../network/mutations/updateSeatPlan'
-import { buildPhysicalSeatMap, getMaxPhysicalPosition, TUTOR_COLORS } from '../../utils/seatGrid'
+import {
+  buildPhysicalSeatMap,
+  getMaxPhysicalPosition,
+  buildPeerGroups,
+  TUTOR_COLORS,
+  type SeatGridViewMode,
+} from '../../utils/seatGrid'
 import { RECHNERHALLE_LAYOUT } from '../../utils/rechnerHalle'
 import { SeatCell } from './SeatCell'
 import { SeatGridLegend } from './SeatGridLegend'
@@ -35,6 +43,7 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
   const queryClient = useQueryClient()
   const [selectedSeat, setSelectedSeat] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<SeatGridViewMode>('tutor')
   const [crossTutorSwap, setCrossTutorSwap] = useState<{
     seatA: Seat
     seatB: Seat
@@ -98,6 +107,17 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
     }
     return map
   }, [peerAssignments])
+
+  // Peer groups: studentID -> group number
+  const peerGroupMap = useMemo(() => {
+    if (!peerAssignments || peerAssignments.length === 0) return new Map<string, number>()
+    return buildPeerGroups(peerAssignments)
+  }, [peerAssignments])
+
+  const peerGroupCount = useMemo(() => {
+    if (peerGroupMap.size === 0) return 0
+    return Math.max(...peerGroupMap.values())
+  }, [peerGroupMap])
 
   const getStudentInitials = useCallback(
     (studentId: string | null): string | null => {
@@ -172,8 +192,40 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
     return set
   }, [layout])
 
+  const hasPeerGroups = peerGroupCount > 0
+
   return (
     <div>
+      {/* View mode toggle */}
+      <div className='flex items-center gap-1.5 mb-3'>
+        <Button
+          variant={viewMode === 'tutor' ? 'default' : 'outline'}
+          size='sm'
+          onClick={() => setViewMode('tutor')}
+        >
+          <GraduationCap className='mr-1.5 h-3.5 w-3.5' />
+          Tutor
+        </Button>
+        {hasPeerGroups && (
+          <Button
+            variant={viewMode === 'peerGroup' ? 'default' : 'outline'}
+            size='sm'
+            onClick={() => setViewMode('peerGroup')}
+          >
+            <Users className='mr-1.5 h-3.5 w-3.5' />
+            Peer Group
+          </Button>
+        )}
+        <Button
+          variant={viewMode === 'seat' ? 'default' : 'outline'}
+          size='sm'
+          onClick={() => setViewMode('seat')}
+        >
+          <Armchair className='mr-1.5 h-3.5 w-3.5' />
+          Seat
+        </Button>
+      </div>
+
       {selectedSeat && (
         <Alert className='mb-3'>
           <AlertDescription>
@@ -233,18 +285,23 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
               const isPeerOfSelected =
                 seat.assignedStudent != null && selectedPeers.has(seat.assignedStudent)
 
+              const peerGroup = seat.assignedStudent ? peerGroupMap.get(seat.assignedStudent) : undefined
+
               return (
                 <SeatCell
                   key={key}
                   seat={seat}
                   tutorColorIndex={seat.assignedTutor ? (tutorColorMap.get(seat.assignedTutor) ?? -1) : -1}
+                  peerGroupColorIndex={peerGroup != null ? (peerGroup - 1) : -1}
                   studentLabel={
                     seat.isTutorSeat
                       ? (seat.assignedTutor ? (tutorNameMap.get(seat.assignedTutor) ?? null) : null)
                       : getStudentInitials(seat.assignedStudent)
                   }
+                  peerGroupLabel={peerGroup != null ? `P${peerGroup}` : null}
                   isSelected={selectedSeat === seat.seatName}
                   isPeerOfSelected={isPeerOfSelected}
+                  viewMode={viewMode}
                   onClick={() => handleCellClick(seat.seatName)}
                 />
               )
@@ -253,7 +310,14 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
         ))}
       </div>
 
-      <SeatGridLegend tutors={tutors} seats={seats} tutorColorMap={tutorColorMap} />
+      <SeatGridLegend
+        tutors={tutors}
+        seats={seats}
+        tutorColorMap={tutorColorMap}
+        viewMode={viewMode}
+        peerGroupCount={peerGroupCount}
+        peerGroupMap={peerGroupMap}
+      />
 
       {/* Cross-tutor swap dialog */}
       <AlertDialog open={!!crossTutorSwap} onOpenChange={() => setCrossTutorSwap(null)}>

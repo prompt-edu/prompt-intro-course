@@ -1,4 +1,5 @@
 import { Seat } from '../../../interfaces/Seat'
+import { PeerAssignment } from '../../../interfaces/PeerAssignment'
 import { type RowLayout, RECHNERHALLE_LAYOUT, getPhysicalPositions } from './rechnerHalle'
 
 export interface ParsedSeat {
@@ -67,6 +68,42 @@ export function buildPhysicalSeatMap(
 /** Get the maximum physical position across all rows in the layout. */
 export function getMaxPhysicalPosition(layout: RowLayout[] = RECHNERHALLE_LAYOUT): number {
   return Math.max(...layout.map((r) => r.physicalEnd))
+}
+
+export type SeatGridViewMode = 'tutor' | 'peerGroup' | 'seat'
+
+/** Build peer groups from peer assignments using BFS connected components. */
+export function buildPeerGroups(peerAssignments: PeerAssignment[]): Map<string, number> {
+  const adj = new Map<string, Set<string>>()
+  for (const a of peerAssignments) {
+    if (!adj.has(a.studentID)) adj.set(a.studentID, new Set())
+    if (!adj.has(a.peerID)) adj.set(a.peerID, new Set())
+    adj.get(a.studentID)!.add(a.peerID)
+    adj.get(a.peerID)!.add(a.studentID)
+  }
+
+  const visited = new Set<string>()
+  const groups = new Map<string, number>()
+  let groupNum = 1
+
+  for (const node of adj.keys()) {
+    if (visited.has(node)) continue
+    const queue = [node]
+    visited.add(node)
+    while (queue.length > 0) {
+      const curr = queue.shift()!
+      groups.set(curr, groupNum)
+      for (const neighbor of adj.get(curr) ?? []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor)
+          queue.push(neighbor)
+        }
+      }
+    }
+    groupNum++
+  }
+
+  return groups
 }
 
 // 9-color palette for tutor groups
