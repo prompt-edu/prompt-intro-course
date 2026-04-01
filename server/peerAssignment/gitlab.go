@@ -364,10 +364,11 @@ func ensurePeerReviewRule(git *gitlab.Client, projectID int64, reviewerGitlabUse
 		}
 	}
 
-	// Create new rule
+	// Create new rule — ApprovalsRequired=0 makes this non-blocking so students
+	// can merge with only tutor approval. Peers still appear as eligible approvers.
 	_, _, err = git.Projects.CreateProjectApprovalRule(projectID, &gitlab.CreateProjectLevelRuleOptions{
 		Name:              gitlab.Ptr(peerReviewRuleName),
-		ApprovalsRequired: gitlab.Ptr(int64(1)),
+		ApprovalsRequired: gitlab.Ptr(int64(0)),
 		UserIDs:           gitlab.Ptr([]int64{reviewerGitlabUserID}),
 	})
 	if err != nil {

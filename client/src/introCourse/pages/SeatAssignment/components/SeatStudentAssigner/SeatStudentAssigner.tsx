@@ -8,6 +8,7 @@ import {
   Users,
   Laptop,
   Sparkles,
+  X,
 } from 'lucide-react'
 import { Seat } from '../../../../interfaces/Seat'
 import { DeveloperWithProfile } from '../../interfaces/DeveloperWithProfile'
@@ -37,6 +38,11 @@ import {
   TableHeader,
   TableRow,
   Badge,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@tumaet/prompt-ui-components'
 
 interface SeatStudentAssignerProps {
@@ -93,6 +99,41 @@ export const SeatStudentAssigner = ({
   // Download assignments as CSV
   const downloadAssignments = useDownloadAssignment(seats, developerWithProfiles, tutors)
 
+  // Unassigned students (for manual assignment)
+  const unassignedStudents = useMemo(() => {
+    const assignedSet = new Set(seats.filter((s) => s.assignedStudent).map((s) => s.assignedStudent!))
+    return developerWithProfiles.filter(
+      (dev) => !assignedSet.has(dev.participation.courseParticipationID),
+    )
+  }, [seats, developerWithProfiles])
+
+  // Available seats (have tutor, not tutor seat, no student)
+  const availableSeats = useMemo(() => {
+    return seats
+      .filter((s) => s.assignedTutor && !s.isTutorSeat && !s.assignedStudent)
+      .sort((a, b) => a.seatName.localeCompare(b.seatName))
+  }, [seats])
+
+  // Manual assign a student to a seat
+  const manualAssign = useCallback(
+    (seatName: string, studentId: string) => {
+      const seat = seats.find((s) => s.seatName === seatName)
+      if (!seat) return
+      mutation.mutate([{ ...seat, assignedStudent: studentId }])
+    },
+    [seats, mutation],
+  )
+
+  // Unassign a student from their seat
+  const unassignStudent = useCallback(
+    (seatName: string) => {
+      const seat = seats.find((s) => s.seatName === seatName)
+      if (!seat) return
+      mutation.mutate([{ ...seat, assignedStudent: null }])
+    },
+    [seats, mutation],
+  )
+
   return (
     <Collapsible open={!isCollapsed} onOpenChange={() => setIsCollapsed(!isCollapsed)}>
       <Card>
@@ -102,8 +143,8 @@ export const SeatStudentAssigner = ({
               <div>
                 <CardTitle>Step 4: Student Assignment</CardTitle>
                 <CardDescription>
-                  Randomly assign students to seats with tutors, prioritizing Mac seats for students
-                  without Macs
+                  Assign students to seats automatically or manually. Mac seats are prioritized for
+                  students without Macs.
                 </CardDescription>
               </div>
               <div className='flex items-center gap-2'>
@@ -177,6 +218,80 @@ export const SeatStudentAssigner = ({
                 </Button>
               </div>
             </div>
+
+            {/* Manual assignment for unassigned students */}
+            {unassignedStudents.length > 0 && availableSeats.length > 0 && (
+              <Card className='overflow-hidden mt-4'>
+                <CardHeader className='pb-2'>
+                  <CardTitle className='text-sm'>Manual Assignment</CardTitle>
+                  <CardDescription className='text-xs'>
+                    Assign individual students to specific seats
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Student</TableHead>
+                        <TableHead>Has Mac</TableHead>
+                        <TableHead>Assign to Seat</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {unassignedStudents
+                        .sort((a, b) =>
+                          `${a.participation.student.lastName}`.localeCompare(
+                            `${b.participation.student.lastName}`,
+                          ),
+                        )
+                        .map((dev) => (
+                          <TableRow key={dev.participation.courseParticipationID}>
+                            <TableCell className='font-medium'>
+                              {dev.participation.student.firstName}{' '}
+                              {dev.participation.student.lastName}
+                            </TableCell>
+                            <TableCell>
+                              {dev.profile?.hasMacBook === true && (
+                                <Badge variant='default'>
+                                  <Laptop className='h-3 w-3 mr-1' />
+                                  Yes
+                                </Badge>
+                              )}
+                              {dev.profile?.hasMacBook === false && (
+                                <Badge variant='destructive'>No</Badge>
+                              )}
+                              {dev.profile?.hasMacBook === undefined && (
+                                <span className='text-muted-foreground text-xs'>Unknown</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Select
+                                onValueChange={(seatName) =>
+                                  manualAssign(seatName, dev.participation.courseParticipationID)
+                                }
+                              >
+                                <SelectTrigger className='w-40'>
+                                  <SelectValue placeholder='Select seat' />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableSeats.map((seat) => (
+                                    <SelectItem key={seat.seatName} value={seat.seatName}>
+                                      {seat.seatName}
+                                      {seat.hasMac ? ' (Mac)' : ''}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Current assignments table */}
             {assignedStudents > 0 && (
               <Card className='overflow-hidden mt-4'>
                 <Table>
@@ -186,6 +301,7 @@ export const SeatStudentAssigner = ({
                       <TableHead>Mac</TableHead>
                       <TableHead>Assigned Student</TableHead>
                       <TableHead>Student Has Mac</TableHead>
+                      <TableHead className='w-10'></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -230,6 +346,18 @@ export const SeatStudentAssigner = ({
                               {student?.profile?.hasMacBook === undefined && (
                                 <span className='text-muted-foreground text-xs'>Unknown</span>
                               )}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant='ghost'
+                                size='sm'
+                                className='h-6 w-6 p-0 text-destructive hover:text-destructive'
+                                onClick={() => unassignStudent(seat.seatName)}
+                                disabled={mutation.isPending}
+                                title='Remove student from seat'
+                              >
+                                <X className='h-3 w-3' />
+                              </Button>
                             </TableCell>
                           </TableRow>
                         )
