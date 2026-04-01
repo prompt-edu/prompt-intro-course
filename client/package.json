@@ -39,7 +39,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tumaet/prompt-shared-state": "^1.0.10",
     "@tumaet/prompt-ui-components": "^1.0.10",
-    "axios": "^1.13.6",
+    "axios": "^1.14.0",
     "clsx": "^2.1.1",
     "file-saver": "^2.0.5",
     "i18n-iso-countries": "^7.14.0",
