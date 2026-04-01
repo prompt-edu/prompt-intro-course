@@ -1,4 +1,5 @@
 import { Seat } from '../../../interfaces/Seat'
+import { type RowLayout, RECHNERHALLE_LAYOUT, getPhysicalPositions } from './rechnerHalle'
 
 export interface ParsedSeat {
   room: number
@@ -29,7 +30,7 @@ export function getGridDimensions(seats: Seat[]): { maxRow: number; maxPosition:
   return { maxRow, maxPosition }
 }
 
-// Build a lookup map: "row-position" -> Seat
+// Build a lookup map: "row-position" -> Seat (using local position from seat name)
 export function buildSeatLookup(seats: Seat[]): Map<string, Seat> {
   const map = new Map<string, Seat>()
   for (const seat of seats) {
@@ -38,6 +39,34 @@ export function buildSeatLookup(seats: Seat[]): Map<string, Seat> {
     map.set(`${parsed.row}-${parsed.position}`, seat)
   }
   return map
+}
+
+/** Build a lookup map: "row-physicalPos" -> Seat using the physical layout. */
+export function buildPhysicalSeatMap(
+  seats: Seat[],
+  layout: RowLayout[] = RECHNERHALLE_LAYOUT,
+): Map<string, Seat> {
+  const layoutByRow = new Map<number, RowLayout>()
+  for (const r of layout) layoutByRow.set(r.row, r)
+
+  const map = new Map<string, Seat>()
+  for (const seat of seats) {
+    const parsed = parseSeatName(seat.seatName)
+    if (!parsed) continue
+    const rowLayout = layoutByRow.get(parsed.row)
+    if (!rowLayout) continue
+    const positions = getPhysicalPositions(rowLayout)
+    const physPos = positions[parsed.position - 1] // local position is 1-based
+    if (physPos !== undefined) {
+      map.set(`${parsed.row}-${physPos}`, seat)
+    }
+  }
+  return map
+}
+
+/** Get the maximum physical position across all rows in the layout. */
+export function getMaxPhysicalPosition(layout: RowLayout[] = RECHNERHALLE_LAYOUT): number {
+  return Math.max(...layout.map((r) => r.physicalEnd))
 }
 
 // 9-color palette for tutor groups

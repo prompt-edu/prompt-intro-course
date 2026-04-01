@@ -33,6 +33,7 @@ type Seat struct {
 	DeviceID        pgtype.Text `json:"device_id"`
 	AssignedStudent pgtype.UUID `json:"assigned_student"`
 	AssignedTutor   pgtype.UUID `json:"assigned_tutor"`
+	IsTutorSeat     bool        `json:"is_tutor_seat"`
 }
 
 type StudentGitlabProcess struct {

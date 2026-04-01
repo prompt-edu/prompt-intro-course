@@ -1,4 +1,4 @@
-import { Laptop } from 'lucide-react'
+import { GraduationCap, Laptop } from 'lucide-react'
 import { Seat } from '../../../../interfaces/Seat'
 import { parseSeatName, TUTOR_COLORS } from '../../utils/seatGrid'
 
@@ -22,13 +22,17 @@ export const SeatCell = ({
   const parsed = parseSeatName(seat.seatName)
   const color = tutorColorIndex >= 0 ? TUTOR_COLORS[tutorColorIndex % TUTOR_COLORS.length] : null
   const hasStudent = !!seat.assignedStudent
+  const isTutor = seat.isTutorSeat
 
   const classes = [
-    'relative w-full aspect-square rounded-md border text-xs flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer',
-    hasStudent && color ? `${color.bg} ${color.border}` : 'bg-muted/20 border-dashed border-muted-foreground/30',
+    'relative w-full aspect-square rounded-md text-xs flex flex-col items-center justify-center gap-0.5 transition-all',
+    isTutor
+      ? `border-2 ${color ? `${color.bg} ${color.border}` : 'bg-muted/20 border-dashed border-muted-foreground/30'}`
+      : `border ${hasStudent && color ? `${color.bg} ${color.border}` : 'bg-muted/20 border-dashed border-muted-foreground/30'}`,
+    !isTutor ? 'cursor-pointer' : 'cursor-default',
     isSelected ? 'ring-2 ring-primary ring-offset-1' : '',
     isPeerOfSelected ? 'ring-2 ring-amber-400 ring-offset-1' : '',
-    hasStudent ? 'hover:opacity-80' : '',
+    hasStudent && !isTutor ? 'hover:opacity-80' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -37,14 +41,18 @@ export const SeatCell = ({
     <button
       onClick={onClick}
       className={classes}
-      title={`${seat.seatName}${studentLabel ? ` - ${studentLabel}` : ''}${seat.hasMac ? ' (Mac)' : ''}`}
+      title={`${seat.seatName}${isTutor ? ' (Tutor seat)' : ''}${studentLabel ? ` - ${studentLabel}` : ''}${seat.hasMac ? ' (Mac)' : ''}`}
     >
-      {/* Position number */}
-      <span className='text-[10px] text-muted-foreground'>
-        {parsed?.position}
-      </span>
+      {/* Position number or tutor icon */}
+      {isTutor ? (
+        <GraduationCap className='h-3 w-3 text-muted-foreground' />
+      ) : (
+        <span className='text-[10px] text-muted-foreground'>
+          {parsed?.position}
+        </span>
+      )}
 
-      {/* Student initials or empty */}
+      {/* Student/tutor initials or empty */}
       {studentLabel ? (
         <span className={`font-semibold text-xs ${color?.text ?? ''}`}>
           {studentLabel}

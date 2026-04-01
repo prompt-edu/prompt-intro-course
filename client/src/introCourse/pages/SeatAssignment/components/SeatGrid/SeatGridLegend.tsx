@@ -1,3 +1,4 @@
+import { GraduationCap } from 'lucide-react'
 import { TUTOR_COLORS } from '../../utils/seatGrid'
 import { Tutor } from '../../../../interfaces/Tutor'
 import { Seat } from '../../../../interfaces/Seat'
@@ -17,8 +18,18 @@ export const SeatGridLegend = ({ tutors, seats, tutorColorMap }: SeatGridLegendP
     }
   }
 
+  const hasTutorSeats = seats.some((s) => s.isTutorSeat)
+
   return (
     <div className='flex flex-wrap gap-3 mt-4'>
+      {hasTutorSeats && (
+        <div className='flex items-center gap-1.5 text-sm'>
+          <div className='w-4 h-4 rounded-md border-2 border-muted-foreground/50 flex items-center justify-center'>
+            <GraduationCap className='h-2.5 w-2.5 text-muted-foreground' />
+          </div>
+          <span>Tutor Seat</span>
+        </div>
+      )}
       {tutors.map((tutor) => {
         const colorIdx = tutorColorMap.get(tutor.id) ?? 0
         const color = TUTOR_COLORS[colorIdx % TUTOR_COLORS.length]

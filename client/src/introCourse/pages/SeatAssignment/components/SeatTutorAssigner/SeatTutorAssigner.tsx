@@ -40,6 +40,16 @@ export const SeatTutorAssigner = ({ seats, tutors, numberOfStudents }: SeatTutor
     mutation.mutate([{ ...seat, assignedTutor: tutorId }])
   }
 
+  const handleTutorSeatToggle = (seatName: string, isTutorSeat: boolean) => {
+    const seat = seats.find((s) => s.seatName === seatName)
+    if (!seat) return
+    mutation.mutate([{
+      ...seat,
+      isTutorSeat,
+      assignedStudent: isTutorSeat ? null : seat.assignedStudent,
+    }])
+  }
+
   const handleBatchTutorAssignment = (tutorId: string | null) => {
     const updatedSeats = selectedSeatNames
       .map((seatName) => seats.find((seat) => seat.seatName === seatName))
@@ -161,6 +171,7 @@ export const SeatTutorAssigner = ({ seats, tutors, numberOfStudents }: SeatTutor
               selectedSeatNames={selectedSeatNames}
               setSelectedSeatNames={setSelectedSeatNames}
               handleTutorAssignment={handleTutorAssignment}
+              handleTutorSeatToggle={handleTutorSeatToggle}
             />
           </div>
         </CardContent>

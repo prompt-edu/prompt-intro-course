@@ -75,10 +75,10 @@ export const SeatStudentAssigner = ({
 
   // Smart assign function
   const smartAssignStudents = useCallback(() => {
-    const seatsWithTutors = seats.filter((seat) => seat.assignedTutor).length
-    if (seatsWithTutors < developerWithProfiles.length) {
+    const studentSeats = seats.filter((seat) => seat.assignedTutor && !seat.isTutorSeat).length
+    if (studentSeats < developerWithProfiles.length) {
       setError(
-        `Not enough seats with tutors assigned. Need ${developerWithProfiles.length} seats with tutors, but only have ${seatsWithTutors}.`,
+        `Not enough student seats with tutors assigned. Need ${developerWithProfiles.length} seats, but only have ${studentSeats} (tutor seats excluded).`,
       )
       return
     }

@@ -31,9 +31,12 @@ export function smartAssign(
   developerWithProfiles: DeveloperWithProfile[],
   peerAssignments?: PeerAssignment[],
 ): Seat[] {
+  // Filter out tutor seats — they are not available for student assignment
+  const studentSeats = seats.filter((s) => !s.isTutorSeat)
+
   // Group seats by tutor (use existing tutor-seat mapping)
   const tutorSeatMap = new Map<string, Seat[]>()
-  for (const seat of seats) {
+  for (const seat of studentSeats) {
     if (!seat.assignedTutor) continue
     if (!tutorSeatMap.has(seat.assignedTutor)) tutorSeatMap.set(seat.assignedTutor, [])
     tutorSeatMap.get(seat.assignedTutor)!.push(seat)

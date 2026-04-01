@@ -4,4 +4,5 @@ export type Seat = {
   deviceID: string | null
   assignedStudent: string | null
   assignedTutor: string | null
+  isTutorSeat: boolean
 }

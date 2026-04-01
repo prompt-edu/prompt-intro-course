@@ -42,6 +42,7 @@ func (q *Queries) DeletePeerAssignments(ctx context.Context, coursePhaseID uuid.
 const getPeerAssignments = `-- name: GetPeerAssignments :many
 SELECT course_phase_id, student_id, peer_id FROM peer_assignment
 WHERE course_phase_id = $1
+ORDER BY student_id, peer_id
 `
 
 func (q *Queries) GetPeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]PeerAssignment, error) {
@@ -79,6 +80,7 @@ LEFT JOIN tutor t
   AND s.assigned_tutor = t.id
 WHERE pa.course_phase_id = $1
   AND pa.student_id = $2
+ORDER BY dp.gitlab_username
 `
 
 type GetPeersForStudentParams struct {
@@ -133,6 +135,7 @@ LEFT JOIN tutor t
   AND s.assigned_tutor = t.id
 WHERE pa.course_phase_id = $1
   AND pa.peer_id = $2
+ORDER BY dp.gitlab_username
 `
 
 type GetReviewersForStudentParams struct {

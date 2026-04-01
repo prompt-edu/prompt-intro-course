@@ -17,7 +17,8 @@ import { Seat } from '../../../../interfaces/Seat'
 import { Tutor } from '../../../../interfaces/Tutor'
 import { PeerAssignment } from '../../../../interfaces/PeerAssignment'
 import { updateSeatPlan } from '../../../../network/mutations/updateSeatPlan'
-import { buildSeatLookup, getGridDimensions, TUTOR_COLORS } from '../../utils/seatGrid'
+import { buildPhysicalSeatMap, getMaxPhysicalPosition, TUTOR_COLORS } from '../../utils/seatGrid'
+import { RECHNERHALLE_LAYOUT } from '../../utils/rechnerHalle'
 import { SeatCell } from './SeatCell'
 import { SeatGridLegend } from './SeatGridLegend'
 import { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
@@ -50,13 +51,15 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
   })
 
   // Build lookup maps
-  const seatLookup = useMemo(() => buildSeatLookup(seats), [seats])
+  const layout = RECHNERHALLE_LAYOUT
+  const maxPhysicalPos = useMemo(() => getMaxPhysicalPosition(layout), [layout])
+  const physicalSeatMap = useMemo(() => buildPhysicalSeatMap(seats, layout), [seats, layout])
+
   const seatByName = useMemo(() => {
     const map = new Map<string, Seat>()
     for (const s of seats) map.set(s.seatName, s)
     return map
   }, [seats])
-  const { maxRow, maxPosition } = useMemo(() => getGridDimensions(seats), [seats])
 
   const participationMap = useMemo(() => {
     const map = new Map<string, CoursePhaseParticipationWithStudent>()
@@ -74,6 +77,16 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
     uniqueTutors.forEach((id, idx) => map.set(id, idx))
     return map
   }, [seats])
+
+  // Tutor name lookup for tutor seats
+  const tutorNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const t of tutors) {
+      const initials = `${t.firstName?.charAt(0) ?? ''}${t.lastName?.charAt(0) ?? ''}`.toUpperCase()
+      map.set(t.id, initials)
+    }
+    return map
+  }, [tutors])
 
   // Peer lookup: studentID -> Set of peer IDs
   const peerMap = useMemo(() => {
@@ -112,7 +125,7 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
   const handleCellClick = useCallback(
     (seatName: string) => {
       const seat = seatByName.get(seatName)
-      if (!seat) return
+      if (!seat || seat.isTutorSeat) return
 
       if (!selectedSeat) {
         if (seat.assignedStudent) {
@@ -150,6 +163,15 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
     return peerMap.get(seat.assignedStudent) ?? new Set<string>()
   }, [selectedSeat, seatByName, peerMap])
 
+  // Build gap set for quick lookup
+  const gapSet = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of layout) {
+      for (const g of r.gaps) set.add(`${r.row}-${g}`)
+    }
+    return set
+  }, [layout])
+
   return (
     <div>
       {selectedSeat && (
@@ -166,33 +188,44 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
         </Alert>
       )}
 
-      {/* Transposed grid: columns = physical rows (R1-R9), rows = positions (1-11) */}
+      {/* Transposed grid: columns = physical rows (R1-R9), rows = physical positions (1-12) */}
       <div
         className='grid gap-1'
         style={{
-          gridTemplateColumns: `2.5rem repeat(${maxRow}, minmax(0, 1fr))`,
+          gridTemplateColumns: `2.5rem repeat(${layout.length}, minmax(0, 1fr))`,
         }}
       >
         {/* Header row: row numbers as column headers */}
         <div /> {/* empty corner */}
-        {Array.from({ length: maxRow }, (_, i) => i + 1).map((row) => (
-          <div key={row} className='text-center text-xs text-muted-foreground font-mono'>
-            R{row}
+        {layout.map((r) => (
+          <div key={r.row} className='text-center text-xs text-muted-foreground font-mono'>
+            R{r.row}
           </div>
         ))}
 
         {/* Position rows */}
-        {Array.from({ length: maxPosition }, (_, i) => i + 1).map((pos) => (
-          <Fragment key={pos}>
+        {Array.from({ length: maxPhysicalPos }, (_, i) => i + 1).map((physPos) => (
+          <Fragment key={physPos}>
             {/* Position label */}
             <div className='flex items-center justify-center text-xs font-medium text-muted-foreground'>
-              {pos}
+              {physPos}
             </div>
             {/* Cells: one per physical row */}
-            {Array.from({ length: maxRow }, (_, i) => i + 1).map((row) => {
-              const key = `${row}-${pos}`
-              const seat = seatLookup.get(key)
+            {layout.map((rowLayout) => {
+              const key = `${rowLayout.row}-${physPos}`
 
+              // Outside this row's range
+              if (physPos < rowLayout.physicalStart || physPos > rowLayout.physicalEnd) {
+                return <div key={key} className='aspect-square' />
+              }
+
+              // Gap position (door, etc.)
+              if (gapSet.has(key)) {
+                return <div key={key} className='aspect-square' />
+              }
+
+              // Look up the seat at this physical position
+              const seat = physicalSeatMap.get(key)
               if (!seat) {
                 return <div key={key} className='aspect-square' />
               }
@@ -205,7 +238,11 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
                   key={key}
                   seat={seat}
                   tutorColorIndex={seat.assignedTutor ? (tutorColorMap.get(seat.assignedTutor) ?? -1) : -1}
-                  studentLabel={getStudentInitials(seat.assignedStudent)}
+                  studentLabel={
+                    seat.isTutorSeat
+                      ? (seat.assignedTutor ? (tutorNameMap.get(seat.assignedTutor) ?? null) : null)
+                      : getStudentInitials(seat.assignedStudent)
+                  }
                   isSelected={selectedSeat === seat.seatName}
                   isPeerOfSelected={isPeerOfSelected}
                   onClick={() => handleCellClick(seat.seatName)}
