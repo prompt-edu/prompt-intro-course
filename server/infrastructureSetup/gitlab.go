@@ -169,7 +169,7 @@ func newCourseProjectOptions(name string, namespaceID int64, ciCDRepoPath string
 		// Git & merge settings
 		Visibility:                                    gitlab.Ptr(gitlab.PrivateVisibility),
 		MergeMethod:                                   gitlab.Ptr(gitlab.NoFastForwardMerge),
-		SquashOption:                                  gitlab.Ptr(gitlab.SquashOptionDefaultOff),
+		SquashOption:                                  gitlab.Ptr(gitlab.SquashOptionDefaultOn),
 		RemoveSourceBranchAfterMerge:                  gitlab.Ptr(true),
 		OnlyAllowMergeIfPipelineSucceeds:              gitlab.Ptr(true),
 		OnlyAllowMergeIfAllDiscussionsAreResolved:     gitlab.Ptr(true),
@@ -229,14 +229,15 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 
 	// Branch protection — GitLab auto-protects 'main' with default settings
 	// when the first commit is pushed, so we must unprotect first to apply our
-	// desired access levels (push=Maintainer, merge=Developer).
+	// desired access levels. Push is set to NoPermissions to force all changes
+	// through merge requests; merge access is Developer (tutors are Maintainer).
 	_, unprotectErr := git.ProtectedBranches.UnprotectRepositoryBranches(projectID, "main")
 	if unprotectErr != nil && !isNotFoundError(unprotectErr) {
 		return fmt.Errorf("unprotect branch for %q: %w", projectName, unprotectErr)
 	}
 	_, _, err = git.ProtectedBranches.ProtectRepositoryBranches(projectID, &gitlab.ProtectRepositoryBranchesOptions{
 		Name:             gitlab.Ptr("main"),
-		PushAccessLevel:  gitlab.Ptr(gitlab.MaintainerPermissions),
+		PushAccessLevel:  gitlab.Ptr(gitlab.NoPermissions),
 		MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
 		AllowForcePush:   gitlab.Ptr(false),
 	})
@@ -469,12 +470,16 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 // - Reset approvals when new commits are pushed (prevents stale approvals)
 // - Prevent MR authors from approving their own MRs
 // - Prevent committers from approving MRs they contributed to
+// - Prevent students from overriding approval rules on their MRs
+// - Only reset code owner approvals when relevant files change
 // Idempotent: safe to call multiple times.
 func ensureApprovalConfiguration(git *gitlab.Client, projectID int64, repoName string) error {
 	_, _, err := git.Projects.ChangeApprovalConfiguration(projectID, &gitlab.ChangeApprovalConfigurationOptions{
-		ResetApprovalsOnPush:                   gitlab.Ptr(true),
-		MergeRequestsAuthorApproval:            gitlab.Ptr(false),
-		MergeRequestsDisableCommittersApproval: gitlab.Ptr(true),
+		ResetApprovalsOnPush:                         gitlab.Ptr(true),
+		MergeRequestsAuthorApproval:                  gitlab.Ptr(false),
+		MergeRequestsDisableCommittersApproval:       gitlab.Ptr(true),
+		DisableOverridingApproversPerMergeRequest:     gitlab.Ptr(true),
+		SelectiveCodeOwnerRemovals:                    gitlab.Ptr(true),
 	})
 	if err != nil {
 		return fmt.Errorf("configure approval settings for %q: %w", repoName, err)
