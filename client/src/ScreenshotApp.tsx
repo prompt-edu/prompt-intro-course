@@ -1,40 +1,30 @@
 /**
- * Standalone screenshot harness for SeatGrid.
- * Renders the real React components with mock data for Playwright screenshots.
- * Usage: yarn dev → http://localhost:3005
+ * E2E screenshot harness — fetches real data from Go API, renders real components.
+ * Usage: start Go dev server on :8082, then webpack dev server on :3006
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { SeatGrid } from './introCourse/pages/SeatAssignment/components/SeatGrid/SeatGrid'
+import { SeatTutorTable } from './introCourse/pages/SeatAssignment/components/SeatTutorAssigner/SeatTutorTable'
+import { PeerGroupList } from './introCourse/pages/PeerAssignment/components/PeerGroupList'
 import { Seat } from './introCourse/interfaces/Seat'
 import { Tutor } from './introCourse/interfaces/Tutor'
 import { PeerAssignment } from './introCourse/interfaces/PeerAssignment'
-import { RECHNERHALLE_LAYOUT, getPhysicalPositions } from './introCourse/pages/SeatAssignment/utils/rechnerHalle'
+import { DeveloperProfile } from './introCourse/interfaces/DeveloperProfile'
 import type { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
+import { Monitor, User, Users, ExternalLink } from 'lucide-react'
+import { Avatar, AvatarFallback, Badge, Button } from '@tumaet/prompt-ui-components'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
 })
 
-// ── Tutors ─────────────────────────────────────────────────────────────
-const tutorData = [
-  { firstName: 'Alice', lastName: 'Mueller' },
-  { firstName: 'Bob', lastName: 'Schmidt' },
-  { firstName: 'Clara', lastName: 'Weber' },
-  { firstName: 'David', lastName: 'Fischer' },
-  { firstName: 'Eva', lastName: 'Braun' },
-  { firstName: 'Felix', lastName: 'Wagner' },
-]
-const tutors: Tutor[] = tutorData.map((t, i) => ({
-  id: `tutor-${i}`,
-  firstName: t.firstName,
-  lastName: t.lastName,
-  email: `${t.firstName.toLowerCase()}@example.com`,
-}))
+// Use relative URL — webpack dev server proxies /intro-course to Go server
+const API = '/intro-course/api/course_phase/4179d58a-d00d-4fa7-94a5-397bc69fab02'
 
-// ── Students ───────────────────────────────────────────────────────────
-const studentNames = [
+// ── Student name lookup (PROMPT Core isn't running, so we provide names locally) ──
+const studentNames: [string, string][] = [
   ['Max','Mueller'],['Anna','Schneider'],['Lukas','Wagner'],['Sophie','Fischer'],
   ['Leon','Weber'],['Emma','Braun'],['Paul','Hoffmann'],['Marie','Schulz'],
   ['Jonas','Koch'],['Tim','Klein'],['Felix','Groß'],['Hannah','Bauer'],
@@ -50,170 +40,75 @@ const studentNames = [
   ['Noah','Fiedler'],['Ralf','Krüger'],['Lara','Koenig'],['Theo','Günther'],
   ['Peter','Fuchs'],['Ida','Becker'],['Tina','Wendt'],['Vera','Roth'],
 ]
-const macNeedy = new Set([5, 8, 13, 18, 23, 29, 33, 37, 41, 45, 50])
 
-const participations: CoursePhaseParticipationWithStudent[] = studentNames.map((n, i) => ({
-  coursePhaseID: 'phase-1',
-  courseParticipationID: `student-${i}`,
-  passStatus: 'not_assessed' as any,
-  restrictedData: {},
-  studentReadableData: {},
-  prevData: {},
-  student: {
-    id: `student-${i}`,
-    firstName: n[0],
-    lastName: n[1],
-    email: `${n[0].toLowerCase()}.${n[1].toLowerCase()}@example.com`,
-    hasUniversityAccount: true,
-  },
-}))
-
-// ── Build seats ────────────────────────────────────────────────────────
-// Row → tutor assignment: [Alice, Bob, Clara, David, David, Eva, Eva, Felix, Felix]
-const rowTutor = [0, 1, 2, 3, 3, 4, 4, 5, 5]
-// Mac seats: R5 local 1-6 → phys 3-8, R6 local 1-6 → phys 3,4,5,7,8,9
-const macSeatKeys = new Set<string>()
-;[3,4,5,6,7,8].forEach(p => macSeatKeys.add(`5-${p}`))
-;[3,4,5,7,8,9].forEach(p => macSeatKeys.add(`6-${p}`))
-
-// Tutor seats
-const tutorSeatPositions: Record<number, { row: number; physPos: number }> = {
-  0: { row: 1, physPos: 12 },
-  1: { row: 2, physPos: 12 },
-  2: { row: 3, physPos: 12 },
-  3: { row: 4, physPos: 12 },
-  4: { row: 7, physPos: 12 },
-  5: { row: 8, physPos: 12 },
-}
-
-// Build all seat objects
-const allSeatMeta: { name: string; row: number; physPos: number; hasMac: boolean }[] = []
-RECHNERHALLE_LAYOUT.forEach(r => {
-  const positions = getPhysicalPositions(r)
-  positions.forEach((physPos, idx) => {
-    allSeatMeta.push({
-      name: `1-${r.row}-${idx + 1}`,
-      row: r.row,
-      physPos,
-      hasMac: macSeatKeys.has(`${r.row}-${physPos}`),
-    })
-  })
-})
-
-// Create seat objects with tutor and student assignments
-const seats: Seat[] = []
-const tutorSeatKeys = new Set<string>()
-for (const [tIdx, pos] of Object.entries(tutorSeatPositions)) {
-  tutorSeatKeys.add(`${pos.row}-${pos.physPos}`)
-}
-
-// Group student seats by tutor, Mac-first sort
-type SeatMeta = typeof allSeatMeta[number]
-const tutorSeatGroups: SeatMeta[][] = [[], [], [], [], [], []]
-
-for (const sm of allSeatMeta) {
-  const key = `${sm.row}-${sm.physPos}`
-  if (tutorSeatKeys.has(key)) continue
-  tutorSeatGroups[rowTutor[sm.row - 1]].push(sm)
-}
-for (let t = 0; t < 6; t++) {
-  tutorSeatGroups[t].sort((a, b) => {
-    if (a.hasMac !== b.hasMac) return a.hasMac ? -1 : 1
-    if (a.row !== b.row) return a.row - b.row
-    return a.physPos - b.physPos
-  })
-}
-
-// Smart Mac-aware student distribution
-const macNeedyStudents = [...macNeedy].map(i => i)
-const macOwnerStudents = studentNames.map((_, i) => i).filter(i => !macNeedy.has(i))
-const caps = [10, 8, 9, 10, 10, 9]
-const tutorStudents: number[][] = [[], [], [], [], [], []]
-
-// David gets first 6 Mac-needy, Eva gets remaining
-let mnIdx = 0
-for (let i = 0; i < 6 && mnIdx < macNeedyStudents.length; i++) tutorStudents[3].push(macNeedyStudents[mnIdx++])
-for (let i = 0; i < 6 && mnIdx < macNeedyStudents.length; i++) tutorStudents[4].push(macNeedyStudents[mnIdx++])
-
-// Fill remaining with Mac-owners
-let moIdx = 0
-for (let t = 0; t < 6; t++) {
-  const remaining = caps[t] - tutorStudents[t].length
-  for (let i = 0; i < remaining && moIdx < macOwnerStudents.length; i++) {
-    tutorStudents[t].push(macOwnerStudents[moIdx++])
+function buildParticipations(seats: Seat[]): CoursePhaseParticipationWithStudent[] {
+  // Map student UUIDs to names based on the seed order (b0...01 → index 0)
+  const studentIds = new Set<string>()
+  for (const s of seats) {
+    if (s.assignedStudent) studentIds.add(s.assignedStudent)
   }
-}
-
-// Sort students within group: Mac-needy first
-for (let t = 0; t < 6; t++) {
-  tutorStudents[t].sort((a, b) => {
-    const aMac = macNeedy.has(a) ? 0 : 1
-    const bMac = macNeedy.has(b) ? 0 : 1
-    return aMac - bMac
-  })
-}
-
-// Assign students to sorted seats
-const studentSeatAssignment = new Map<string, string>() // seatName → studentId
-for (let t = 0; t < 6; t++) {
-  const seatGroup = tutorSeatGroups[t]
-  const studs = tutorStudents[t]
-  for (let i = 0; i < studs.length && i < seatGroup.length; i++) {
-    studentSeatAssignment.set(seatGroup[i].name, `student-${studs[i]}`)
-  }
-}
-
-// Build final Seat[]
-for (const sm of allSeatMeta) {
-  const key = `${sm.row}-${sm.physPos}`
-  const isTutorSeat = tutorSeatKeys.has(key)
-  const tIdx = rowTutor[sm.row - 1]
-
-  seats.push({
-    seatName: sm.name,
-    hasMac: sm.hasMac,
-    deviceID: null,
-    assignedStudent: isTutorSeat ? null : (studentSeatAssignment.get(sm.name) ?? null),
-    assignedTutor: `tutor-${tIdx}`,
-    isTutorSeat,
-  })
-}
-
-// ── Peer assignments ───────────────────────────────────────────────────
-// Build peer groups per tutor using 3a + 4b = n partitioning
-function partition(n: number): number[] {
-  const groups: number[] = []
-  const rem = n % 3
-  const numQuads = rem === 0 ? 0 : rem === 1 ? 1 : 2
-  const numTriples = (n - numQuads * 4) / 3
-  for (let i = 0; i < numTriples; i++) groups.push(3)
-  for (let i = 0; i < numQuads; i++) groups.push(4)
-  return groups
-}
-
-const peerAssignments: PeerAssignment[] = []
-for (let t = 0; t < 6; t++) {
-  const studs = tutorStudents[t]
-  const groups = partition(studs.length)
-  let offset = 0
-  for (const size of groups) {
-    const members = studs.slice(offset, offset + size)
-    // Create peer pairs: each member is paired with every other member
-    for (let i = 0; i < members.length; i++) {
-      for (let j = i + 1; j < members.length; j++) {
-        peerAssignments.push({
-          studentID: `student-${members[i]}`,
-          peerID: `student-${members[j]}`,
-        })
-      }
+  return Array.from(studentIds).map((id) => {
+    const idx = parseInt(id.slice(-2), 10) - 1 // b0...01 → 0, b0...56 → 55
+    const [first, last] = studentNames[idx] ?? ['Student', id.slice(-4)]
+    return {
+      coursePhaseID: '4179d58a-d00d-4fa7-94a5-397bc69fab02',
+      courseParticipationID: id,
+      passStatus: 'not_assessed' as any,
+      restrictedData: {},
+      studentReadableData: {},
+      prevData: {},
+      student: {
+        id,
+        firstName: first,
+        lastName: last,
+        email: `${first.toLowerCase()}.${last.toLowerCase()}@example.com`,
+        hasUniversityAccount: true,
+      },
     }
-    offset += size
-  }
+  })
 }
 
-// ── The screenshot page ────────────────────────────────────────────────
+// ── Data fetching hook ────────────────────────────────────────────────
+function useApiData() {
+  const [seats, setSeats] = useState<Seat[]>([])
+  const [tutors, setTutors] = useState<Tutor[]>([])
+  const [peers, setPeers] = useState<PeerAssignment[]>([])
+  const [profiles, setProfiles] = useState<DeveloperProfile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/seat_plan`).then(r => r.json()),
+      fetch(`${API}/tutor`).then(r => r.json()),
+      fetch(`${API}/peer_assignments`).then(r => r.json()),
+      fetch(`${API}/developer-profile/all`).then(r => r.json()),
+    ])
+      .then(([s, t, p, d]) => {
+        setSeats(s)
+        setTutors(t)
+        setPeers(p)
+        setProfiles(d)
+        setLoading(false)
+      })
+      .catch(e => {
+        setError(e.message)
+        setLoading(false)
+      })
+  }, [])
+
+  const participations = buildParticipations(seats)
+  return { seats, tutors, peers, profiles, participations, loading, error }
+}
+
+// ── Page: Seat Grid (all 3 view modes via URL param) ──────────────────
 const SeatGridPage = () => {
-  const [, setForceUpdate] = useState(0)
+  const { seats, tutors, peers, participations, loading, error } = useApiData()
+  if (loading) return <div className='p-6'>Loading...</div>
+  if (error) return <div className='p-6 text-red-500'>Error: {error}</div>
+
+  const studentCount = seats.filter(s => s.assignedStudent).length
+  const totalStudentSeats = seats.filter(s => !s.isTutorSeat).length
 
   return (
     <div className='p-6 max-w-5xl mx-auto bg-background text-foreground'>
@@ -221,16 +116,15 @@ const SeatGridPage = () => {
         <div>
           <h2 className='text-xl font-bold tracking-tight'>Seat Assignment</h2>
           <p className='text-sm text-muted-foreground mt-1'>
-            Rechnerhalle Room 1 — {studentNames.length} of {allSeatMeta.length - 6} student seats assigned. 12 Mac seats (R5 &amp; R6).
+            Rechnerhalle Room 1 — {studentCount} of {totalStudentSeats} student seats assigned
           </p>
         </div>
-
         <div className='bg-card border rounded-lg p-6 shadow-sm'>
           <SeatGrid
             seats={seats}
             tutors={tutors}
             participations={participations}
-            peerAssignments={peerAssignments}
+            peerAssignments={peers}
           />
         </div>
       </div>
@@ -238,11 +132,192 @@ const SeatGridPage = () => {
   )
 }
 
-export const ScreenshotApp = () => (
+// ── Page: Tutor Assignment Table ──────────────────────────────────────
+const TutorTablePage = () => {
+  const { seats, tutors, loading, error } = useApiData()
+  const [selected, setSelected] = useState<string[]>([])
+  if (loading) return <div className='p-6'>Loading...</div>
+  if (error) return <div className='p-6 text-red-500'>Error: {error}</div>
+
+  return (
+    <div className='p-6 max-w-4xl mx-auto bg-background text-foreground'>
+      <div className='space-y-4'>
+        <h2 className='text-xl font-bold tracking-tight'>Tutor Assignment</h2>
+        <div className='bg-card border rounded-lg p-4 shadow-sm'>
+          <SeatTutorTable
+            allSeats={seats}
+            tutors={tutors}
+            selectedSeatNames={selected}
+            setSelectedSeatNames={setSelected}
+            handleTutorAssignment={() => {}}
+            handleTutorSeatToggle={() => {}}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Page: Peer Group List ─────────────────────────────────────────────
+const PeerGroupPage = () => {
+  const { seats, tutors, peers, profiles, participations, loading, error } = useApiData()
+  if (loading) return <div className='p-6'>Loading...</div>
+  if (error) return <div className='p-6 text-red-500'>Error: {error}</div>
+
+  return (
+    <div className='p-6 max-w-4xl mx-auto bg-background text-foreground'>
+      <div className='space-y-4'>
+        <h2 className='text-xl font-bold tracking-tight'>Peer Review Groups</h2>
+        <PeerGroupList
+          peerAssignments={peers}
+          seats={seats}
+          tutors={tutors}
+          developerProfiles={profiles}
+          participations={participations}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── Page: Empty state (no peer assignments) ──────────────────────────
+const EmptyStatePage = () => {
+  const { seats, tutors, profiles, participations, loading, error } = useApiData()
+  if (loading) return <div className='p-6'>Loading...</div>
+  if (error) return <div className='p-6 text-red-500'>Error: {error}</div>
+
+  return (
+    <div className='p-6 max-w-4xl mx-auto bg-background text-foreground'>
+      <div className='space-y-4'>
+        <h2 className='text-xl font-bold tracking-tight'>Peer Review Groups</h2>
+        <PeerGroupList
+          peerAssignments={[]}
+          seats={seats}
+          tutors={tutors}
+          developerProfiles={profiles}
+          participations={participations}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── Page: Student Seat View (standalone, no zustand) ─────────────────
+const StudentViewPage = () => {
+  const [data, setData] = useState<any>(null)
+  const [peerData, setPeerData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/seat_plan/own-assignment`).then(r => r.json()),
+      fetch(`${API}/peer_assignments/own`).then(r => r.json()),
+    ])
+      .then(([seat, peers]) => {
+        setData(seat)
+        setPeerData(peers)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className='p-6'>Loading...</div>
+  if (!data) return <div className='p-6'>No data</div>
+
+  const { seatName, hasMac, deviceID, tutorFirstName, tutorLastName, tutorEmail } = data
+  const tutorFullName = `${tutorFirstName} ${tutorLastName}`
+  const tutorInitial = tutorFirstName.charAt(0)
+  const peersIReview = peerData?.peersIReview ?? []
+
+  return (
+    <div className='p-6 max-w-3xl mx-auto bg-background text-foreground'>
+      <div className='space-y-4'>
+        <h2 className='text-xl font-bold tracking-tight'>My Seat Assignment</h2>
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+          {/* Seat Information Card */}
+          <section className='p-4 bg-muted/20 rounded-lg shadow'>
+            <div className='flex items-center gap-2 mb-3'>
+              <Monitor className='h-5 w-5 text-primary' />
+              <h2 className='text-lg font-medium'>Seat Information</h2>
+            </div>
+            <div>
+              <p className='text-sm text-muted-foreground'>Assigned Seat</p>
+              <p className='text-xl font-semibold'>{seatName}</p>
+            </div>
+            <div className='mt-4'>
+              <p className='text-sm text-muted-foreground'>Device Type</p>
+              <div className='flex items-center gap-2 mt-1'>
+                <Badge variant='outline'>{hasMac ? 'Chair Mac' : 'Own MacBook'}</Badge>
+                {deviceID && <span className='text-sm'>ID: {deviceID}</span>}
+              </div>
+            </div>
+          </section>
+
+          {/* Tutor Information Card */}
+          <section className='p-4 bg-muted/20 rounded-lg shadow'>
+            <div className='flex items-center gap-2 mb-3'>
+              <User className='h-5 w-5 text-primary' />
+              <h2 className='text-lg font-medium'>Your Tutor</h2>
+            </div>
+            <div className='flex items-center gap-4'>
+              <Avatar className='h-16 w-16 border-2 border-background shadow-sm'>
+                <AvatarFallback className='text-lg font-bold'>{tutorInitial}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className='font-semibold text-lg'>{tutorFullName}</p>
+                <p className='text-sm text-muted-foreground'>{tutorEmail}</p>
+              </div>
+            </div>
+          </section>
+
+          {/* Peer Review Information Card */}
+          {peersIReview.length > 0 && (
+            <section className='p-4 bg-muted/20 rounded-lg shadow md:col-span-2'>
+              <div className='flex items-center gap-2 mb-3'>
+                <Users className='h-5 w-5 text-primary' />
+                <h2 className='text-lg font-medium'>Your Review Peers</h2>
+              </div>
+              <p className='text-sm text-muted-foreground mb-2'>
+                Your main task is to <strong>manually test</strong> your peer&apos;s application.
+              </p>
+              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'>
+                {peersIReview.map((peer: any) => (
+                  <div
+                    key={peer.courseParticipationID}
+                    className='border rounded-md p-3 flex flex-col gap-2'
+                  >
+                    <p className='font-medium'>{peer.gitlabUsername}</p>
+                    {peer.seatName && (
+                      <p className='text-sm text-muted-foreground'>Seat: {peer.seatName}</p>
+                    )}
+                    {peer.gitlabUsername && (
+                      <Button variant='outline' size='sm' className='w-fit' disabled>
+                        <ExternalLink className='h-3 w-3 mr-1' />
+                        GitLab Repo
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── App ──────────────────────────────────────────────────────────────
+export const ScreenshotApp = ({ initialRoute = '/grid' }: { initialRoute?: string }) => (
   <QueryClientProvider client={queryClient}>
-    <MemoryRouter initialEntries={['/course/c1/phase/p1']}>
+    <MemoryRouter initialEntries={[initialRoute]}>
       <Routes>
-        <Route path='/course/:courseId/phase/:phaseId' element={<SeatGridPage />} />
+        <Route path='/grid' element={<SeatGridPage />} />
+        <Route path='/tutor-table' element={<TutorTablePage />} />
+        <Route path='/peer-groups' element={<PeerGroupPage />} />
+        <Route path='/empty-state' element={<EmptyStatePage />} />
+        <Route path='/student-view' element={<StudentViewPage />} />
+        <Route path='*' element={<SeatGridPage />} />
       </Routes>
     </MemoryRouter>
   </QueryClientProvider>

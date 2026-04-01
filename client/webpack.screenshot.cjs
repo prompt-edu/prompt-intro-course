@@ -17,6 +17,14 @@ module.exports = {
     historyApiFallback: true,
     port: 3006,
     open: false,
+    // Proxy API requests to Go dev server to avoid CORS
+    proxy: [
+      {
+        context: ['/intro-course'],
+        target: 'http://localhost:8082',
+        changeOrigin: true,
+      },
+    ],
   },
   module: {
     rules: [

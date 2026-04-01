@@ -1,51 +1,63 @@
 /**
- * Take real Playwright screenshots of the SeatGrid component.
- * Run: node screenshot.cjs (with webpack.screenshot dev server on port 3006)
+ * E2E Playwright screenshots — captures all views from the real React app.
+ * Requires: Go dev server on :8082, webpack dev server on :3006
  */
 const { chromium } = require('playwright')
 
-const BASE = 'http://localhost:3006/course/c1/phase/p1'
+const BASE = 'http://localhost:3006'
 const OUT = '../.github/pr-screenshots'
+
+const VIEWS = [
+  // Seat grid — tutor view (default)
+  { route: '/grid', name: 'screenshot-seat-grid-tutor', width: 1280, height: 900 },
+  // Seat grid — peer group view (click button)
+  { route: '/grid', name: 'screenshot-seat-grid-peer', width: 1280, height: 900, clickButton: 'Peer Group' },
+  // Seat grid — seat view (click button)
+  { route: '/grid', name: 'screenshot-seat-grid-seat', width: 1280, height: 900, clickButton: 'Seat' },
+  // Admin tutor assignment table
+  { route: '/tutor-table', name: 'screenshot-admin-table', width: 1100, height: 800 },
+  // Admin peer review groups
+  { route: '/peer-groups', name: 'screenshot-admin-peer-groups', width: 1100, height: 900 },
+  // Empty state (no peer assignments)
+  { route: '/empty-state', name: 'screenshot-empty-state', width: 900, height: 500 },
+  // Student seat assignment view
+  { route: '/student-view', name: 'screenshot-student-view', width: 1000, height: 700 },
+]
 
 async function main() {
   const browser = await chromium.launch()
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 900 },
-    deviceScaleFactor: 2,
-  })
 
-  // 1. Tutor view (default)
-  const page1 = await context.newPage()
-  await page1.goto(BASE)
-  await page1.waitForSelector('button', { timeout: 10000 })
-  await page1.waitForTimeout(500)
-  await page1.screenshot({ path: `${OUT}/screenshot-seat-grid-tutor.png`, fullPage: true })
-  console.log('✓ Tutor view screenshot')
+  for (const view of VIEWS) {
+    const context = await browser.newContext({
+      viewport: { width: view.width, height: view.height },
+      deviceScaleFactor: 2,
+    })
+    const page = await context.newPage()
 
-  // 2. Peer Group view
-  const page2 = await context.newPage()
-  await page2.goto(BASE)
-  await page2.waitForSelector('button', { timeout: 10000 })
-  await page2.waitForTimeout(300)
-  const peerBtn = page2.locator('button', { hasText: 'Peer Group' })
-  await peerBtn.click()
-  await page2.waitForTimeout(300)
-  await page2.screenshot({ path: `${OUT}/screenshot-seat-grid-peer.png`, fullPage: true })
-  console.log('✓ Peer Group view screenshot')
+    // Navigate using hash routing
+    await page.goto(`${BASE}/#${view.route}`)
+    // Wait for content to render (API fetch + React render)
+    await page.waitForTimeout(2000)
 
-  // 3. Seat view
-  const page3 = await context.newPage()
-  await page3.goto(BASE)
-  await page3.waitForSelector('button', { timeout: 10000 })
-  await page3.waitForTimeout(300)
-  const seatBtn = page3.locator('button', { hasText: 'Seat' })
-  await seatBtn.click()
-  await page3.waitForTimeout(300)
-  await page3.screenshot({ path: `${OUT}/screenshot-seat-grid-seat.png`, fullPage: true })
-  console.log('✓ Seat view screenshot')
+    // Click a view mode button if needed
+    if (view.clickButton) {
+      const btn = page.locator('button', { hasText: view.clickButton })
+      if (await btn.count() > 0) {
+        await btn.click()
+        await page.waitForTimeout(500)
+      }
+    }
+
+    await page.screenshot({
+      path: `${OUT}/${view.name}.png`,
+      fullPage: true,
+    })
+    console.log(`✓ ${view.name}`)
+    await context.close()
+  }
 
   await browser.close()
-  console.log(`\nAll screenshots saved to ${OUT}/`)
+  console.log(`\nAll ${VIEWS.length} screenshots saved to ${OUT}/`)
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
