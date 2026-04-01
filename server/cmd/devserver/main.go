@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -50,7 +49,6 @@ func main() {
 	conn, err := pgxpool.New(context.Background(), databaseURL)
 	if err != nil {
 		log.Fatalf("DB connection failed: %v", err)
-		os.Exit(1)
 	}
 	defer conn.Close()
 

@@ -89,11 +89,19 @@ func updateSeatPlanHandler(q *db.Queries, conn *pgxpool.Pool) gin.HandlerFunc {
 				params.DeviceID = pgtype.Text{String: *s.DeviceID, Valid: true}
 			}
 			if s.AssignedStudent != nil {
-				uid, _ := uuid.Parse(*s.AssignedStudent)
+				uid, err := uuid.Parse(*s.AssignedStudent)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignedStudent UUID"})
+					return
+				}
 				params.AssignedStudent = pgtype.UUID{Bytes: uid, Valid: true}
 			}
 			if s.AssignedTutor != nil {
-				uid, _ := uuid.Parse(*s.AssignedTutor)
+				uid, err := uuid.Parse(*s.AssignedTutor)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignedTutor UUID"})
+					return
+				}
 				params.AssignedTutor = pgtype.UUID{Bytes: uid, Valid: true}
 			}
 			if err := qtx.UpdateSeat(c, params); err != nil {
@@ -265,7 +273,7 @@ func getOwnPeerAssignmentsHandler(q *db.Queries) gin.HandlerFunc {
 				CourseParticipationID: uuidToString(pgtype.UUID{Bytes: p.PeerID, Valid: true}),
 				GitlabUsername:        stringOrEmpty(p.GitlabUsername),
 				SeatName:              stringOrEmpty(p.SeatName),
-				TutorGitlabUsername:   stringOrEmpty2(p.TutorGitlabUsername),
+				TutorGitlabUsername:   stringOrEmpty(p.TutorGitlabUsername),
 			}
 		}
 		for i, r := range reviewers {
@@ -273,7 +281,7 @@ func getOwnPeerAssignmentsHandler(q *db.Queries) gin.HandlerFunc {
 				CourseParticipationID: uuidToString(pgtype.UUID{Bytes: r.StudentID, Valid: true}),
 				GitlabUsername:        stringOrEmpty(r.GitlabUsername),
 				SeatName:              stringOrEmpty(r.SeatName),
-				TutorGitlabUsername:   stringOrEmpty2(r.TutorGitlabUsername),
+				TutorGitlabUsername:   stringOrEmpty(r.TutorGitlabUsername),
 			}
 		}
 		c.JSON(http.StatusOK, dto)
@@ -324,13 +332,6 @@ func uuidToString(u pgtype.UUID) string {
 }
 
 func stringOrEmpty(t pgtype.Text) string {
-	if !t.Valid {
-		return ""
-	}
-	return t.String
-}
-
-func stringOrEmpty2(t pgtype.Text) string {
 	if !t.Valid {
 		return ""
 	}

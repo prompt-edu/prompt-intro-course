@@ -17,7 +17,6 @@ module.exports = {
     historyApiFallback: true,
     port: 3006,
     open: false,
-    // Proxy API requests to Go dev server to avoid CORS
     proxy: [
       {
         context: ['/intro-course'],
@@ -41,7 +40,28 @@ module.exports = {
       },
       {
         test: /\.css$/i,
-        use: ['style-loader', 'css-loader', 'postcss-loader'],
+        use: [
+          'style-loader',
+          'css-loader',
+          {
+            loader: 'postcss-loader',
+            options: {
+              postcssOptions: {
+                // Inline Tailwind config — production tailwind.config.js uses ESM
+                // imports that don't resolve in CJS postcss-loader context
+                plugins: [
+                  ['tailwindcss', {
+                    content: [
+                      'src/**/*.{ts,tsx}',
+                      'node_modules/@tumaet/prompt-ui-components/dist/**/*.{js,ts,tsx}',
+                    ],
+                  }],
+                  'autoprefixer',
+                ],
+              },
+            },
+          },
+        ],
         exclude: /node_modules/,
       },
       {
