@@ -31,6 +31,7 @@ CREATE TABLE seat (
   device_id text,
   assigned_student uuid,
   assigned_tutor uuid,
+  is_tutor_seat boolean NOT NULL DEFAULT false,
   PRIMARY KEY (seat_name, course_phase_id),
   CONSTRAINT fk_assigned_tutor
     FOREIGN KEY (course_phase_id, assigned_tutor)
