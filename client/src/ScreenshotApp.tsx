@@ -14,7 +14,20 @@ import { PeerAssignment } from './introCourse/interfaces/PeerAssignment'
 import { DeveloperProfile } from './introCourse/interfaces/DeveloperProfile'
 import type { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
 import { Monitor, User, Users, ExternalLink } from 'lucide-react'
-import { Avatar, AvatarFallback, Badge, Button } from '@tumaet/prompt-ui-components'
+import {
+  Alert,
+  AlertDescription,
+  Avatar,
+  AvatarFallback,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Skeleton,
+} from '@tumaet/prompt-ui-components'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -42,13 +55,12 @@ const studentNames: [string, string][] = [
 ]
 
 function buildParticipations(seats: Seat[]): CoursePhaseParticipationWithStudent[] {
-  // Map student UUIDs to names based on the seed order (b0...01 → index 0)
   const studentIds = new Set<string>()
   for (const s of seats) {
     if (s.assignedStudent) studentIds.add(s.assignedStudent)
   }
   return Array.from(studentIds).map((id) => {
-    const idx = parseInt(id.slice(-2), 10) - 1 // b0...01 → 0, b0...56 → 55
+    const idx = parseInt(id.slice(-2), 10) - 1
     const [first, last] = studentNames[idx] ?? ['Student', id.slice(-4)]
     return {
       coursePhaseID: '4179d58a-d00d-4fa7-94a5-397bc69fab02',
@@ -67,6 +79,22 @@ function buildParticipations(seats: Seat[]): CoursePhaseParticipationWithStudent
     }
   })
 }
+
+// ── Shared loading/error states ───────────────────────────────────────
+const LoadingState = () => (
+  <div className='p-6 space-y-4'>
+    <Skeleton className='h-8 w-48' />
+    <Skeleton className='h-64 w-full' />
+  </div>
+)
+
+const ErrorState = ({ message }: { message: string }) => (
+  <div className='p-6'>
+    <Alert variant='destructive'>
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
+  </div>
+)
 
 // ── Data fetching hook ────────────────────────────────────────────────
 function useApiData() {
@@ -101,17 +129,17 @@ function useApiData() {
   return { seats, tutors, peers, profiles, participations, loading, error }
 }
 
-// ── Page: Seat Grid (all 3 view modes via URL param) ──────────────────
+// ── Page: Seat Grid ───────────────────────────────────────────────────
 const SeatGridPage = () => {
   const { seats, tutors, peers, participations, loading, error } = useApiData()
-  if (loading) return <div className='p-6'>Loading...</div>
-  if (error) return <div className='p-6 text-red-500'>Error: {error}</div>
+  if (loading) return <LoadingState />
+  if (error) return <ErrorState message={error} />
 
   const studentCount = seats.filter(s => s.assignedStudent).length
   const totalStudentSeats = seats.filter(s => !s.isTutorSeat).length
 
   return (
-    <div className='p-6 max-w-5xl mx-auto bg-background text-foreground'>
+    <div className='p-6 max-w-5xl mx-auto'>
       <div className='space-y-4'>
         <div>
           <h2 className='text-xl font-bold tracking-tight'>Seat Assignment</h2>
@@ -119,14 +147,16 @@ const SeatGridPage = () => {
             Rechnerhalle Room 1 — {studentCount} of {totalStudentSeats} student seats assigned
           </p>
         </div>
-        <div className='bg-card border rounded-lg p-6 shadow-sm'>
-          <SeatGrid
-            seats={seats}
-            tutors={tutors}
-            participations={participations}
-            peerAssignments={peers}
-          />
-        </div>
+        <Card>
+          <CardContent className='pt-6'>
+            <SeatGrid
+              seats={seats}
+              tutors={tutors}
+              participations={participations}
+              peerAssignments={peers}
+            />
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
@@ -136,23 +166,25 @@ const SeatGridPage = () => {
 const TutorTablePage = () => {
   const { seats, tutors, loading, error } = useApiData()
   const [selected, setSelected] = useState<string[]>([])
-  if (loading) return <div className='p-6'>Loading...</div>
-  if (error) return <div className='p-6 text-red-500'>Error: {error}</div>
+  if (loading) return <LoadingState />
+  if (error) return <ErrorState message={error} />
 
   return (
-    <div className='p-6 max-w-4xl mx-auto bg-background text-foreground'>
+    <div className='p-6 max-w-4xl mx-auto'>
       <div className='space-y-4'>
         <h2 className='text-xl font-bold tracking-tight'>Tutor Assignment</h2>
-        <div className='bg-card border rounded-lg p-4 shadow-sm'>
-          <SeatTutorTable
-            allSeats={seats}
-            tutors={tutors}
-            selectedSeatNames={selected}
-            setSelectedSeatNames={setSelected}
-            handleTutorAssignment={() => {}}
-            handleTutorSeatToggle={() => {}}
-          />
-        </div>
+        <Card>
+          <CardContent className='pt-6'>
+            <SeatTutorTable
+              allSeats={seats}
+              tutors={tutors}
+              selectedSeatNames={selected}
+              setSelectedSeatNames={setSelected}
+              handleTutorAssignment={() => {}}
+              handleTutorSeatToggle={() => {}}
+            />
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
@@ -161,11 +193,11 @@ const TutorTablePage = () => {
 // ── Page: Peer Group List ─────────────────────────────────────────────
 const PeerGroupPage = () => {
   const { seats, tutors, peers, profiles, participations, loading, error } = useApiData()
-  if (loading) return <div className='p-6'>Loading...</div>
-  if (error) return <div className='p-6 text-red-500'>Error: {error}</div>
+  if (loading) return <LoadingState />
+  if (error) return <ErrorState message={error} />
 
   return (
-    <div className='p-6 max-w-4xl mx-auto bg-background text-foreground'>
+    <div className='p-6 max-w-4xl mx-auto'>
       <div className='space-y-4'>
         <h2 className='text-xl font-bold tracking-tight'>Peer Review Groups</h2>
         <PeerGroupList
@@ -183,11 +215,11 @@ const PeerGroupPage = () => {
 // ── Page: Empty state (no peer assignments) ──────────────────────────
 const EmptyStatePage = () => {
   const { seats, tutors, profiles, participations, loading, error } = useApiData()
-  if (loading) return <div className='p-6'>Loading...</div>
-  if (error) return <div className='p-6 text-red-500'>Error: {error}</div>
+  if (loading) return <LoadingState />
+  if (error) return <ErrorState message={error} />
 
   return (
-    <div className='p-6 max-w-4xl mx-auto bg-background text-foreground'>
+    <div className='p-6 max-w-4xl mx-auto'>
       <div className='space-y-4'>
         <h2 className='text-xl font-bold tracking-tight'>Peer Review Groups</h2>
         <PeerGroupList
@@ -221,8 +253,8 @@ const StudentViewPage = () => {
       .catch(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className='p-6'>Loading...</div>
-  if (!data) return <div className='p-6'>No data</div>
+  if (loading) return <LoadingState />
+  if (!data) return <ErrorState message='No seat assignment data available' />
 
   const { seatName, hasMac, deviceID, tutorFirstName, tutorLastName, tutorEmail } = data
   const tutorFullName = `${tutorFirstName} ${tutorLastName}`
@@ -230,76 +262,87 @@ const StudentViewPage = () => {
   const peersIReview = peerData?.peersIReview ?? []
 
   return (
-    <div className='p-6 max-w-3xl mx-auto bg-background text-foreground'>
+    <div className='p-6 max-w-3xl mx-auto'>
       <div className='space-y-4'>
         <h2 className='text-xl font-bold tracking-tight'>My Seat Assignment</h2>
         <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
           {/* Seat Information Card */}
-          <section className='p-4 bg-muted/20 rounded-lg shadow'>
-            <div className='flex items-center gap-2 mb-3'>
-              <Monitor className='h-5 w-5 text-primary' />
-              <h2 className='text-lg font-medium'>Seat Information</h2>
-            </div>
-            <div>
-              <p className='text-sm text-muted-foreground'>Assigned Seat</p>
-              <p className='text-xl font-semibold'>{seatName}</p>
-            </div>
-            <div className='mt-4'>
-              <p className='text-sm text-muted-foreground'>Device Type</p>
-              <div className='flex items-center gap-2 mt-1'>
-                <Badge variant='outline'>{hasMac ? 'Chair Mac' : 'Own MacBook'}</Badge>
-                {deviceID && <span className='text-sm'>ID: {deviceID}</span>}
+          <Card>
+            <CardHeader className='pb-3'>
+              <CardTitle className='flex items-center gap-2 text-base'>
+                <Monitor className='h-5 w-5 text-primary' />
+                Seat Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div>
+                <p className='text-sm text-muted-foreground'>Assigned Seat</p>
+                <p className='text-xl font-semibold'>{seatName}</p>
               </div>
-            </div>
-          </section>
+              <div className='mt-4'>
+                <p className='text-sm text-muted-foreground'>Device Type</p>
+                <div className='flex items-center gap-2 mt-1'>
+                  <Badge variant='outline'>{hasMac ? 'Chair Mac' : 'Own MacBook'}</Badge>
+                  {deviceID && <span className='text-sm'>ID: {deviceID}</span>}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Tutor Information Card */}
-          <section className='p-4 bg-muted/20 rounded-lg shadow'>
-            <div className='flex items-center gap-2 mb-3'>
-              <User className='h-5 w-5 text-primary' />
-              <h2 className='text-lg font-medium'>Your Tutor</h2>
-            </div>
-            <div className='flex items-center gap-4'>
-              <Avatar className='h-16 w-16 border-2 border-background shadow-sm'>
-                <AvatarFallback className='text-lg font-bold'>{tutorInitial}</AvatarFallback>
-              </Avatar>
-              <div>
-                <p className='font-semibold text-lg'>{tutorFullName}</p>
-                <p className='text-sm text-muted-foreground'>{tutorEmail}</p>
+          <Card>
+            <CardHeader className='pb-3'>
+              <CardTitle className='flex items-center gap-2 text-base'>
+                <User className='h-5 w-5 text-primary' />
+                Your Tutor
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className='flex items-center gap-4'>
+                <Avatar className='h-16 w-16 border-2 border-background shadow-sm'>
+                  <AvatarFallback className='text-lg font-bold'>{tutorInitial}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className='font-semibold text-lg'>{tutorFullName}</p>
+                  <p className='text-sm text-muted-foreground'>{tutorEmail}</p>
+                </div>
               </div>
-            </div>
-          </section>
+            </CardContent>
+          </Card>
 
           {/* Peer Review Information Card */}
           {peersIReview.length > 0 && (
-            <section className='p-4 bg-muted/20 rounded-lg shadow md:col-span-2'>
-              <div className='flex items-center gap-2 mb-3'>
-                <Users className='h-5 w-5 text-primary' />
-                <h2 className='text-lg font-medium'>Your Review Peers</h2>
-              </div>
-              <p className='text-sm text-muted-foreground mb-2'>
-                Your main task is to <strong>manually test</strong> your peer&apos;s application.
-              </p>
-              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'>
-                {peersIReview.map((peer: any) => (
-                  <div
-                    key={peer.courseParticipationID}
-                    className='border rounded-md p-3 flex flex-col gap-2'
-                  >
-                    <p className='font-medium'>{peer.gitlabUsername}</p>
-                    {peer.seatName && (
-                      <p className='text-sm text-muted-foreground'>Seat: {peer.seatName}</p>
-                    )}
-                    {peer.gitlabUsername && (
-                      <Button variant='outline' size='sm' className='w-fit' disabled>
-                        <ExternalLink className='h-3 w-3 mr-1' />
-                        GitLab Repo
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
+            <Card className='md:col-span-2'>
+              <CardHeader className='pb-3'>
+                <CardTitle className='flex items-center gap-2 text-base'>
+                  <Users className='h-5 w-5 text-primary' />
+                  Your Review Peers
+                </CardTitle>
+                <CardDescription>
+                  Your main task is to <strong>manually test</strong> your peer&apos;s application.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'>
+                  {peersIReview.map((peer: any) => (
+                    <Card key={peer.courseParticipationID}>
+                      <CardContent className='p-3 flex flex-col gap-2'>
+                        <p className='font-medium'>{peer.gitlabUsername}</p>
+                        {peer.seatName && (
+                          <p className='text-sm text-muted-foreground'>Seat: {peer.seatName}</p>
+                        )}
+                        {peer.gitlabUsername && (
+                          <Button variant='outline' size='sm' className='w-fit' disabled>
+                            <ExternalLink className='h-3 w-3 mr-1' />
+                            GitLab Repo
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       </div>

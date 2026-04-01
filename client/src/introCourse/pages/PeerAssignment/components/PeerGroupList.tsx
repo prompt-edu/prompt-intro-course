@@ -127,14 +127,16 @@ export const PeerGroupList = ({
 
   if (peerAssignments.length === 0) {
     return (
-      <div className='text-center py-8 bg-muted/30 rounded-lg'>
-        <Users className='h-12 w-12 mx-auto text-muted-foreground mb-2' />
-        <h3 className='text-lg font-medium mb-2'>No Peer Assignments</h3>
-        <p className='text-muted-foreground max-w-md mx-auto'>
-          Click &quot;Generate Groups&quot; to automatically create peer review groups within each
-          tutor group.
-        </p>
-      </div>
+      <Card>
+        <CardContent className='text-center py-8'>
+          <Users className='h-12 w-12 mx-auto text-muted-foreground mb-2' />
+          <h3 className='text-lg font-medium mb-2'>No Peer Assignments</h3>
+          <p className='text-muted-foreground max-w-md mx-auto'>
+            Click &quot;Generate Groups&quot; to automatically create peer review groups within each
+            tutor group.
+          </p>
+        </CardContent>
+      </Card>
     )
   }
 

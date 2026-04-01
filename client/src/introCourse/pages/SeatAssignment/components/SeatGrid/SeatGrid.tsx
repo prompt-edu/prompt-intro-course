@@ -13,7 +13,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  Button,
+  ToggleGroup,
+  ToggleGroupItem,
 } from '@tumaet/prompt-ui-components'
 import { Seat } from '../../../../interfaces/Seat'
 import { Tutor } from '../../../../interfaces/Tutor'
@@ -197,34 +198,27 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
   return (
     <div>
       {/* View mode toggle */}
-      <div className='flex items-center gap-1.5 mb-3'>
-        <Button
-          variant={viewMode === 'tutor' ? 'default' : 'outline'}
-          size='sm'
-          onClick={() => setViewMode('tutor')}
-        >
+      <ToggleGroup
+        type='single'
+        value={viewMode}
+        onValueChange={(value) => { if (value) setViewMode(value as SeatGridViewMode) }}
+        className='mb-3'
+      >
+        <ToggleGroupItem value='tutor' size='sm'>
           <GraduationCap className='mr-1.5 h-3.5 w-3.5' />
           Tutor
-        </Button>
+        </ToggleGroupItem>
         {hasPeerGroups && (
-          <Button
-            variant={viewMode === 'peerGroup' ? 'default' : 'outline'}
-            size='sm'
-            onClick={() => setViewMode('peerGroup')}
-          >
+          <ToggleGroupItem value='peerGroup' size='sm'>
             <Users className='mr-1.5 h-3.5 w-3.5' />
             Peer Group
-          </Button>
+          </ToggleGroupItem>
         )}
-        <Button
-          variant={viewMode === 'seat' ? 'default' : 'outline'}
-          size='sm'
-          onClick={() => setViewMode('seat')}
-        >
+        <ToggleGroupItem value='seat' size='sm'>
           <Armchair className='mr-1.5 h-3.5 w-3.5' />
           Seat
-        </Button>
-      </div>
+        </ToggleGroupItem>
+      </ToggleGroup>
 
       {selectedSeat && (
         <Alert className='mb-3'>

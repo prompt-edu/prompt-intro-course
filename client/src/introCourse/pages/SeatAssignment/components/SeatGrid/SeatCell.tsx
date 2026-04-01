@@ -1,4 +1,5 @@
 import { GraduationCap, Laptop } from 'lucide-react'
+import { cn } from '@tumaet/prompt-ui-components'
 import { Seat } from '../../../../interfaces/Seat'
 import { parseSeatName, TUTOR_COLORS, type SeatGridViewMode } from '../../utils/seatGrid'
 
@@ -36,18 +37,16 @@ export const SeatCell = ({
   // In seat view, only use color for tutor seats and assigned seats with tutor
   const useColor = viewMode === 'seat' ? isTutor : true
 
-  const classes = [
+  const classes = cn(
     'relative w-full aspect-square rounded-md text-xs flex flex-col items-center justify-center gap-0.5 transition-all',
     isTutor
       ? `border-2 ${useColor && color ? `${color.bg} ${color.border}` : 'bg-muted/20 border-dashed border-muted-foreground/30'}`
       : `border ${hasStudent && useColor && color ? `${color.bg} ${color.border}` : 'bg-muted/20 border-dashed border-muted-foreground/30'}`,
-    !isTutor ? 'cursor-pointer' : 'cursor-default',
-    isSelected ? 'ring-2 ring-primary ring-offset-1' : '',
-    isPeerOfSelected ? 'ring-2 ring-amber-400 ring-offset-1' : '',
-    hasStudent && !isTutor ? 'hover:opacity-80' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
+    isTutor ? 'cursor-default' : 'cursor-pointer',
+    isSelected && 'ring-2 ring-primary ring-offset-1',
+    isPeerOfSelected && 'ring-2 ring-amber-400 ring-offset-1',
+    hasStudent && !isTutor && 'hover:opacity-80',
+  )
 
   return (
     <button
@@ -88,7 +87,7 @@ export const SeatCell = ({
           <span className='text-muted-foreground/50'>-</span>
         )
       ) : studentLabel ? (
-        <span className={`font-semibold text-xs ${useColor && color?.text ? color.text : ''}`}>
+        <span className={cn('font-semibold text-xs', useColor && color?.text)}>
           {studentLabel}
         </span>
       ) : (
