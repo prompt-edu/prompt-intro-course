@@ -82,19 +82,22 @@ export const SeatStudentAssigner = ({
     mutation.mutate(updatedSeats)
   }, [seats, mutation])
 
-  // Smart assign function
+  // Smart assign function — fills remaining unassigned students into empty seats
   const smartAssignStudents = useCallback(() => {
-    const studentSeats = seats.filter((seat) => seat.assignedTutor && !seat.isTutorSeat).length
-    if (studentSeats < developerWithProfiles.length) {
+    const emptyStudentSeats = seats.filter(
+      (seat) => seat.assignedTutor && !seat.isTutorSeat && !seat.assignedStudent,
+    ).length
+    const unassignedCount = developerWithProfiles.length - assignedStudents
+    if (emptyStudentSeats < unassignedCount) {
       setError(
-        `Not enough student seats with tutors assigned. Need ${developerWithProfiles.length} seats, but only have ${studentSeats} (tutor seats excluded).`,
+        `Not enough empty student seats. Need ${unassignedCount} seats, but only have ${emptyStudentSeats} available.`,
       )
       return
     }
     setError(null)
     const updatedSeats = smartAssign(seats, developerWithProfiles, peerAssignments)
     mutation.mutate(updatedSeats)
-  }, [seats, developerWithProfiles, tutors, peerAssignments, mutation])
+  }, [seats, developerWithProfiles, assignedStudents, peerAssignments, mutation])
 
   // Download assignments as CSV
   const downloadAssignments = useDownloadAssignment(seats, developerWithProfiles, tutors)
@@ -211,7 +214,7 @@ export const SeatStudentAssigner = ({
                 <Button
                   variant='secondary'
                   onClick={smartAssignStudents}
-                  disabled={mutation.isPending || assignedStudents > 0}
+                  disabled={mutation.isPending || assignedStudents >= totalStudents}
                 >
                   <Sparkles className='mr-2 h-4 w-4' />
                   Smart Assign

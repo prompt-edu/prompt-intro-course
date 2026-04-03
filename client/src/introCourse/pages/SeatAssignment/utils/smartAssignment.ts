@@ -34,30 +34,45 @@ export function smartAssign(
   // Filter out tutor seats — they are not available for student assignment
   const studentSeats = seats.filter((s) => !s.isTutorSeat)
 
-  // Group seats by tutor (use existing tutor-seat mapping)
+  // Preserve existing assignments: track which students are already seated
+  const alreadyAssignedStudents = new Set<string>()
+  const alreadyOccupiedSeats = new Set<string>()
+  for (const seat of studentSeats) {
+    if (seat.assignedStudent) {
+      alreadyAssignedStudents.add(seat.assignedStudent)
+      alreadyOccupiedSeats.add(seat.seatName)
+    }
+  }
+
+  // Group EMPTY seats by tutor (use existing tutor-seat mapping)
   const tutorSeatMap = new Map<string, Seat[]>()
   for (const seat of studentSeats) {
     if (!seat.assignedTutor) continue
+    if (alreadyOccupiedSeats.has(seat.seatName)) continue
     if (!tutorSeatMap.has(seat.assignedTutor)) tutorSeatMap.set(seat.assignedTutor, [])
     tutorSeatMap.get(seat.assignedTutor)!.push(seat)
   }
 
   const tutorIds = [...tutorSeatMap.keys()].sort()
 
-  // Always clear assignments — even if no tutors assigned
-  const updatedSeats = seats.map((s) => ({ ...s, assignedStudent: null as string | null }))
+  // Carry over existing assignments, clear only unoccupied seats
+  const updatedSeats = seats.map((s) => ({ ...s }))
 
   if (tutorIds.length === 0) return updatedSeats
 
-  // Count Mac seats per tutor
+  // Count Mac seats per tutor (empty seats only)
   const tutorMacCount = new Map<string, number>()
   for (const id of tutorIds) {
     tutorMacCount.set(id, (tutorSeatMap.get(id) ?? []).filter((s) => s.hasMac).length)
   }
 
-  // Distribute students proportionally to seat count per tutor (max 10 per tutor)
+  // Only assign unassigned students
   const MAX_STUDENTS_PER_TUTOR = 10
-  const students = shuffle(developerWithProfiles)
+  const students = shuffle(
+    developerWithProfiles.filter(
+      (d) => !alreadyAssignedStudents.has(d.participation.courseParticipationID),
+    ),
+  )
   const tutorGroups = new Map<string, DeveloperWithProfile[]>()
   for (const id of tutorIds) tutorGroups.set(id, [])
 
