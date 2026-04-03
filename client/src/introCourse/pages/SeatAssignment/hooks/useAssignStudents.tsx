@@ -16,7 +16,7 @@ export const useAssignStudents = (
 
   // Helper function to check if user can assign students
   const canAssignStudents = useCallback(() => {
-    const seatsWithTutors = seats.filter((seat) => seat.assignedTutor).length
+    const seatsWithTutors = seats.filter((seat) => seat.assignedTutor && !seat.isTutorSeat).length
     const studentsWithoutMacs = developerWithProfiles.filter(
       (dev) => dev.profile?.hasMacBook === false,
     ).length
@@ -43,7 +43,7 @@ export const useAssignStudents = (
 
     // Create a copy and clear any existing student assignments
     const updatedSeats: Seat[] = seats.map((seat) => ({ ...seat, assignedStudent: null }))
-    const eligibleSeats = updatedSeats.filter((seat) => seat.assignedTutor)
+    const eligibleSeats = updatedSeats.filter((seat) => seat.assignedTutor && !seat.isTutorSeat)
 
     // Separate students by Mac ownership
     const studentsWithMacs = developerWithProfiles.filter((dev) => dev.profile?.hasMacBook === true)

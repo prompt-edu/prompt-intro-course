@@ -1,20 +1,21 @@
 package infrastructureSetup
 
 import (
-	"errors"
 	"fmt"
-	"net/http"
-	"strings"
 
+	"github.com/prompt-edu/prompt-intro-course/server/gitlabutil"
 	log "github.com/sirupsen/logrus"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 const inProgressLabelID int64 = 53319
 const inReviewLabelID int64 = 53320
-const aseGroupID int64 = 186940
 
-var errGitLabClientNotInitialized = errors.New("gitlab client not initialized")
+// Shared constants and helpers — delegate to gitlabutil to avoid duplication.
+var (
+	aseGroupID                    = gitlabutil.ASEGroupID
+	errGitLabClientNotInitialized = gitlabutil.ErrClientNotInitialized
+)
 
 func getClient() (*gitlab.Client, error) {
 	if InfrastructureServiceSingleton.gitlabClient == nil {
@@ -23,44 +24,8 @@ func getClient() (*gitlab.Client, error) {
 	return InfrastructureServiceSingleton.gitlabClient, nil
 }
 
-// isAlreadyExistsError checks whether a GitLab API error indicates the resource
-// already exists. It checks for 409 Conflict by status code, and for APIs that
-// return 400 with "already exists" in the structured response message.
-//
-// String matching is intentionally restricted to the gitlab.ErrorResponse.Message
-// field (not the full wrapped error chain) to avoid false positives from network
-// errors or wrapping context that happens to contain matching substrings.
-func isAlreadyExistsError(err error) bool {
-	if err == nil {
-		return false
-	}
-	var errResp *gitlab.ErrorResponse
-	if errors.As(err, &errResp) && errResp.Response != nil {
-		code := errResp.Response.StatusCode
-		if code == http.StatusConflict {
-			return true
-		}
-		// Only string-match on the structured API response message,
-		// not the full wrapped error chain, to avoid false positives.
-		msg := errResp.Message
-		return strings.Contains(msg, "already exists") ||
-			strings.Contains(msg, "already a member") ||
-			strings.Contains(msg, "already been taken")
-	}
-	return false
-}
-
-// isNotFoundError checks whether a GitLab API error is a 404 Not Found.
-func isNotFoundError(err error) bool {
-	if err == nil {
-		return false
-	}
-	var errResp *gitlab.ErrorResponse
-	if errors.As(err, &errResp) && errResp.Response != nil {
-		return errResp.Response.StatusCode == http.StatusNotFound
-	}
-	return false
-}
+func isAlreadyExistsError(err error) bool { return gitlabutil.IsAlreadyExistsError(err) }
+func isNotFoundError(err error) bool      { return gitlabutil.IsNotFoundError(err) }
 
 // findSubGroup searches for a subgroup by name under the given parent.
 // Returns the group if found, nil if not found, or an error on API failure.
@@ -188,20 +153,7 @@ func getUser(username string) (*gitlab.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get client for user lookup %q: %w", username, err)
 	}
-
-	userOpts := &gitlab.ListUsersOptions{
-		Username: gitlab.Ptr(username),
-	}
-
-	users, _, err := git.Users.ListUsers(userOpts)
-	if err != nil {
-		return nil, fmt.Errorf("list users for %q: %w", username, err)
-	}
-
-	if len(users) != 1 || users[0] == nil {
-		return nil, fmt.Errorf("user %q not found on GitLab", username)
-	}
-	return users[0], nil
+	return gitlabutil.GetUser(git, username)
 }
 
 // newCourseProjectOptions returns the shared project configuration for all
@@ -217,7 +169,7 @@ func newCourseProjectOptions(name string, namespaceID int64, ciCDRepoPath string
 		// Git & merge settings
 		Visibility:                                    gitlab.Ptr(gitlab.PrivateVisibility),
 		MergeMethod:                                   gitlab.Ptr(gitlab.NoFastForwardMerge),
-		SquashOption:                                  gitlab.Ptr(gitlab.SquashOptionDefaultOff),
+		SquashOption:                                  gitlab.Ptr(gitlab.SquashOptionDefaultOn),
 		RemoveSourceBranchAfterMerge:                  gitlab.Ptr(true),
 		OnlyAllowMergeIfPipelineSucceeds:              gitlab.Ptr(true),
 		OnlyAllowMergeIfAllDiscussionsAreResolved:     gitlab.Ptr(true),
@@ -277,14 +229,15 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 
 	// Branch protection — GitLab auto-protects 'main' with default settings
 	// when the first commit is pushed, so we must unprotect first to apply our
-	// desired access levels (push=Maintainer, merge=Developer).
+	// desired access levels. Push is set to NoPermissions to force all changes
+	// through merge requests; merge access is Developer (tutors are Maintainer).
 	_, unprotectErr := git.ProtectedBranches.UnprotectRepositoryBranches(projectID, "main")
 	if unprotectErr != nil && !isNotFoundError(unprotectErr) {
 		return fmt.Errorf("unprotect branch for %q: %w", projectName, unprotectErr)
 	}
 	_, _, err = git.ProtectedBranches.ProtectRepositoryBranches(projectID, &gitlab.ProtectRepositoryBranchesOptions{
 		Name:             gitlab.Ptr("main"),
-		PushAccessLevel:  gitlab.Ptr(gitlab.MaintainerPermissions),
+		PushAccessLevel:  gitlab.Ptr(gitlab.NoPermissions),
 		MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
 		AllowForcePush:   gitlab.Ptr(false),
 	})
@@ -517,12 +470,16 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 // - Reset approvals when new commits are pushed (prevents stale approvals)
 // - Prevent MR authors from approving their own MRs
 // - Prevent committers from approving MRs they contributed to
+// - Prevent students from overriding approval rules on their MRs
+// - Only reset code owner approvals when relevant files change
 // Idempotent: safe to call multiple times.
 func ensureApprovalConfiguration(git *gitlab.Client, projectID int64, repoName string) error {
 	_, _, err := git.Projects.ChangeApprovalConfiguration(projectID, &gitlab.ChangeApprovalConfigurationOptions{
-		ResetApprovalsOnPush:                   gitlab.Ptr(true),
-		MergeRequestsAuthorApproval:            gitlab.Ptr(false),
-		MergeRequestsDisableCommittersApproval: gitlab.Ptr(true),
+		ResetApprovalsOnPush:                         gitlab.Ptr(true),
+		MergeRequestsAuthorApproval:                  gitlab.Ptr(false),
+		MergeRequestsDisableCommittersApproval:       gitlab.Ptr(true),
+		DisableOverridingApproversPerMergeRequest:     gitlab.Ptr(true),
+		SelectiveCodeOwnerRemovals:                    gitlab.Ptr(true),
 	})
 	if err != nil {
 		return fmt.Errorf("configure approval settings for %q: %w", repoName, err)

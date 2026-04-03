@@ -14,7 +14,8 @@ UPDATE seat
 SET has_mac = $3,
     device_id = $4,
     assigned_student = $5,
-    assigned_tutor = $6
+    assigned_tutor = $6,
+    is_tutor_seat = $7
 WHERE course_phase_id = $1
   AND seat_name = $2;
 

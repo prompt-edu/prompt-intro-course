@@ -24,3 +24,5 @@ authenticatedAxiosInstance.interceptors.request.use((config) => {
 })
 
 export { authenticatedAxiosInstance as introCourseAxiosInstance }
+
+export const GITLAB_INTROCOURSE_BASE_URL = 'https://gitlab.lrz.de'

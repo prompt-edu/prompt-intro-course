@@ -1,80 +1,41 @@
-export const RECHNERHALLE_SEATS = [
-  '1-1-3',
-  '1-1-4',
-  '1-1-5',
-  '1-1-6',
-  '1-1-7',
-  '1-1-8',
-  '1-1-9',
-  '1-1-10',
-  '1-1-11',
-  '1-2-1',
-  '1-2-2',
-  '1-2-3',
-  '1-2-4',
-  '1-2-5',
-  '1-2-6',
-  '1-2-7',
-  '1-2-8',
-  '1-3-1',
-  '1-3-2',
-  '1-3-3',
-  '1-3-4',
-  '1-3-5',
-  '1-3-6',
-  '1-3-7',
-  '1-3-8',
-  '1-3-9',
-  '1-4-1',
-  '1-4-2',
-  '1-4-3',
-  '1-4-4',
-  '1-4-5',
-  '1-4-6',
-  '1-4-7',
-  '1-4-8',
-  '1-4-9',
-  '1-5-1',
-  '1-5-2',
-  '1-5-3',
-  '1-5-4',
-  '1-5-5',
-  '1-5-6',
-  '1-5-7',
-  '1-5-8',
-  '1-5-9',
-  '1-6-1',
-  '1-6-2',
-  '1-6-3',
-  '1-6-4',
-  '1-6-5',
-  '1-6-6',
-  '1-6-7',
-  '1-7-1',
-  '1-7-2',
-  '1-7-3',
-  '1-7-4',
-  '1-7-5',
-  '1-7-6',
-  '1-7-7',
-  '1-7-8',
-  '1-7-9',
-  '1-8-1',
-  '1-8-2',
-  '1-8-3',
-  '1-8-4',
-  '1-8-5',
-  '1-8-6',
-  '1-8-7',
-  '1-8-8',
-  '1-8-9',
-  '1-9-1',
-  '1-9-2',
-  '1-9-3',
-  '1-9-4',
-  '1-9-5',
-  '1-9-6',
-  '1-9-7',
-  '1-9-8',
-  '1-9-9',
+export interface RowLayout {
+  row: number
+  physicalStart: number // 1-indexed physical position of first seat
+  physicalEnd: number // inclusive
+  gaps: number[] // physical positions within range that have NO seat
+}
+
+export const RECHNERHALLE_LAYOUT: RowLayout[] = [
+  { row: 1, physicalStart: 1, physicalEnd: 12, gaps: [] }, // 12 seats
+  { row: 2, physicalStart: 3, physicalEnd: 12, gaps: [6] }, // 9 seats
+  { row: 3, physicalStart: 3, physicalEnd: 12, gaps: [] }, // 10 seats
+  { row: 4, physicalStart: 3, physicalEnd: 12, gaps: [] }, // 10 seats
+  { row: 5, physicalStart: 3, physicalEnd: 12, gaps: [] }, // 10 seats
+  { row: 6, physicalStart: 3, physicalEnd: 12, gaps: [6, 12] }, // 8 seats
+  { row: 7, physicalStart: 3, physicalEnd: 12, gaps: [] }, // 10 seats
+  { row: 8, physicalStart: 3, physicalEnd: 12, gaps: [] }, // 10 seats
+  { row: 9, physicalStart: 3, physicalEnd: 12, gaps: [] }, // 10 seats
 ]
+
+/** Get the physical positions that actually have seats for a row layout. */
+export function getPhysicalPositions(layout: RowLayout): number[] {
+  const positions: number[] = []
+  for (let p = layout.physicalStart; p <= layout.physicalEnd; p++) {
+    if (!layout.gaps.includes(p)) positions.push(p)
+  }
+  return positions
+}
+
+/** Map 0-based local seat index to physical position for a row. */
+export function localToPhysical(layout: RowLayout, localIndex: number): number {
+  const positions = getPhysicalPositions(layout)
+  return positions[localIndex]
+}
+
+// Backward-compat flat list for SeatUploader
+export const RECHNERHALLE_SEATS = RECHNERHALLE_LAYOUT.flatMap(
+  ({ row, physicalStart, physicalEnd, gaps }) => {
+    const seatCount = physicalEnd - physicalStart + 1 - gaps.length
+    return Array.from({ length: seatCount }, (_, i) => `1-${row}-${i + 1}`)
+  },
+)

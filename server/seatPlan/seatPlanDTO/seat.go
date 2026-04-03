@@ -11,6 +11,7 @@ type Seat struct {
 	DeviceID        pgtype.Text `json:"deviceID"`
 	AssignedStudent pgtype.UUID `json:"assignedStudent"` // using pgtype bc. it might be empty
 	AssignedTutor   pgtype.UUID `json:"assignedTutor"`
+	IsTutorSeat     bool        `json:"isTutorSeat"`
 }
 
 func GetSeatDTOFromDBModel(seat db.Seat) Seat {
@@ -20,6 +21,7 @@ func GetSeatDTOFromDBModel(seat db.Seat) Seat {
 		DeviceID:        seat.DeviceID,
 		AssignedStudent: seat.AssignedStudent,
 		AssignedTutor:   seat.AssignedTutor,
+		IsTutorSeat:     seat.IsTutorSeat,
 	}
 }
 

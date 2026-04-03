@@ -73,6 +73,7 @@ func UpdateSeatPlan(ctx context.Context, coursePhaseID uuid.UUID, seatDTOs []sea
 			DeviceID:        seatDTO.DeviceID,
 			AssignedStudent: seatDTO.AssignedStudent,
 			AssignedTutor:   seatDTO.AssignedTutor,
+			IsTutorSeat:     seatDTO.IsTutorSeat,
 		})
 
 		if err != nil {

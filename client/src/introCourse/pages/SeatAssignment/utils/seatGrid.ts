@@ -1,0 +1,120 @@
+import { Seat } from '../../../interfaces/Seat'
+import { PeerAssignment } from '../../../interfaces/PeerAssignment'
+import { type RowLayout, RECHNERHALLE_LAYOUT, getPhysicalPositions } from './rechnerHalle'
+
+export interface ParsedSeat {
+  room: number
+  row: number
+  position: number
+  original: string
+}
+
+export function parseSeatName(seatName: string): ParsedSeat | null {
+  const parts = seatName.split('-')
+  if (parts.length !== 3) return null
+  const room = parseInt(parts[0], 10)
+  const row = parseInt(parts[1], 10)
+  const position = parseInt(parts[2], 10)
+  if (isNaN(room) || isNaN(row) || isNaN(position)) return null
+  return { room, row, position, original: seatName }
+}
+
+export function getGridDimensions(seats: Seat[]): { maxRow: number; maxPosition: number } {
+  let maxRow = 0
+  let maxPosition = 0
+  for (const seat of seats) {
+    const parsed = parseSeatName(seat.seatName)
+    if (!parsed) continue
+    if (parsed.row > maxRow) maxRow = parsed.row
+    if (parsed.position > maxPosition) maxPosition = parsed.position
+  }
+  return { maxRow, maxPosition }
+}
+
+// Build a lookup map: "row-position" -> Seat (using local position from seat name)
+export function buildSeatLookup(seats: Seat[]): Map<string, Seat> {
+  const map = new Map<string, Seat>()
+  for (const seat of seats) {
+    const parsed = parseSeatName(seat.seatName)
+    if (!parsed) continue
+    map.set(`${parsed.row}-${parsed.position}`, seat)
+  }
+  return map
+}
+
+/** Build a lookup map: "row-physicalPos" -> Seat using the physical layout. */
+export function buildPhysicalSeatMap(
+  seats: Seat[],
+  layout: RowLayout[] = RECHNERHALLE_LAYOUT,
+): Map<string, Seat> {
+  const layoutByRow = new Map<number, RowLayout>()
+  for (const r of layout) layoutByRow.set(r.row, r)
+
+  const map = new Map<string, Seat>()
+  for (const seat of seats) {
+    const parsed = parseSeatName(seat.seatName)
+    if (!parsed) continue
+    const rowLayout = layoutByRow.get(parsed.row)
+    if (!rowLayout) continue
+    const positions = getPhysicalPositions(rowLayout)
+    const physPos = positions[parsed.position - 1] // local position is 1-based
+    if (physPos !== undefined) {
+      map.set(`${parsed.row}-${physPos}`, seat)
+    }
+  }
+  return map
+}
+
+/** Get the maximum physical position across all rows in the layout. */
+export function getMaxPhysicalPosition(layout: RowLayout[] = RECHNERHALLE_LAYOUT): number {
+  return Math.max(...layout.map((r) => r.physicalEnd))
+}
+
+export type SeatGridViewMode = 'tutor' | 'peerGroup' | 'seat'
+
+/** Build peer groups from peer assignments using BFS connected components. */
+export function buildPeerGroups(peerAssignments: PeerAssignment[]): Map<string, number> {
+  const adj = new Map<string, Set<string>>()
+  for (const a of peerAssignments) {
+    if (!adj.has(a.studentID)) adj.set(a.studentID, new Set())
+    if (!adj.has(a.peerID)) adj.set(a.peerID, new Set())
+    adj.get(a.studentID)!.add(a.peerID)
+    adj.get(a.peerID)!.add(a.studentID)
+  }
+
+  const visited = new Set<string>()
+  const groups = new Map<string, number>()
+  let groupNum = 1
+
+  for (const node of adj.keys()) {
+    if (visited.has(node)) continue
+    const queue = [node]
+    visited.add(node)
+    while (queue.length > 0) {
+      const curr = queue.shift()!
+      groups.set(curr, groupNum)
+      for (const neighbor of adj.get(curr) ?? []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor)
+          queue.push(neighbor)
+        }
+      }
+    }
+    groupNum++
+  }
+
+  return groups
+}
+
+// 9-color palette for tutor groups
+export const TUTOR_COLORS = [
+  { bg: 'bg-blue-100 dark:bg-blue-900/30', border: 'border-blue-300', text: 'text-blue-800 dark:text-blue-200', dot: 'bg-blue-500' },
+  { bg: 'bg-green-100 dark:bg-green-900/30', border: 'border-green-300', text: 'text-green-800 dark:text-green-200', dot: 'bg-green-500' },
+  { bg: 'bg-amber-100 dark:bg-amber-900/30', border: 'border-amber-300', text: 'text-amber-800 dark:text-amber-200', dot: 'bg-amber-500' },
+  { bg: 'bg-purple-100 dark:bg-purple-900/30', border: 'border-purple-300', text: 'text-purple-800 dark:text-purple-200', dot: 'bg-purple-500' },
+  { bg: 'bg-pink-100 dark:bg-pink-900/30', border: 'border-pink-300', text: 'text-pink-800 dark:text-pink-200', dot: 'bg-pink-500' },
+  { bg: 'bg-cyan-100 dark:bg-cyan-900/30', border: 'border-cyan-300', text: 'text-cyan-800 dark:text-cyan-200', dot: 'bg-cyan-500' },
+  { bg: 'bg-orange-100 dark:bg-orange-900/30', border: 'border-orange-300', text: 'text-orange-800 dark:text-orange-200', dot: 'bg-orange-500' },
+  { bg: 'bg-teal-100 dark:bg-teal-900/30', border: 'border-teal-300', text: 'text-teal-800 dark:text-teal-200', dot: 'bg-teal-500' },
+  { bg: 'bg-rose-100 dark:bg-rose-900/30', border: 'border-rose-300', text: 'text-rose-800 dark:text-rose-200', dot: 'bg-rose-500' },
+]

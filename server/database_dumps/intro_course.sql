@@ -31,6 +31,7 @@ CREATE TABLE seat (
   device_id text,
   assigned_student uuid,
   assigned_tutor uuid,
+  is_tutor_seat boolean NOT NULL DEFAULT false,
   PRIMARY KEY (seat_name, course_phase_id),
   CONSTRAINT fk_assigned_tutor
     FOREIGN KEY (course_phase_id, assigned_tutor)
@@ -67,5 +68,15 @@ INSERT INTO seat (course_phase_id, seat_name, has_mac, device_id, assigned_stude
 INSERT INTO student_gitlab_processes (course_phase_id, course_participation_id, gitlab_success, error_message) VALUES
 ('4179d58a-d00d-4fa7-94a5-397bc69fab02', '33333333-3333-3333-3333-333333333333', TRUE, NULL),
 ('4179d58a-d00d-4fa7-94a5-397bc69fab02', '44444444-4444-4444-4444-444444444444', FALSE, 'repo creation failed');
+
+CREATE TABLE peer_assignment (
+  course_phase_id uuid NOT NULL,
+  student_id uuid NOT NULL,
+  peer_id uuid NOT NULL,
+  PRIMARY KEY (course_phase_id, student_id, peer_id),
+  CHECK (student_id <> peer_id)
+);
+
+CREATE INDEX idx_peer_assignment_peer ON peer_assignment (course_phase_id, peer_id);
 
 COMMIT;

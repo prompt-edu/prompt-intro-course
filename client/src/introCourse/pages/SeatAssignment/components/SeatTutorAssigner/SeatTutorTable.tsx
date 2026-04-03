@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { SearchIcon } from 'lucide-react'
+import { GraduationCap, SearchIcon } from 'lucide-react'
 import { Seat } from '../../../../interfaces/Seat'
 import { Tutor } from '../../../../interfaces/Tutor'
 import { TutorAssignmentFilterOptions } from '../../interfaces/TutorAssignmentFilterOptions'
@@ -28,6 +28,7 @@ interface SeatTutorTableProps {
   selectedSeatNames: string[]
   setSelectedSeatNames: React.Dispatch<React.SetStateAction<string[]>>
   handleTutorAssignment: (seatName: string, tutorId: string | null) => void
+  handleTutorSeatToggle: (seatName: string, isTutorSeat: boolean) => void
 }
 
 export const SeatTutorTable = ({
@@ -36,6 +37,7 @@ export const SeatTutorTable = ({
   setSelectedSeatNames,
   tutors,
   handleTutorAssignment,
+  handleTutorSeatToggle,
 }: SeatTutorTableProps) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null)
@@ -139,6 +141,11 @@ export const SeatTutorTable = ({
               </TableHead>
               <TableHead>Seat</TableHead>
               <TableHead>Mac</TableHead>
+              <TableHead className='w-[40px]'>
+                <div className='flex items-center justify-center' title='Tutor Seat'>
+                  <GraduationCap className='h-4 w-4' />
+                </div>
+              </TableHead>
               <TableHead className='w-[50%]'>Assigned Tutor</TableHead>
             </TableRow>
           </TableHeader>
@@ -171,6 +178,16 @@ export const SeatTutorTable = ({
                       )}
                     </TableCell>
                     <TableCell>
+                      <Checkbox
+                        checked={seat.isTutorSeat}
+                        disabled={!seat.assignedTutor}
+                        onCheckedChange={(checked) =>
+                          handleTutorSeatToggle(seat.seatName, checked === true)
+                        }
+                        aria-label={`Mark ${seat.seatName} as tutor seat`}
+                      />
+                    </TableCell>
+                    <TableCell>
                       <Select
                         value={seat.assignedTutor || ''}
                         onValueChange={(value) =>
@@ -195,7 +212,7 @@ export const SeatTutorTable = ({
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className='text-center py-4 text-muted-foreground'>
+                <TableCell colSpan={5} className='text-center py-4 text-muted-foreground'>
                   {searchTerm ? 'No seats match your search' : 'No seats available'}
                 </TableCell>
               </TableRow>

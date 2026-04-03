@@ -109,7 +109,7 @@ func (q *Queries) GetOwnSeatAssignment(ctx context.Context, arg GetOwnSeatAssign
 }
 
 const getSeatPlan = `-- name: GetSeatPlan :many
-SELECT course_phase_id, seat_name, has_mac, device_id, assigned_student, assigned_tutor
+SELECT course_phase_id, seat_name, has_mac, device_id, assigned_student, assigned_tutor, is_tutor_seat
 FROM seat
 WHERE course_phase_id = $1
 ORDER BY seat_name
@@ -131,6 +131,7 @@ func (q *Queries) GetSeatPlan(ctx context.Context, coursePhaseID uuid.UUID) ([]S
 			&i.DeviceID,
 			&i.AssignedStudent,
 			&i.AssignedTutor,
+			&i.IsTutorSeat,
 		); err != nil {
 			return nil, err
 		}
@@ -147,7 +148,8 @@ UPDATE seat
 SET has_mac = $3,
     device_id = $4,
     assigned_student = $5,
-    assigned_tutor = $6
+    assigned_tutor = $6,
+    is_tutor_seat = $7
 WHERE course_phase_id = $1
   AND seat_name = $2
 `
@@ -159,6 +161,7 @@ type UpdateSeatParams struct {
 	DeviceID        pgtype.Text `json:"device_id"`
 	AssignedStudent pgtype.UUID `json:"assigned_student"`
 	AssignedTutor   pgtype.UUID `json:"assigned_tutor"`
+	IsTutorSeat     bool        `json:"is_tutor_seat"`
 }
 
 func (q *Queries) UpdateSeat(ctx context.Context, arg UpdateSeatParams) error {
@@ -169,6 +172,7 @@ func (q *Queries) UpdateSeat(ctx context.Context, arg UpdateSeatParams) error {
 		arg.DeviceID,
 		arg.AssignedStudent,
 		arg.AssignedTutor,
+		arg.IsTutorSeat,
 	)
 	return err
 }

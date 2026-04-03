@@ -9,9 +9,11 @@ import { useEffect, useState } from 'react'
 import { useIntroCourseStore } from './zustand/useIntroCourseStore'
 import { getOwnDeveloperProfile } from './network/queries/getOwnDeveloperProfile'
 import { DeveloperProfile } from './interfaces/DeveloperProfile'
+import { OwnPeerAssignment } from './interfaces/PeerAssignment'
 import { Alert, AlertDescription, AlertTitle, ErrorPage } from '@tumaet/prompt-ui-components'
 import { SeatAssignment } from './pages/SeatAssignment/interfaces/SeatAssignment'
 import { getOwnSeatPlanAssignment } from './network/queries/getOwnSeatPlanAssignment'
+import { getOwnPeerAssignment } from './network/queries/getOwnPeerAssignment'
 
 interface IntroCourseDataShellProps {
   children: React.ReactNode
@@ -21,12 +23,13 @@ export const IntroCourseDataShell = ({ children }: IntroCourseDataShellProps) =>
   const { isStudentOfCourse } = useCourseStore()
   const { courseId, phaseId } = useParams<{ courseId: string; phaseId: string }>()
   const isStudent = isStudentOfCourse(courseId ?? '')
-  const { setCoursePhaseParticipation, setDeveloperProfile, setSeatAssignment } =
+  const { setCoursePhaseParticipation, setDeveloperProfile, setSeatAssignment, setPeerAssignment } =
     useIntroCourseStore()
 
   const [devProfileSet, setDevProfileSet] = useState(false)
   const [participationSet, setParticipationSet] = useState(false)
   const [seatAssignmentSet, setSeatAssignmentSet] = useState(false)
+  const [peerAssignmentSet, setPeerAssignmentSet] = useState(false)
 
   // getting the course phase participation
   const {
@@ -64,15 +67,29 @@ export const IntroCourseDataShell = ({ children }: IntroCourseDataShellProps) =>
     enabled: isStudent,
   })
 
+  const {
+    data: fetchedPeerAssignment,
+    isPending: isPeerAssignmentPending,
+    isError: isPeerAssignmentError,
+    refetch: refetchPeerAssignment,
+  } = useQuery<OwnPeerAssignment>({
+    queryKey: ['peer_assignment', phaseId],
+    queryFn: () => getOwnPeerAssignment(phaseId ?? ''),
+    enabled: isStudent,
+  })
+
   const isPending = isStudent
     ? isParticipationPending ||
       isProfilePending ||
       !devProfileSet ||
       !participationSet ||
       isSeatAssignmentPending ||
-      !seatAssignmentSet
+      !seatAssignmentSet ||
+      isPeerAssignmentPending ||
+      !peerAssignmentSet
     : false
-  const isError = isParticipationError || isProfileError || isSeatAssignmentError
+  const isError =
+    isParticipationError || isProfileError || isSeatAssignmentError || isPeerAssignmentError
 
   useEffect(() => {
     if (fetchedParticipation) {
@@ -102,6 +119,23 @@ export const IntroCourseDataShell = ({ children }: IntroCourseDataShellProps) =>
     }
   }, [fetchedSeatAssignment, setSeatAssignment])
 
+  useEffect(() => {
+    if (fetchedPeerAssignment) {
+      if (
+        fetchedPeerAssignment.peersIReview?.length > 0 ||
+        fetchedPeerAssignment.peersWhoReviewMe?.length > 0
+      ) {
+        setPeerAssignment(fetchedPeerAssignment)
+      } else {
+        setPeerAssignment(undefined)
+      }
+      setPeerAssignmentSet(true)
+    } else if (fetchedPeerAssignment === undefined && !isPeerAssignmentPending) {
+      setPeerAssignment(undefined)
+      setPeerAssignmentSet(true)
+    }
+  }, [fetchedPeerAssignment, isPeerAssignmentPending, setPeerAssignment])
+
   // if he is not a student -> we do not wait for the participation
   if (isStudent && isPending) {
     return (
@@ -123,6 +157,7 @@ export const IntroCourseDataShell = ({ children }: IntroCourseDataShellProps) =>
             refetchProfile()
             refetchParticipation()
             refetchSeatAssignment()
+            refetchPeerAssignment()
           }}
         />
       )

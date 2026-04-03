@@ -20,6 +20,12 @@ type DeveloperProfile struct {
 	AppleWatchUdid        pgtype.Text `json:"apple_watch_udid"`
 }
 
+type PeerAssignment struct {
+	CoursePhaseID uuid.UUID `json:"course_phase_id"`
+	StudentID     uuid.UUID `json:"student_id"`
+	PeerID        uuid.UUID `json:"peer_id"`
+}
+
 type Seat struct {
 	CoursePhaseID   uuid.UUID   `json:"course_phase_id"`
 	SeatName        string      `json:"seat_name"`
@@ -27,6 +33,7 @@ type Seat struct {
 	DeviceID        pgtype.Text `json:"device_id"`
 	AssignedStudent pgtype.UUID `json:"assigned_student"`
 	AssignedTutor   pgtype.UUID `json:"assigned_tutor"`
+	IsTutorSeat     bool        `json:"is_tutor_seat"`
 }
 
 type StudentGitlabProcess struct {

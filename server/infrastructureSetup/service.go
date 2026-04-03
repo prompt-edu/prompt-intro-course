@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	db "github.com/prompt-edu/prompt-intro-course/server/db/sqlc"
+	"github.com/prompt-edu/prompt-intro-course/server/gitlabutil"
 	"github.com/prompt-edu/prompt-intro-course/server/infrastructureSetup/infrastructureDTO"
 	log "github.com/sirupsen/logrus"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -26,7 +27,7 @@ type InfrastructureService struct {
 
 var InfrastructureServiceSingleton *InfrastructureService
 
-const iPraktikumGroupName = "iPraktikum"
+var iPraktikumGroupName = gitlabutil.IPraktikumGroupName
 
 func CreateCourseInfrastructure(semesterTag string) error {
 	// 1.) Get Top Level Group

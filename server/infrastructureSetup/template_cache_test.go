@@ -1520,4 +1520,6 @@ func TestEnsureApprovalConfiguration(t *testing.T) {
 	assert.Equal(t, true, configBody["reset_approvals_on_push"])
 	assert.Equal(t, false, configBody["merge_requests_author_approval"])
 	assert.Equal(t, true, configBody["merge_requests_disable_committers_approval"])
+	assert.Equal(t, true, configBody["disable_overriding_approvers_per_merge_request"])
+	assert.Equal(t, true, configBody["selective_code_owner_removals"])
 }
