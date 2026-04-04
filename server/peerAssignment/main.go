@@ -10,8 +10,12 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
-func InitPeerAssignmentModule(routerGroup *gin.RouterGroup, queries db.Queries, conn *pgxpool.Pool, gitlabAccessToken string) {
-	setupPeerAssignmentRouter(routerGroup, promptSDK.AuthenticationMiddleware)
+func InitPeerAssignmentModule(routerGroup *gin.RouterGroup, queries db.Queries, conn *pgxpool.Pool, gitlabAccessToken string, authMiddlewareOverride ...func(allowedRoles ...string) gin.HandlerFunc) {
+	authMiddleware := promptSDK.AuthenticationMiddleware
+	if len(authMiddlewareOverride) > 0 && authMiddlewareOverride[0] != nil {
+		authMiddleware = authMiddlewareOverride[0]
+	}
+	setupPeerAssignmentRouter(routerGroup, authMiddleware)
 
 	var gitlabClient *gitlab.Client
 	if gitlabAccessToken != "" {

@@ -16,9 +16,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-  Input,
-  Label,
 } from '@tumaet/prompt-ui-components'
+import { useCourseStore } from '@tumaet/prompt-shared-state'
 import { PeerAssignment, SyncResult } from '../../../interfaces/PeerAssignment'
 import { generatePeerAssignments } from '../../../network/mutations/generatePeerAssignments'
 import { deletePeerAssignments } from '../../../network/mutations/deletePeerAssignments'
@@ -34,11 +33,12 @@ export const PeerAssignmentActions = ({
   peerAssignments,
   totalStudents,
 }: PeerAssignmentActionsProps) => {
-  const { phaseId } = useParams<{ phaseId: string }>()
+  const { phaseId, courseId } = useParams<{ phaseId: string; courseId: string }>()
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [syncResults, setSyncResults] = useState<SyncResult[] | null>(null)
-  const [semesterTag, setSemesterTag] = useState('')
+  const { courses } = useCourseStore()
+  const semesterTag = courses.find((course) => course.id === courseId)?.semesterTag ?? ''
 
   // Count unique students in peer assignments
   const uniqueStudents = useMemo(
@@ -141,40 +141,32 @@ export const PeerAssignmentActions = ({
           </AlertDialogContent>
         </AlertDialog>
 
-        <div className='flex items-center gap-2'>
-          <Input
-            placeholder='Semester tag (e.g. IOS25)'
-            value={semesterTag}
-            onChange={(e) => setSemesterTag(e.target.value)}
-            className='w-48 h-9'
-          />
-          <Button
-            onClick={() => syncMutation.mutate()}
-            disabled={isLoading || peerAssignments.length === 0 || !semesterTag}
-            size='sm'
-            variant='outline'
-          >
-            {syncMutation.isPending ? (
-              <Loader2 className='h-4 w-4 animate-spin mr-1' />
-            ) : (
-              <GitBranch className='h-4 w-4 mr-1' />
-            )}
-            Sync to GitLab
-          </Button>
-          <Button
-            onClick={() => unsyncMutation.mutate()}
-            disabled={isLoading || peerAssignments.length === 0 || !semesterTag}
-            size='sm'
-            variant='outline'
-          >
-            {unsyncMutation.isPending ? (
-              <Loader2 className='h-4 w-4 animate-spin mr-1' />
-            ) : (
-              <Unlink className='h-4 w-4 mr-1' />
-            )}
-            Unsync from GitLab
-          </Button>
-        </div>
+        <Button
+          onClick={() => syncMutation.mutate()}
+          disabled={isLoading || peerAssignments.length === 0 || !semesterTag}
+          size='sm'
+          variant='outline'
+        >
+          {syncMutation.isPending ? (
+            <Loader2 className='h-4 w-4 animate-spin mr-1' />
+          ) : (
+            <GitBranch className='h-4 w-4 mr-1' />
+          )}
+          Sync to GitLab
+        </Button>
+        <Button
+          onClick={() => unsyncMutation.mutate()}
+          disabled={isLoading || peerAssignments.length === 0 || !semesterTag}
+          size='sm'
+          variant='outline'
+        >
+          {unsyncMutation.isPending ? (
+            <Loader2 className='h-4 w-4 animate-spin mr-1' />
+          ) : (
+            <Unlink className='h-4 w-4 mr-1' />
+          )}
+          Unsync from GitLab
+        </Button>
       </div>
 
       {error && (

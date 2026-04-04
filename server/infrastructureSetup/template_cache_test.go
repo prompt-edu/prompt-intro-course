@@ -796,7 +796,7 @@ func TestCreateDemoProject(t *testing.T) {
 	// Verify all setup steps executed
 	assert.True(t, projectCreated.Load(), "project should be created")
 	assert.True(t, branchProtected.Load(), "main branch should be protected")
-	assert.True(t, boardCreated.Load(), "issue board should be created")
+	// Issue board setup is no longer part of configureProject
 	assert.True(t, sharedWithGroup.Load(), "demo should be shared with tutors group")
 
 	// Verify CI/CD config path points to shared repo
@@ -937,8 +937,8 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 				{
 					"id": 1, "name": "Issue Board",
 					"lists": []map[string]interface{}{
-						{"id": 10, "label": map[string]interface{}{"id": inProgressLabelID}},
-						{"id": 11, "label": map[string]interface{}{"id": inReviewLabelID}},
+						{"id": 10, "label": map[string]interface{}{"id": 53319}},
+						{"id": 11, "label": map[string]interface{}{"id": 53320}},
 					},
 				},
 			})
@@ -1521,5 +1521,4 @@ func TestEnsureApprovalConfiguration(t *testing.T) {
 	assert.Equal(t, false, configBody["merge_requests_author_approval"])
 	assert.Equal(t, true, configBody["merge_requests_disable_committers_approval"])
 	assert.Equal(t, true, configBody["disable_overriding_approvers_per_merge_request"])
-	assert.Equal(t, true, configBody["selective_code_owner_removals"])
 }

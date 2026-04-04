@@ -1,5 +1,6 @@
 import { Seat } from '../../../interfaces/Seat'
 import { PeerAssignment } from '../../../interfaces/PeerAssignment'
+import { Tutor } from '../../../interfaces/Tutor'
 import { DeveloperWithProfile } from '../interfaces/DeveloperWithProfile'
 import { parseSeatName } from './seatGrid'
 
@@ -10,6 +11,75 @@ function shuffle<T>(arr: T[]): T[] {
     ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
+}
+
+/**
+ * Auto-assign tutors to contiguous blocks of seats.
+ * Clears existing tutor state, sorts seats numerically by room/row/position,
+ * distributes tutors evenly in contiguous blocks, and places each tutor seat
+ * on the last NON-Mac seat in each block.
+ */
+export function autoAssignTutors(seats: Seat[], tutors: Tutor[]): Seat[] {
+  if (tutors.length === 0) return seats
+
+  const updated = seats.map((s) => ({
+    ...s,
+    assignedTutor: null as string | null,
+    isTutorSeat: false,
+  }))
+
+  // Sort seats numerically by parsed name
+  const sorted = [...updated].sort((a, b) => {
+    const pa = parseSeatName(a.seatName)
+    const pb = parseSeatName(b.seatName)
+    if (!pa || !pb) return a.seatName.localeCompare(b.seatName)
+    if (pa.room !== pb.room) return pa.room - pb.room
+    if (pa.row !== pb.row) return pa.row - pb.row
+    return pa.position - pb.position
+  })
+
+  const seatIndex = new Map<string, number>()
+  updated.forEach((s, i) => seatIndex.set(s.seatName, i))
+
+  const totalSeats = sorted.length
+  const blockSize = Math.floor(totalSeats / tutors.length)
+  const remainder = totalSeats % tutors.length
+
+  let offset = 0
+  for (let t = 0; t < tutors.length; t++) {
+    const size = blockSize + (t < remainder ? 1 : 0)
+    const blockSeats = sorted.slice(offset, offset + size)
+
+    // Assign tutor to all seats in block
+    for (const seat of blockSeats) {
+      const idx = seatIndex.get(seat.seatName)
+      if (idx !== undefined) {
+        updated[idx].assignedTutor = tutors[t].id
+      }
+    }
+
+    // Tutor seat = last non-Mac seat in block (fallback: last seat)
+    let tutorSeatName: string | null = null
+    for (let i = blockSeats.length - 1; i >= 0; i--) {
+      if (!blockSeats[i].hasMac) {
+        tutorSeatName = blockSeats[i].seatName
+        break
+      }
+    }
+    if (!tutorSeatName && blockSeats.length > 0) {
+      tutorSeatName = blockSeats[blockSeats.length - 1].seatName
+    }
+    if (tutorSeatName) {
+      const idx = seatIndex.get(tutorSeatName)
+      if (idx !== undefined) {
+        updated[idx].isTutorSeat = true
+      }
+    }
+
+    offset += size
+  }
+
+  return updated
 }
 
 /**
@@ -30,9 +100,17 @@ export function smartAssign(
   seats: Seat[],
   developerWithProfiles: DeveloperWithProfile[],
   peerAssignments?: PeerAssignment[],
+  tutors?: Tutor[],
 ): Seat[] {
+  // If no tutor assignments exist, auto-assign tutors first
+  const hasTutorAssignments = seats.some((s) => s.assignedTutor)
+  let workingSeats = seats
+  if (!hasTutorAssignments && tutors && tutors.length > 0) {
+    workingSeats = autoAssignTutors(seats, tutors)
+  }
+
   // Filter out tutor seats — they are not available for student assignment
-  const studentSeats = seats.filter((s) => !s.isTutorSeat)
+  const studentSeats = workingSeats.filter((s) => !s.isTutorSeat)
 
   // Preserve existing assignments: track which students are already seated
   const alreadyAssignedStudents = new Set<string>()
@@ -56,7 +134,7 @@ export function smartAssign(
   const tutorIds = [...tutorSeatMap.keys()].sort()
 
   // Carry over existing assignments, clear only unoccupied seats
-  const updatedSeats = seats.map((s) => ({ ...s }))
+  const updatedSeats = workingSeats.map((s) => ({ ...s }))
 
   if (tutorIds.length === 0) return updatedSeats
 
@@ -155,6 +233,13 @@ export function smartAssign(
         updatedSeats[idx].assignedStudent =
           orderedStudents[i].participation.courseParticipationID ?? null
       }
+    }
+  }
+
+  // Clear assignedTutor from empty non-tutor seats (cleanup)
+  for (const seat of updatedSeats) {
+    if (!seat.isTutorSeat && !seat.assignedStudent && seat.assignedTutor) {
+      // Keep assignedTutor — it's needed for the tutor color mapping
     }
   }
 
