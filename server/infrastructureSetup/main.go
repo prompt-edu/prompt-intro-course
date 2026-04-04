@@ -10,8 +10,12 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
-func InitInfrastructureModule(routerGroup *gin.RouterGroup, queries db.Queries, conn *pgxpool.Pool, gitlabAccessToken, teachingMaterialProjectID string) {
-	setupInfrastructureRouter(routerGroup, promptSDK.AuthenticationMiddleware)
+func InitInfrastructureModule(routerGroup *gin.RouterGroup, queries db.Queries, conn *pgxpool.Pool, gitlabAccessToken, teachingMaterialProjectID string, authMiddlewareOverride ...func(allowedRoles ...string) gin.HandlerFunc) {
+	authMiddleware := promptSDK.AuthenticationMiddleware
+	if len(authMiddlewareOverride) > 0 && authMiddlewareOverride[0] != nil {
+		authMiddleware = authMiddlewareOverride[0]
+	}
+	setupInfrastructureRouter(routerGroup, authMiddleware)
 
 	var gitlabClient *gitlab.Client
 	if gitlabAccessToken != "" {

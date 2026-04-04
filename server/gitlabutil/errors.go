@@ -42,5 +42,6 @@ func IsNotFoundError(err error) bool {
 	if errors.As(err, &errResp) && errResp.Response != nil {
 		return errResp.Response.StatusCode == http.StatusNotFound
 	}
-	return false
+	// Fallback: some endpoints return errors that don't wrap ErrorResponse
+	return strings.Contains(err.Error(), "404 Not Found")
 }

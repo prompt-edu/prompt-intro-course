@@ -1,8 +1,9 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import {
   ChevronDown,
   ChevronUp,
   Download,
+  Upload,
   AlertCircle,
   UserCheck,
   Users,
@@ -83,11 +84,23 @@ export const SeatStudentAssigner = ({
   }, [seats, mutation])
 
   // Smart assign function — fills remaining unassigned students into empty seats
-  const smartAssignStudents = useCallback(() => {
-    const emptyStudentSeats = seats.filter(
-      (seat) => seat.assignedTutor && !seat.isTutorSeat && !seat.assignedStudent,
+  const smartAssignStudents = useCallback((resetStudentsFirst = false) => {
+    let workingSeats = seats
+    if (resetStudentsFirst) {
+      workingSeats = seats.map((s) => ({ ...s, assignedStudent: null }))
+    }
+
+    // Auto-assign tutors if needed
+    const hasTutors = workingSeats.some((s) => s.assignedTutor)
+    if (!hasTutors && tutors.length > 0) {
+      // Will be handled inside smartAssign
+    }
+
+    const currentAssigned = resetStudentsFirst ? 0 : assignedStudents
+    const emptyStudentSeats = workingSeats.filter(
+      (seat) => (seat.assignedTutor || !hasTutors) && !seat.isTutorSeat && !seat.assignedStudent,
     ).length
-    const unassignedCount = developerWithProfiles.length - assignedStudents
+    const unassignedCount = developerWithProfiles.length - currentAssigned
     if (emptyStudentSeats < unassignedCount) {
       setError(
         `Not enough empty student seats. Need ${unassignedCount} seats, but only have ${emptyStudentSeats} available.`,
@@ -95,12 +108,79 @@ export const SeatStudentAssigner = ({
       return
     }
     setError(null)
-    const updatedSeats = smartAssign(seats, developerWithProfiles, peerAssignments)
+    const updatedSeats = smartAssign(workingSeats, developerWithProfiles, peerAssignments, tutors)
     mutation.mutate(updatedSeats)
-  }, [seats, developerWithProfiles, assignedStudents, peerAssignments, mutation])
+  }, [seats, developerWithProfiles, assignedStudents, peerAssignments, tutors, mutation])
+
+  // CSV import handler — matches students/tutors by NAME
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const handleImportCSV = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = e.target?.result as string
+      const lines = text.split('\n').filter((l) => l.trim())
+      if (lines.length < 2) {
+        setError('CSV file must have a header and at least one data row.')
+        return
+      }
+
+      const header = lines[0].split(',').map((h) => h.trim().toLowerCase())
+      const seatCol = header.findIndex((h) => h === 'seat')
+      const studentCol = header.findIndex((h) => h.includes('student'))
+      const tutorCol = header.findIndex((h) => h.includes('tutor') && !h.includes('seat'))
+
+      if (seatCol < 0 || studentCol < 0) {
+        setError('CSV must have "Seat" and "Assigned Student" columns.')
+        return
+      }
+
+      const updatedSeats = seats.map((s) => ({ ...s }))
+      const seatIndex = new Map<string, number>()
+      updatedSeats.forEach((s, i) => seatIndex.set(s.seatName, i))
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
+        const seatName = cols[seatCol]
+        const studentName = cols[studentCol]
+        const tutorName = tutorCol >= 0 ? cols[tutorCol] : ''
+
+        const idx = seatIndex.get(seatName)
+        if (idx === undefined) continue
+
+        // Match student by name
+        if (studentName && studentName !== 'Unassigned') {
+          const dev = developerWithProfiles.find((d) => {
+            const fullName = `${d.participation.student.firstName} ${d.participation.student.lastName}`
+            return fullName.toLowerCase() === studentName.toLowerCase()
+          })
+          if (dev) {
+            updatedSeats[idx].assignedStudent = dev.participation.courseParticipationID
+          }
+        }
+
+        // Match tutor by name
+        if (tutorName) {
+          const tutor = tutors.find((t) => {
+            const fullName = `${t.firstName} ${t.lastName}`
+            return fullName.toLowerCase() === tutorName.toLowerCase()
+          })
+          if (tutor) {
+            updatedSeats[idx].assignedTutor = tutor.id
+          }
+        }
+      }
+
+      mutation.mutate(updatedSeats)
+    }
+    reader.readAsText(file)
+    // Reset input so the same file can be re-imported
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }, [seats, developerWithProfiles, tutors, mutation])
 
   // Download assignments as CSV
-  const downloadAssignments = useDownloadAssignment(seats, developerWithProfiles, tutors)
+  const downloadAssignments = useDownloadAssignment(seats, developerWithProfiles, tutors, peerAssignments)
 
   // Unassigned students (for manual assignment)
   const unassignedStudents = useMemo(() => {
@@ -191,9 +271,25 @@ export const SeatStudentAssigner = ({
                   )}
                 </div>
               </div>
-              <div className='flex flex-col sm:flex-row gap-2'>
+              <div className='flex flex-wrap gap-2'>
+                <input
+                  type='file'
+                  accept='.csv'
+                  ref={fileInputRef}
+                  className='hidden'
+                  onChange={handleImportCSV}
+                />
                 <Button
                   variant='outline'
+                  size='sm'
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className='mr-2 h-4 w-4' />
+                  Import
+                </Button>
+                <Button
+                  variant='outline'
+                  size='sm'
                   onClick={downloadAssignments}
                   disabled={assignedStudents === 0}
                 >
@@ -205,6 +301,7 @@ export const SeatStudentAssigner = ({
                   onSuccess={resetAssignments}
                 />
                 <Button
+                  size='sm'
                   onClick={assignStudents}
                   disabled={mutation.isPending || assignedStudents > 0}
                 >
@@ -213,11 +310,21 @@ export const SeatStudentAssigner = ({
                 </Button>
                 <Button
                   variant='secondary'
-                  onClick={smartAssignStudents}
+                  size='sm'
+                  onClick={() => smartAssignStudents()}
                   disabled={mutation.isPending || assignedStudents >= totalStudents}
                 >
                   <Sparkles className='mr-2 h-4 w-4' />
                   Smart Assign
+                </Button>
+                <Button
+                  variant='secondary'
+                  size='sm'
+                  onClick={() => smartAssignStudents(true)}
+                  disabled={mutation.isPending}
+                >
+                  <Sparkles className='mr-2 h-4 w-4' />
+                  Reassign All
                 </Button>
               </div>
             </div>

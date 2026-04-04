@@ -42,7 +42,7 @@ export const SeatCell = ({
     isTutor
       ? `border-2 ${useColor && color ? `${color.bg} ${color.border}` : 'bg-muted/20 border-dashed border-muted-foreground/30'}`
       : `border ${hasStudent && useColor && color ? `${color.bg} ${color.border}` : 'bg-muted/20 border-dashed border-muted-foreground/30'}`,
-    isTutor ? 'cursor-default' : 'cursor-pointer',
+    'cursor-pointer',
     isSelected && 'ring-2 ring-primary ring-offset-1',
     isPeerOfSelected && 'ring-2 ring-amber-400 ring-offset-1',
     hasStudent && !isTutor && 'hover:opacity-80',
@@ -56,7 +56,7 @@ export const SeatCell = ({
     >
       {/* Peer group badge — top right */}
       {peerGroupLabel && !isTutor && (
-        <span className='absolute -top-0.5 -right-0.5 text-[8px] font-bold leading-none bg-background rounded-sm px-0.5 text-muted-foreground border border-muted-foreground/20'>
+        <span style={{ position: 'absolute', top: 1, right: 2, fontSize: 9, fontWeight: 700, lineHeight: 1, zIndex: 10 }} className='text-muted-foreground'>
           {peerGroupLabel}
         </span>
       )}

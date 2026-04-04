@@ -45,7 +45,7 @@ func findSubGroup(groupName string, parentGroupID int64) (*gitlab.Group, error) 
 	}
 
 	for _, group := range groups {
-		if group.Name == groupName && group.ParentID == parentGroupID {
+		if (group.Name == groupName || group.Path == groupName) && group.ParentID == parentGroupID {
 			return group, nil
 		}
 	}
@@ -221,35 +221,36 @@ func createOrGetProject(git *gitlab.Client, opts *gitlab.CreateProjectOptions, g
 // template files, branch protection, issue board, approval config, daily issues.
 // All steps are idempotent — safe to call on both new and existing projects.
 func configureProject(git *gitlab.Client, projectID int64, projectName string, vars templateVars) error {
+	// Branch protection — GitLab auto-protects 'main' with default settings
+	// when the first commit is pushed, so we must unprotect first to apply our
+	// desired access levels. We unprotect BEFORE creating files so the initial
+	// commit doesn't trigger default protection rules.
+	_, unprotectErr := git.ProtectedBranches.UnprotectRepositoryBranches(projectID, "main")
+	if unprotectErr != nil && !isNotFoundError(unprotectErr) {
+		return fmt.Errorf("unprotect branch for %q: %w", projectName, unprotectErr)
+	}
+
 	// Template files (idempotent: skip files that already exist)
 	err := createProjectFiles(git, projectID, projectName, vars)
 	if err != nil {
 		return err
 	}
 
-	// Branch protection — GitLab auto-protects 'main' with default settings
-	// when the first commit is pushed, so we must unprotect first to apply our
-	// desired access levels. Push is set to NoPermissions to force all changes
-	// through merge requests; merge access is Developer (tutors are Maintainer).
-	_, unprotectErr := git.ProtectedBranches.UnprotectRepositoryBranches(projectID, "main")
-	if unprotectErr != nil && !isNotFoundError(unprotectErr) {
-		return fmt.Errorf("unprotect branch for %q: %w", projectName, unprotectErr)
-	}
+	// Re-protect branch with our desired settings. Push is set to NoPermissions
+	// to force all changes through merge requests; merge access is Developer
+	// (tutors are Maintainer). Tolerate already-exists in case of retry.
 	_, _, err = git.ProtectedBranches.ProtectRepositoryBranches(projectID, &gitlab.ProtectRepositoryBranchesOptions{
 		Name:             gitlab.Ptr("main"),
 		PushAccessLevel:  gitlab.Ptr(gitlab.NoPermissions),
 		MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
 		AllowForcePush:   gitlab.Ptr(false),
 	})
-	if err != nil {
+	if err != nil && !isAlreadyExistsError(err) {
 		return fmt.Errorf("protect branch for %q: %w", projectName, err)
 	}
 
-	// Issue board (idempotent: reuse existing board, add missing lists)
-	err = ensureIssueBoard(git, projectID, projectName)
-	if err != nil {
-		return err
-	}
+	// Issue board — skipped; GitLab provides a default board and custom lists
+	// add complexity with no clear benefit for the intro course workflow.
 
 	// Approval configuration (reset approvals on push, prevent self-approval)
 	err = ensureApprovalConfiguration(git, projectID, projectName)
@@ -479,7 +480,6 @@ func ensureApprovalConfiguration(git *gitlab.Client, projectID int64, repoName s
 		MergeRequestsAuthorApproval:                  gitlab.Ptr(false),
 		MergeRequestsDisableCommittersApproval:       gitlab.Ptr(true),
 		DisableOverridingApproversPerMergeRequest:     gitlab.Ptr(true),
-		SelectiveCodeOwnerRemovals:                    gitlab.Ptr(true),
 	})
 	if err != nil {
 		return fmt.Errorf("configure approval settings for %q: %w", repoName, err)

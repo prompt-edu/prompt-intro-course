@@ -5,14 +5,11 @@ import { Users, GraduationCap, Armchair } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   ToggleGroup,
   ToggleGroupItem,
 } from '@tumaet/prompt-ui-components'
@@ -20,6 +17,7 @@ import { Seat } from '../../../../interfaces/Seat'
 import { Tutor } from '../../../../interfaces/Tutor'
 import { PeerAssignment } from '../../../../interfaces/PeerAssignment'
 import { updateSeatPlan } from '../../../../network/mutations/updateSeatPlan'
+import { updatePeerAssignments } from '../../../../network/mutations/updatePeerAssignments'
 import {
   buildPhysicalSeatMap,
   getMaxPhysicalPosition,
@@ -45,10 +43,6 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
   const [selectedSeat, setSelectedSeat] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<SeatGridViewMode>('tutor')
-  const [crossTutorSwap, setCrossTutorSwap] = useState<{
-    seatA: Seat
-    seatB: Seat
-  } | null>(null)
 
   const swapMutation = useMutation({
     mutationFn: (updatedSeats: Seat[]) => updateSeatPlan(phaseId ?? '', updatedSeats),
@@ -58,6 +52,13 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
       setError(null)
     },
     onError: () => setError('Failed to swap seats.'),
+  })
+
+  const peerMutation = useMutation({
+    mutationFn: (assignments: PeerAssignment[]) => updatePeerAssignments(phaseId ?? '', assignments),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['peerAssignments', phaseId] })
+    },
   })
 
   // Build lookup maps
@@ -134,10 +135,72 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
 
   const { mutate: swapSeats } = swapMutation
 
+  // Change tutor assignment for a single seat
+  const changeTutor = useCallback(
+    (seatName: string, newTutorId: string) => {
+      const seat = seatByName.get(seatName)
+      if (!seat) return
+      swapSeats([{ ...seat, assignedTutor: newTutorId }])
+    },
+    [seatByName, swapSeats],
+  )
+
+  // Swap all seats between two tutors (swap entire blocks)
+  const swapTutors = useCallback(
+    (tutorA: string, tutorB: string) => {
+      const updates: Seat[] = []
+      for (const s of seats) {
+        if (s.assignedTutor === tutorA) {
+          updates.push({ ...s, assignedTutor: tutorB })
+        } else if (s.assignedTutor === tutorB) {
+          updates.push({ ...s, assignedTutor: tutorA })
+        }
+      }
+      if (updates.length > 0) swapSeats(updates)
+    },
+    [seats, swapSeats],
+  )
+
+  // Build group members lookup
+  const groupMembers = useMemo(() => {
+    const map = new Map<number, string[]>()
+    for (const [studentId, groupNum] of peerGroupMap) {
+      if (!map.has(groupNum)) map.set(groupNum, [])
+      map.get(groupNum)!.push(studentId)
+    }
+    return map
+  }, [peerGroupMap])
+
+  // Move a student to a different peer group
+  const moveStudentToGroup = useCallback(
+    (studentId: string, targetGroup: number) => {
+      if (!peerAssignments) return
+      // Remove student from current group assignments
+      const filtered = peerAssignments.filter(
+        (a) => a.studentID !== studentId && a.peerID !== studentId,
+      )
+      // Add student to target group
+      const targetMembers = groupMembers.get(targetGroup) ?? []
+      for (const member of targetMembers) {
+        if (member === studentId) continue
+        filtered.push({ studentID: studentId, peerID: member })
+        filtered.push({ studentID: member, peerID: studentId })
+      }
+      peerMutation.mutate(filtered)
+    },
+    [peerAssignments, groupMembers, peerMutation],
+  )
+
   const executeSwap = useCallback(
     (seatA: Seat, seatB: Seat) => {
       const updatedA = { ...seatA, assignedStudent: seatB.assignedStudent }
       const updatedB = { ...seatB, assignedStudent: seatA.assignedStudent }
+      // When one seat is empty and the other has a student, tutor follows the student
+      if (!seatA.assignedStudent && seatB.assignedStudent) {
+        updatedB.assignedTutor = seatA.assignedTutor
+      } else if (!seatB.assignedStudent && seatA.assignedStudent) {
+        updatedA.assignedTutor = seatB.assignedTutor
+      }
       swapSeats([updatedA, updatedB])
     },
     [swapSeats],
@@ -146,13 +209,12 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
   const handleCellClick = useCallback(
     (seatName: string) => {
       const seat = seatByName.get(seatName)
-      if (!seat || seat.isTutorSeat) return
+      if (!seat) return
 
       if (!selectedSeat) {
-        if (seat.assignedStudent) {
-          setSelectedSeat(seatName)
-          setError(null)
-        }
+        // Allow selecting any seat (including tutor seats and empty seats)
+        setSelectedSeat(seatName)
+        setError(null)
         return
       }
 
@@ -166,14 +228,40 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
       if (!seatA) return
       const seatB = seat
 
-      if (seatA.assignedTutor && seatB.assignedTutor && seatA.assignedTutor !== seatB.assignedTutor) {
-        setCrossTutorSwap({ seatA, seatB })
-      } else {
-        executeSwap(seatA, seatB)
+      // Tutor-to-tutor: swap entire blocks
+      if (seatA.isTutorSeat && seatB.isTutorSeat && seatA.assignedTutor && seatB.assignedTutor && seatA.assignedTutor !== seatB.assignedTutor) {
+        swapTutors(seatA.assignedTutor, seatB.assignedTutor)
+        setSelectedSeat(null)
+        return
       }
+
+      // Tutor seat to student seat: move tutor seat (carry assignedTutor, clear duplicates)
+      if (seatA.isTutorSeat && !seatB.isTutorSeat && seatA.assignedTutor) {
+        const tutorId = seatA.assignedTutor
+        const updates: Seat[] = [
+          { ...seatA, isTutorSeat: false },
+          { ...seatB, isTutorSeat: true, assignedTutor: tutorId },
+        ]
+        swapSeats(updates)
+        setSelectedSeat(null)
+        return
+      }
+      if (!seatA.isTutorSeat && seatB.isTutorSeat && seatB.assignedTutor) {
+        const tutorId = seatB.assignedTutor
+        const updates: Seat[] = [
+          { ...seatB, isTutorSeat: false },
+          { ...seatA, isTutorSeat: true, assignedTutor: tutorId },
+        ]
+        swapSeats(updates)
+        setSelectedSeat(null)
+        return
+      }
+
+      // Student-to-student (or empty) — always works
+      executeSwap(seatA, seatB)
       setSelectedSeat(null)
     },
-    [selectedSeat, seatByName, executeSwap],
+    [selectedSeat, seatByName, executeSwap, swapTutors, swapSeats],
   )
 
   // Get peers of selected student
@@ -220,13 +308,52 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
         </ToggleGroupItem>
       </ToggleGroup>
 
-      {selectedSeat && (
-        <Alert className='mb-3'>
-          <AlertDescription>
-            Click another seat to swap students, or click the same seat to deselect.
-          </AlertDescription>
-        </Alert>
-      )}
+      {selectedSeat && (() => {
+        const selSeat = seatByName.get(selectedSeat)
+        const selStudent = selSeat?.assignedStudent
+        const selPeerGroup = selStudent ? peerGroupMap.get(selStudent) : undefined
+        return (
+          <Alert className='mb-3'>
+            <AlertDescription className='flex flex-wrap items-center gap-3'>
+              <span>Click another seat to swap, or click the same seat to deselect.</span>
+              {selSeat && !selSeat.isTutorSeat && (
+                <Select
+                  value={selSeat.assignedTutor ?? ''}
+                  onValueChange={(val) => changeTutor(selectedSeat, val)}
+                >
+                  <SelectTrigger className='w-40 h-8'>
+                    <SelectValue placeholder='Tutor' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tutors.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.firstName} {t.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {selStudent && hasPeerGroups && (
+                <Select
+                  value={selPeerGroup != null ? String(selPeerGroup) : ''}
+                  onValueChange={(val) => moveStudentToGroup(selStudent, Number(val))}
+                >
+                  <SelectTrigger className='w-28 h-8'>
+                    <SelectValue placeholder='Peer Group' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: peerGroupCount }, (_, i) => i + 1).map((g) => (
+                      <SelectItem key={g} value={String(g)}>
+                        P{g}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </AlertDescription>
+          </Alert>
+        )
+      })()}
 
       {error && (
         <Alert variant='destructive' className='mb-3'>
@@ -313,31 +440,6 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
         peerGroupMap={peerGroupMap}
       />
 
-      {/* Cross-tutor swap dialog */}
-      <AlertDialog open={!!crossTutorSwap} onOpenChange={() => setCrossTutorSwap(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cross-tutor seat swap</AlertDialogTitle>
-            <AlertDialogDescription>
-              These seats belong to different tutors. The students will physically move but their
-              GitLab repositories will remain under their original tutor. Continue?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (crossTutorSwap) {
-                  executeSwap(crossTutorSwap.seatA, crossTutorSwap.seatB)
-                  setCrossTutorSwap(null)
-                }
-              }}
-            >
-              Swap Anyway
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

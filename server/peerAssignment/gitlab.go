@@ -111,6 +111,12 @@ func syncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cours
 		return fmt.Errorf("resolve reviewer GitLab user: %w", err)
 	}
 
+	// Also resolve reviewee GitLab user for the fallback search below
+	revieweeGitlabUser, err := getCachedUser(git, revieweeProfile.GitlabUsername, userCache)
+	if err != nil {
+		return fmt.Errorf("resolve reviewee GitLab user: %w", err)
+	}
+
 	// 5. Find reviewee's project by convention path
 	// semesterTag is passed as-is (case must match what infrastructure setup used)
 	projectPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s/%s",
@@ -118,10 +124,51 @@ func syncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cours
 
 	project, _, err := git.Projects.GetProject(projectPath, nil)
 	if err != nil {
-		if gitlabutil.IsNotFoundError(err) {
-			return fmt.Errorf("project %q not found — has student infrastructure been set up?", projectPath)
+		if !gitlabutil.IsNotFoundError(err) {
+			return fmt.Errorf("find project %q: %w", projectPath, err)
 		}
-		return fmt.Errorf("find project %q: %w", projectPath, err)
+
+		// Fallback: the project name/path might differ from the GitLab username
+		// (e.g. tutor display name vs path). Search the tutor subgroup for a
+		// project where the reviewee is a Developer member.
+		log.WithField("conventionPath", projectPath).Debug("Convention path not found, falling back to subgroup search")
+
+		tutorSubgroupPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s",
+			gitlabutil.IPraktikumGroupName, semesterTag, tutor.GitlabUsername.String)
+		tutorSubgroup, _, grpErr := git.Groups.GetGroup(tutorSubgroupPath, nil)
+		if grpErr != nil {
+			return fmt.Errorf("project %q not found and tutor subgroup %q also not found: %w", projectPath, tutorSubgroupPath, grpErr)
+		}
+
+		projects, _, listErr := git.Groups.ListGroupProjects(tutorSubgroup.ID, &gitlab.ListGroupProjectsOptions{
+			ListOptions: gitlab.ListOptions{PerPage: 100},
+		})
+		if listErr != nil {
+			return fmt.Errorf("list projects in tutor subgroup %q: %w", tutorSubgroupPath, listErr)
+		}
+
+		var found *gitlab.Project
+		for _, p := range projects {
+			members, _, mErr := git.ProjectMembers.ListProjectMembers(p.ID, &gitlab.ListProjectMembersOptions{
+				ListOptions: gitlab.ListOptions{PerPage: 100},
+			})
+			if mErr != nil {
+				continue
+			}
+			for _, m := range members {
+				if m.ID == revieweeGitlabUser.ID && m.AccessLevel >= gitlab.DeveloperPermissions {
+					found = p
+					break
+				}
+			}
+			if found != nil {
+				break
+			}
+		}
+		if found == nil {
+			return fmt.Errorf("project %q not found and no project in tutor subgroup %q has reviewee as Developer member", projectPath, tutorSubgroupPath)
+		}
+		project = found
 	}
 
 	// 6. Add reviewer as Reporter (idempotent)
