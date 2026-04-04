@@ -8,8 +8,6 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
-const inProgressLabelID int64 = 53319
-const inReviewLabelID int64 = 53320
 
 // Shared constants and helpers — delegate to gitlabutil to avoid duplication.
 var (
@@ -338,62 +336,6 @@ func addProjectMembers(git *gitlab.Client, projectID int64, repoName string, dev
 	}
 
 	// Tutor access is inherited from the tutor subgroup (Maintainer permission)
-
-	return nil
-}
-
-func ensureIssueBoard(git *gitlab.Client, projectID int64, repoName string) error {
-	boards, _, err := git.Boards.ListIssueBoards(projectID, nil)
-	if err != nil {
-		return fmt.Errorf("list issue boards for %q: %w", repoName, err)
-	}
-
-	// Find existing board by name, or create one.
-	// GitLab allows duplicate board names, so we search first to avoid
-	// creating duplicates on partial-failure retries.
-	var board *gitlab.IssueBoard
-	for _, b := range boards {
-		if b.Name == "Issue Board" {
-			board = b
-			break
-		}
-	}
-	if board == nil {
-		board, _, err = git.Boards.CreateIssueBoard(projectID, &gitlab.CreateIssueBoardOptions{
-			Name: gitlab.Ptr("Issue Board"),
-		})
-		if err != nil {
-			return fmt.Errorf("create issue board for %q: %w", repoName, err)
-		}
-	}
-
-	// Add lists individually (idempotent: skip if label list already exists on this board)
-	hasLabel := func(labelID int64) bool {
-		for _, l := range board.Lists {
-			if l.Label != nil && l.Label.ID == labelID {
-				return true
-			}
-		}
-		return false
-	}
-
-	if !hasLabel(inProgressLabelID) {
-		_, _, err = git.Boards.CreateIssueBoardList(projectID, board.ID, &gitlab.CreateIssueBoardListOptions{
-			LabelID: gitlab.Ptr(inProgressLabelID),
-		})
-		if err != nil && !isAlreadyExistsError(err) {
-			return fmt.Errorf("create 'In Progress' board list for %q: %w", repoName, err)
-		}
-	}
-
-	if !hasLabel(inReviewLabelID) {
-		_, _, err = git.Boards.CreateIssueBoardList(projectID, board.ID, &gitlab.CreateIssueBoardListOptions{
-			LabelID: gitlab.Ptr(inReviewLabelID),
-		})
-		if err != nil && !isAlreadyExistsError(err) {
-			return fmt.Errorf("create 'In Review' board list for %q: %w", repoName, err)
-		}
-	}
 
 	return nil
 }

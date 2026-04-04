@@ -937,8 +937,8 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 				{
 					"id": 1, "name": "Issue Board",
 					"lists": []map[string]interface{}{
-						{"id": 10, "label": map[string]interface{}{"id": inProgressLabelID}},
-						{"id": 11, "label": map[string]interface{}{"id": inReviewLabelID}},
+						{"id": 10, "label": map[string]interface{}{"id": 53319}},
+						{"id": 11, "label": map[string]interface{}{"id": 53320}},
 					},
 				},
 			})
