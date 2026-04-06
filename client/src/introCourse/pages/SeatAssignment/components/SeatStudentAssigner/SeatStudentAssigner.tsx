@@ -21,7 +21,6 @@ import { useAssignStudents } from '../../hooks/useAssignStudents'
 import { useDownloadAssignment } from '../../hooks/useDownloadAssignment'
 import { smartAssign } from '../../utils/smartAssignment'
 import { updatePeerAssignments } from '../../../../network/mutations/updatePeerAssignments'
-import { updatePeerAssignments } from '../../../../network/mutations/updatePeerAssignments'
 import { ResetSeatAssignmentDialog } from './ResetSeatAssignmentDialog'
 import {
   Card,
