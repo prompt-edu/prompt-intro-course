@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	promptSDK "github.com/prompt-edu/prompt-sdk"
+	"github.com/prompt-edu/prompt-intro-course/server/coreRequests"
 	"github.com/prompt-edu/prompt-intro-course/server/seatPlan/seatPlanDTO"
 	log "github.com/sirupsen/logrus"
 )
@@ -25,6 +26,8 @@ func setupSeatPlanRouter(router *gin.RouterGroup, authMiddleware func(allowedRol
 
 	seatPlanRouter.GET("/own-assignment", authMiddleware(promptSDK.CourseStudent), getOwnSeatAssignment)
 
+	// Import seat assignments from CSV export (matches by name, not ID)
+	seatPlanRouter.POST("/import", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), importSeatAssignments)
 }
 
 // createSeatPlan godoc
@@ -195,6 +198,73 @@ func getOwnSeatAssignment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, seatAssignment)
+}
+
+// importSeatAssignments godoc
+// @Summary Import seat assignments from CSV export
+// @Description Imports seat assignments matching students and tutors by name.
+//
+//	Updates seats, Mac assignments, tutor seats, and peer groups atomically.
+//
+// @Tags seat-plan
+// @Accept json
+// @Produce json
+// @Param coursePhaseID path string true "Course Phase UUID"
+// @Param request body seatPlanDTO.ImportRequest true "Import payload"
+// @Success 200 {object} seatPlanDTO.ImportResult
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security ApiKeyAuth
+// @Router /course_phase/{coursePhaseID}/seat_plan/import [post]
+func importSeatAssignments(c *gin.Context) {
+	coursePhaseID, err := uuid.Parse(c.Param("coursePhaseID"))
+	if err != nil {
+		handleError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	var req seatPlanDTO.ImportRequest
+	if err := c.BindJSON(&req); err != nil {
+		handleError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	if len(req.Assignments) == 0 {
+		handleError(c, http.StatusBadRequest, errors.New("no assignments provided"))
+		return
+	}
+
+	// Fetch student names from core platform
+	participations, err := coreRequests.GetCoursePhaseParticipations(
+		c.GetHeader("Authorization"), coursePhaseID,
+	)
+	if err != nil {
+		log.WithError(err).Error("Failed to fetch participations from core")
+		handleError(c, http.StatusInternalServerError, errors.New("failed to fetch student data from core platform"))
+		return
+	}
+
+	students := make([]StudentInfo, len(participations))
+	for i, p := range participations {
+		cpID, parseErr := uuid.Parse(p.CourseParticipationID)
+		if parseErr != nil {
+			continue
+		}
+		students[i] = StudentInfo{
+			CourseParticipationID: cpID,
+			FirstName:            p.Student.FirstName,
+			LastName:             p.Student.LastName,
+		}
+	}
+
+	result, err := ImportSeatAssignments(c, coursePhaseID, req, students)
+	if err != nil {
+		log.WithError(err).Error("Import failed")
+		handleError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 func handleError(c *gin.Context, statusCode int, err error) {
