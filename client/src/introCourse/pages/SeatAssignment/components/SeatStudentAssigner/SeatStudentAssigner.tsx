@@ -135,6 +135,7 @@ export const SeatStudentAssigner = ({
       const header = lines[0].split(',').map((h) => h.trim().toLowerCase())
       const findCol = (name: string) => header.findIndex((h) => h === name.toLowerCase())
       const seatCol = findCol('seat')
+      const seatMacCol = findCol('seat mac')
       const studentNameCol = findCol('assigned student')
       const tutorNameCol = findCol('assigned tutor')
       const tutorSeatCol = findCol('tutor seat')
@@ -196,6 +197,11 @@ export const SeatStudentAssigner = ({
         // Tutor seat flag
         if (tutorSeatCol >= 0) {
           updatedSeats[idx].isTutorSeat = (cols[tutorSeatCol] || '').toLowerCase() === 'yes'
+        }
+
+        // Mac assignment
+        if (seatMacCol >= 0) {
+          updatedSeats[idx].hasMac = (cols[seatMacCol] || '').toLowerCase() === 'yes'
         }
 
         // Collect peer groups
