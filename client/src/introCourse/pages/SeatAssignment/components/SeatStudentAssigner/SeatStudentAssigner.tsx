@@ -11,6 +11,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react'
+import { useParams } from 'react-router-dom'
 import { Seat } from '../../../../interfaces/Seat'
 import { DeveloperWithProfile } from '../../interfaces/DeveloperWithProfile'
 import { Tutor } from '../../../../interfaces/Tutor'
@@ -19,6 +20,8 @@ import { useUpdateSeats } from '../../hooks/useUpdateSeats'
 import { useAssignStudents } from '../../hooks/useAssignStudents'
 import { useDownloadAssignment } from '../../hooks/useDownloadAssignment'
 import { smartAssign } from '../../utils/smartAssignment'
+import { updatePeerAssignments } from '../../../../network/mutations/updatePeerAssignments'
+import { updatePeerAssignments } from '../../../../network/mutations/updatePeerAssignments'
 import { ResetSeatAssignmentDialog } from './ResetSeatAssignmentDialog'
 import {
   Card,
@@ -112,72 +115,129 @@ export const SeatStudentAssigner = ({
     mutation.mutate(updatedSeats)
   }, [seats, developerWithProfiles, assignedStudents, peerAssignments, tutors, mutation])
 
-  // CSV import handler — matches students/tutors by NAME
+  // CSV import — matches by name, handles tutor seats and peer groups
+  const { phaseId } = useParams<{ phaseId: string }>()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const handleImportCSV = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const text = e.target?.result as string
+      if (!text) return
       const lines = text.split('\n').filter((l) => l.trim())
       if (lines.length < 2) {
         setError('CSV file must have a header and at least one data row.')
         return
       }
 
+      // Match exact column names from export
       const header = lines[0].split(',').map((h) => h.trim().toLowerCase())
-      const seatCol = header.findIndex((h) => h === 'seat')
-      const studentCol = header.findIndex((h) => h.includes('student'))
-      const tutorCol = header.findIndex((h) => h.includes('tutor') && !h.includes('seat'))
+      const findCol = (name: string) => header.findIndex((h) => h === name.toLowerCase())
+      const seatCol = findCol('seat')
+      const studentNameCol = findCol('assigned student')
+      const tutorNameCol = findCol('assigned tutor')
+      const tutorSeatCol = findCol('tutor seat')
+      const peerGroupCol = findCol('peer group')
 
-      if (seatCol < 0 || studentCol < 0) {
-        setError('CSV must have "Seat" and "Assigned Student" columns.')
+      if (seatCol < 0) {
+        setError('CSV must have a "Seat" column.')
         return
       }
 
+      // Build name -> ID lookups
+      const studentNameToId = new Map<string, string>()
+      for (const dev of developerWithProfiles) {
+        const name = `${dev.participation.student.firstName} ${dev.participation.student.lastName}`
+        studentNameToId.set(name.toLowerCase(), dev.participation.courseParticipationID)
+      }
+      const tutorNameToId = new Map<string, string>()
+      if (tutors) {
+        for (const t of tutors) {
+          tutorNameToId.set(`${t.firstName} ${t.lastName}`.toLowerCase(), t.id)
+        }
+      }
+
+      // Parse rows
       const updatedSeats = seats.map((s) => ({ ...s }))
       const seatIndex = new Map<string, number>()
       updatedSeats.forEach((s, i) => seatIndex.set(s.seatName, i))
 
+      const peerGroups = new Map<string, string[]>()
+      const warnings: string[] = []
+
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
         const seatName = cols[seatCol]
-        const studentName = cols[studentCol]
-        const tutorName = tutorCol >= 0 ? cols[tutorCol] : ''
-
+        if (!seatName) continue
         const idx = seatIndex.get(seatName)
         if (idx === undefined) continue
 
-        // Match student by name
-        if (studentName && studentName !== 'Unassigned') {
-          const dev = developerWithProfiles.find((d) => {
-            const fullName = `${d.participation.student.firstName} ${d.participation.student.lastName}`
-            return fullName.toLowerCase() === studentName.toLowerCase()
-          })
-          if (dev) {
-            updatedSeats[idx].assignedStudent = dev.participation.courseParticipationID
+        // Student
+        const studentName = studentNameCol >= 0 ? (cols[studentNameCol] || '').trim() : ''
+        let studentId: string | null = null
+        if (studentName && studentName.toLowerCase() !== 'unassigned') {
+          studentId = studentNameToId.get(studentName.toLowerCase()) ?? null
+          if (!studentId) warnings.push(`Student "${studentName}" not found`)
+        }
+        updatedSeats[idx].assignedStudent = studentId
+
+        // Tutor
+        const tutorName = tutorNameCol >= 0 ? (cols[tutorNameCol] || '').trim() : ''
+        if (tutorName && tutorName.toLowerCase() !== 'unknown tutor') {
+          const tutorId = tutorNameToId.get(tutorName.toLowerCase()) ?? null
+          if (tutorId) {
+            updatedSeats[idx].assignedTutor = tutorId
+          } else {
+            warnings.push(`Tutor "${tutorName}" not found`)
           }
         }
 
-        // Match tutor by name
-        if (tutorName) {
-          const tutor = tutors.find((t) => {
-            const fullName = `${t.firstName} ${t.lastName}`
-            return fullName.toLowerCase() === tutorName.toLowerCase()
-          })
-          if (tutor) {
-            updatedSeats[idx].assignedTutor = tutor.id
+        // Tutor seat flag
+        if (tutorSeatCol >= 0) {
+          updatedSeats[idx].isTutorSeat = (cols[tutorSeatCol] || '').toLowerCase() === 'yes'
+        }
+
+        // Collect peer groups
+        if (peerGroupCol >= 0 && studentId) {
+          const pg = (cols[peerGroupCol] || '').trim()
+          if (pg) {
+            if (!peerGroups.has(pg)) peerGroups.set(pg, [])
+            peerGroups.get(pg)!.push(studentId)
           }
         }
       }
 
+      // Save seat assignments
       mutation.mutate(updatedSeats)
+
+      // Build and save peer assignments from groups
+      if (peerGroups.size > 0 && phaseId) {
+        const peerList: PeerAssignment[] = []
+        for (const members of peerGroups.values()) {
+          for (const a of members) {
+            for (const b of members) {
+              if (a !== b) peerList.push({ studentID: a, peerID: b })
+            }
+          }
+        }
+        try {
+          await updatePeerAssignments(phaseId, peerList)
+        } catch {
+          warnings.push('Failed to save peer assignments')
+        }
+      }
+
+      if (warnings.length > 0) {
+        const unique = [...new Set(warnings)]
+        setError(`Imported ${updatedSeats.length} seats. Warnings: ${unique.slice(0, 5).join('; ')}${unique.length > 5 ? ` (+${unique.length - 5} more)` : ''}`)
+      } else {
+        setError(null)
+      }
     }
     reader.readAsText(file)
-    // Reset input so the same file can be re-imported
     if (fileInputRef.current) fileInputRef.current.value = ''
-  }, [seats, developerWithProfiles, tutors, mutation])
+  }, [seats, developerWithProfiles, tutors, mutation, phaseId])
 
   // Download assignments as CSV
   const downloadAssignments = useDownloadAssignment(seats, developerWithProfiles, tutors, peerAssignments)
