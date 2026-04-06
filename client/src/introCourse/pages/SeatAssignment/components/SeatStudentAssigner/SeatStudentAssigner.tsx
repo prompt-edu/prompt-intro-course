@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ChevronDown,
   ChevronUp,
@@ -20,6 +21,7 @@ import { useUpdateSeats } from '../../hooks/useUpdateSeats'
 import { useAssignStudents } from '../../hooks/useAssignStudents'
 import { useDownloadAssignment } from '../../hooks/useDownloadAssignment'
 import { smartAssign } from '../../utils/smartAssignment'
+import { updateSeatPlan } from '../../../../network/mutations/updateSeatPlan'
 import { updatePeerAssignments } from '../../../../network/mutations/updatePeerAssignments'
 import { ResetSeatAssignmentDialog } from './ResetSeatAssignmentDialog'
 import {
@@ -61,6 +63,7 @@ export const SeatStudentAssigner = ({
   tutors,
   peerAssignments,
 }: SeatStudentAssignerProps) => {
+  const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const totalStudents = developerWithProfiles.length
@@ -213,8 +216,13 @@ export const SeatStudentAssigner = ({
         }
       }
 
-      // Save seat assignments
-      mutation.mutate(updatedSeats)
+      // Save seat assignments first, then peer assignments
+      try {
+        await updateSeatPlan(phaseId ?? '', updatedSeats)
+        queryClient.invalidateQueries({ queryKey: ['seatPlan', phaseId] })
+      } catch {
+        warnings.push('Failed to save seat assignments')
+      }
 
       // Build and save peer assignments from groups
       if (peerGroups.size > 0 && phaseId) {
@@ -228,6 +236,7 @@ export const SeatStudentAssigner = ({
         }
         try {
           await updatePeerAssignments(phaseId, peerList)
+          queryClient.invalidateQueries({ queryKey: ['peerAssignments', phaseId] })
         } catch {
           warnings.push('Failed to save peer assignments')
         }
@@ -235,14 +244,14 @@ export const SeatStudentAssigner = ({
 
       if (warnings.length > 0) {
         const unique = [...new Set(warnings)]
-        setError(`Imported ${updatedSeats.length} seats. Warnings: ${unique.slice(0, 5).join('; ')}${unique.length > 5 ? ` (+${unique.length - 5} more)` : ''}`)
+        setError(`Imported. Warnings: ${unique.slice(0, 5).join('; ')}${unique.length > 5 ? ` (+${unique.length - 5} more)` : ''}`)
       } else {
         setError(null)
       }
     }
     reader.readAsText(file)
     if (fileInputRef.current) fileInputRef.current.value = ''
-  }, [seats, developerWithProfiles, tutors, mutation, phaseId])
+  }, [seats, developerWithProfiles, tutors, phaseId, queryClient])
 
   // Download assignments as CSV
   const downloadAssignments = useDownloadAssignment(seats, developerWithProfiles, tutors, peerAssignments)
