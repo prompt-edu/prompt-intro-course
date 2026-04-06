@@ -83,16 +83,19 @@ func importTutors(c *gin.Context) {
 		return
 	}
 
-	// Add Tutors to keycloak groups (best-effort: log warnings but don't block import)
+	// Add Tutors to keycloak groups (best-effort: collect warnings but don't block import)
 	tutorIDs := make([]uuid.UUID, len(tutors))
 	for i, tutor := range tutors {
 		tutorIDs[i] = tutor.ID
 	}
+	var keycloakWarnings []string
 	if err := coreRequests.SendAddStudentsToKeycloakGroup(c.GetHeader("Authorization"), courseID, tutorIDs, KEYCLOAK_GROUP_NAME); err != nil {
 		log.Warn("Failed to add tutors to custom keycloak group (continuing with import): ", err)
+		keycloakWarnings = append(keycloakWarnings, "Failed to add tutors to keycloak group '"+KEYCLOAK_GROUP_NAME+"': "+err.Error())
 	}
 	if err := coreRequests.SendAddStudentsToKeycloakGroup(c.GetHeader("Authorization"), courseID, tutorIDs, "editor"); err != nil {
 		log.Warn("Failed to add tutors to editor keycloak group (continuing with import): ", err)
+		keycloakWarnings = append(keycloakWarnings, "Failed to add tutors to keycloak group 'editor': "+err.Error())
 	}
 
 	if err := ImportTutors(c, coursePhaseID, tutors); err != nil {
@@ -101,7 +104,14 @@ func importTutors(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusCreated)
+	if len(keycloakWarnings) > 0 {
+		c.JSON(http.StatusCreated, gin.H{
+			"imported": len(tutors),
+			"warnings": keycloakWarnings,
+		})
+	} else {
+		c.Status(http.StatusCreated)
+	}
 }
 
 // updateGitLabUsername godoc

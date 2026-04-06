@@ -1,17 +1,65 @@
+import { useState } from 'react'
 import { KeycloakGroupCreation } from './components/KeycloakGroupCreation'
 import { TutorImportDialog } from './components/TutorImportDialog'
 import { TutorTable } from './components/TutorTable'
 import { useGetCoursePhase } from '@/hooks/useGetCoursePhase'
-import { Loader2 } from 'lucide-react'
-import { ManagementPageHeader, ErrorPage, Separator } from '@tumaet/prompt-ui-components'
+import { Loader2, RefreshCw, AlertTriangle } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { getAllTutors } from '../../network/queries/getAllTutors'
+import { importTutors } from '../../network/mutations/importTutors'
+import { Tutor } from '../../interfaces/Tutor'
+import {
+  ManagementPageHeader,
+  ErrorPage,
+  Separator,
+  Button,
+  Alert,
+  AlertDescription,
+} from '@tumaet/prompt-ui-components'
 
 export const TutorImportPage = () => {
+  const { courseId, phaseId } = useParams<{ courseId: string; phaseId: string }>()
+  const [syncStatus, setSyncStatus] = useState<{ loading: boolean; warnings: string[] | null }>({
+    loading: false,
+    warnings: null,
+  })
+
   const {
     data: coursePhase,
     isPending: isCoursePhasePending,
     isError: isCoursePhaseError,
     refetch: refetchCoursePhase,
   } = useGetCoursePhase()
+
+  const { data: tutors } = useQuery<Tutor[]>({
+    queryKey: ['tutors', phaseId],
+    queryFn: () => getAllTutors(phaseId ?? ''),
+    enabled: !!phaseId,
+  })
+
+  const handleSyncKeycloak = async () => {
+    if (!tutors || tutors.length === 0 || !phaseId || !courseId) return
+    setSyncStatus({ loading: true, warnings: null })
+    try {
+      // Re-import the same tutors — the server upserts and retries Keycloak
+      const result = await importTutors(phaseId, courseId, tutors.map((t) => ({
+        id: t.id,
+        firstName: t.firstName,
+        lastName: t.lastName,
+        email: t.email,
+        matriculationNumber: t.matriculationNumber,
+        universityLogin: t.universityLogin,
+      } as any)))
+      if (result.warnings && result.warnings.length > 0) {
+        setSyncStatus({ loading: false, warnings: result.warnings })
+      } else {
+        setSyncStatus({ loading: false, warnings: null })
+      }
+    } catch {
+      setSyncStatus({ loading: false, warnings: ['Failed to sync tutors to Keycloak.'] })
+    }
+  }
 
   if (isCoursePhasePending) {
     return (
@@ -43,8 +91,35 @@ export const TutorImportPage = () => {
         <div className='space-y-4'>
           <div className='flex items-center justify-between'>
             <h2 className='text-xl font-semibold'>Imported Tutors</h2>
-            <TutorImportDialog />
+            <div className='flex gap-2'>
+              {tutors && tutors.length > 0 && (
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={handleSyncKeycloak}
+                  disabled={syncStatus.loading}
+                >
+                  {syncStatus.loading ? (
+                    <Loader2 className='mr-1.5 h-4 w-4 animate-spin' />
+                  ) : (
+                    <RefreshCw className='mr-1.5 h-4 w-4' />
+                  )}
+                  Sync to Keycloak
+                </Button>
+              )}
+              <TutorImportDialog />
+            </div>
           </div>
+          {syncStatus.warnings && (
+            <Alert>
+              <AlertTriangle className='h-4 w-4' />
+              <AlertDescription>
+                {syncStatus.warnings.map((w, i) => (
+                  <p key={i} className='text-sm'>{w}</p>
+                ))}
+              </AlertDescription>
+            </Alert>
+          )}
           <TutorTable />
         </div>
       ) : (
