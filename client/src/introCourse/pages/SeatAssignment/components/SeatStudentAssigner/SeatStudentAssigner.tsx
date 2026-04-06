@@ -21,8 +21,7 @@ import { useUpdateSeats } from '../../hooks/useUpdateSeats'
 import { useAssignStudents } from '../../hooks/useAssignStudents'
 import { useDownloadAssignment } from '../../hooks/useDownloadAssignment'
 import { smartAssign } from '../../utils/smartAssignment'
-import { updateSeatPlan } from '../../../../network/mutations/updateSeatPlan'
-import { updatePeerAssignments } from '../../../../network/mutations/updatePeerAssignments'
+import { importSeatAssignments, ImportSeatAssignment } from '../../../../network/mutations/importSeatAssignments'
 import { ResetSeatAssignmentDialog } from './ResetSeatAssignmentDialog'
 import {
   Card,
@@ -117,7 +116,7 @@ export const SeatStudentAssigner = ({
     mutation.mutate(updatedSeats)
   }, [seats, developerWithProfiles, assignedStudents, peerAssignments, tutors, mutation])
 
-  // CSV import — matches by name, handles tutor seats and peer groups
+  // CSV import — parses CSV client-side, sends to server for name resolution and atomic save
   const { phaseId } = useParams<{ phaseId: string }>()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const handleImportCSV = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,7 +132,6 @@ export const SeatStudentAssigner = ({
         return
       }
 
-      // Match exact column names from export
       const header = lines[0].split(',').map((h) => h.trim().toLowerCase())
       const findCol = (name: string) => header.findIndex((h) => h === name.toLowerCase())
       const seatCol = findCol('seat')
@@ -148,110 +146,40 @@ export const SeatStudentAssigner = ({
         return
       }
 
-      // Build name -> ID lookups
-      const studentNameToId = new Map<string, string>()
-      for (const dev of developerWithProfiles) {
-        const name = `${dev.participation.student.firstName} ${dev.participation.student.lastName}`
-        studentNameToId.set(name.toLowerCase(), dev.participation.courseParticipationID)
-      }
-      const tutorNameToId = new Map<string, string>()
-      if (tutors) {
-        for (const t of tutors) {
-          tutorNameToId.set(`${t.firstName} ${t.lastName}`.toLowerCase(), t.id)
-        }
-      }
-
-      // Parse rows
-      const updatedSeats = seats.map((s) => ({ ...s }))
-      const seatIndex = new Map<string, number>()
-      updatedSeats.forEach((s, i) => seatIndex.set(s.seatName, i))
-
-      const peerGroups = new Map<string, string[]>()
-      const warnings: string[] = []
-
+      // Parse CSV into structured assignments — send raw names to server
+      const assignments: ImportSeatAssignment[] = []
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
         const seatName = cols[seatCol]
         if (!seatName) continue
-        const idx = seatIndex.get(seatName)
-        if (idx === undefined) continue
 
-        // Student
-        const studentName = studentNameCol >= 0 ? (cols[studentNameCol] || '').trim() : ''
-        let studentId: string | null = null
-        if (studentName && studentName.toLowerCase() !== 'unassigned') {
-          studentId = studentNameToId.get(studentName.toLowerCase()) ?? null
-          if (!studentId) warnings.push(`Student "${studentName}" not found`)
-        }
-        updatedSeats[idx].assignedStudent = studentId
-
-        // Tutor
-        const tutorName = tutorNameCol >= 0 ? (cols[tutorNameCol] || '').trim() : ''
-        if (tutorName && tutorName.toLowerCase() !== 'unknown tutor') {
-          const tutorId = tutorNameToId.get(tutorName.toLowerCase()) ?? null
-          if (tutorId) {
-            updatedSeats[idx].assignedTutor = tutorId
-          } else {
-            warnings.push(`Tutor "${tutorName}" not found`)
-          }
-        }
-
-        // Tutor seat flag
-        if (tutorSeatCol >= 0) {
-          updatedSeats[idx].isTutorSeat = (cols[tutorSeatCol] || '').toLowerCase() === 'yes'
-        }
-
-        // Mac assignment
-        if (seatMacCol >= 0) {
-          updatedSeats[idx].hasMac = (cols[seatMacCol] || '').toLowerCase() === 'yes'
-        }
-
-        // Collect peer groups
-        if (peerGroupCol >= 0 && studentId) {
-          const pg = (cols[peerGroupCol] || '').trim()
-          if (pg) {
-            if (!peerGroups.has(pg)) peerGroups.set(pg, [])
-            peerGroups.get(pg)!.push(studentId)
-          }
-        }
+        assignments.push({
+          seatName,
+          seatMac: seatMacCol >= 0 ? cols[seatMacCol]?.toLowerCase() === 'yes' : false,
+          assignedStudent: studentNameCol >= 0 ? (cols[studentNameCol] || '') : '',
+          assignedTutor: tutorNameCol >= 0 ? (cols[tutorNameCol] || '') : '',
+          isTutorSeat: tutorSeatCol >= 0 ? cols[tutorSeatCol]?.toLowerCase() === 'yes' : false,
+          peerGroup: peerGroupCol >= 0 ? (cols[peerGroupCol] || '') : '',
+        })
       }
 
-      // Save seat assignments first, then peer assignments
       try {
-        await updateSeatPlan(phaseId ?? '', updatedSeats)
+        const result = await importSeatAssignments(phaseId ?? '', assignments)
         queryClient.invalidateQueries({ queryKey: ['seatPlan', phaseId] })
-      } catch {
-        warnings.push('Failed to save seat assignments')
-      }
+        queryClient.invalidateQueries({ queryKey: ['peerAssignments', phaseId] })
 
-      // Build and save peer assignments from groups
-      if (peerGroups.size > 0 && phaseId) {
-        const peerList: PeerAssignment[] = []
-        for (const members of peerGroups.values()) {
-          for (const a of members) {
-            for (const b of members) {
-              if (a !== b) peerList.push({ studentID: a, peerID: b })
-            }
-          }
+        if (result.warnings && result.warnings.length > 0) {
+          setError(`Imported ${result.seatsUpdated} seats, ${result.peerGroupsImported} peer groups. Warnings: ${result.warnings.slice(0, 5).join('; ')}${result.warnings.length > 5 ? ` (+${result.warnings.length - 5} more)` : ''}`)
+        } else {
+          setError(null)
         }
-        try {
-          await updatePeerAssignments(phaseId, peerList)
-          queryClient.invalidateQueries({ queryKey: ['peerAssignments', phaseId] })
-        } catch {
-          warnings.push('Failed to save peer assignments')
-        }
-      }
-
-      if (warnings.length > 0) {
-        const unique = [...new Set(warnings)]
-        setError(`Imported. Warnings: ${unique.slice(0, 5).join('; ')}${unique.length > 5 ? ` (+${unique.length - 5} more)` : ''}`)
-      } else {
-        setError(null)
+      } catch (err) {
+        setError(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
       }
     }
     reader.readAsText(file)
     if (fileInputRef.current) fileInputRef.current.value = ''
-  }, [seats, developerWithProfiles, tutors, phaseId, queryClient])
+  }, [phaseId, queryClient])
 
   // Download assignments as CSV
   const downloadAssignments = useDownloadAssignment(seats, developerWithProfiles, tutors, peerAssignments)
