@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Loader2, UserPlus } from 'lucide-react'
+import { Loader2, UserPlus, AlertTriangle } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCourseStore, Student } from '@tumaet/prompt-shared-state'
 import { getStudentsOfCoursePhase } from '../../../network/queries/getStudentsOfCoursePhase'
-import { importTutors } from '../../../network/mutations/importTutors'
+import { importTutors, ImportTutorsResult } from '../../../network/mutations/importTutors'
 import { StudentSelection } from './StudentSelection'
 import {
+  Alert,
+  AlertDescription,
   Button,
   Dialog,
   DialogContent,
@@ -37,10 +39,11 @@ export function TutorImportDialog() {
   const [isImporting, setIsImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
 
-  // Reset error and selections when the dialog closes.
+  // Reset state when the dialog closes.
   useEffect(() => {
     if (!open) {
       setImportError(null)
+      setImportWarnings(null)
       setSelectedSourceCourse(null)
       setSelectedSourcePhase(null)
       setSelectedStudents([])
@@ -91,14 +94,21 @@ export function TutorImportDialog() {
     enabled: !!selectedSourceCourse && !!selectedSourcePhase,
   })
 
+  const [importWarnings, setImportWarnings] = useState<string[] | null>(null)
+
   // Mutation for importing tutors into the destination course/phase.
   const { mutate: mutateImportTutors } = useMutation({
     mutationFn: (tutors: Student[]) => importTutors(phaseId ?? '', courseId ?? '', tutors),
-    onSuccess: () => {
-      setOpen(false)
+    onSuccess: (result: ImportTutorsResult) => {
       setIsImporting(false)
       setImportError(null)
       queryClient.invalidateQueries({ queryKey: ['tutors', phaseId] })
+      if (result.warnings && result.warnings.length > 0) {
+        setImportWarnings(result.warnings)
+      } else {
+        setImportWarnings(null)
+        setOpen(false)
+      }
     },
     onError: (error: unknown) => {
       console.error('Error importing tutors:', error)
@@ -194,30 +204,65 @@ export function TutorImportDialog() {
             </div>
           )}
 
-          {/* Display any import error */}
           {importError && <div className='text-red-500 text-sm'>{importError}</div>}
+
+          {importWarnings && (
+            <Alert>
+              <AlertTriangle className='h-4 w-4' />
+              <AlertDescription>
+                <p className='font-medium mb-1'>
+                  Tutors imported successfully, but Keycloak group assignment had issues:
+                </p>
+                {importWarnings.map((w, i) => (
+                  <p key={i} className='text-sm text-muted-foreground'>{w}</p>
+                ))}
+                <p className='text-sm mt-2'>
+                  You can retry the Keycloak assignment by re-importing the same tutors, or
+                  assign them manually in the Keycloak admin console.
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
 
-        <DialogFooter>
-          <Button
-            type='submit'
-            onClick={handleImport}
-            disabled={
-              !selectedSourceCourse ||
-              !selectedSourcePhase ||
-              selectedStudents.length === 0 ||
-              isImporting
-            }
-          >
-            {isImporting ? (
-              <>
-                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                Importing...
-              </>
-            ) : (
-              'Import Selected Students'
-            )}
-          </Button>
+        <DialogFooter className='gap-2'>
+          {importWarnings ? (
+            <>
+              <Button variant='outline' onClick={() => setOpen(false)}>
+                Close
+              </Button>
+              <Button onClick={handleImport} disabled={isImporting}>
+                {isImporting ? (
+                  <>
+                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                    Retrying...
+                  </>
+                ) : (
+                  'Retry Keycloak Assignment'
+                )}
+              </Button>
+            </>
+          ) : (
+            <Button
+              type='submit'
+              onClick={handleImport}
+              disabled={
+                !selectedSourceCourse ||
+                !selectedSourcePhase ||
+                selectedStudents.length === 0 ||
+                isImporting
+              }
+            >
+              {isImporting ? (
+                <>
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                  Importing...
+                </>
+              ) : (
+                'Import Selected Students'
+              )}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
