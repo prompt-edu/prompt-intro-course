@@ -3807,7 +3807,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"axios@npm:^1.14.0":
+"axios@npm:^1.15.0":
   version: 1.15.0
   resolution: "axios@npm:1.15.0"
   dependencies:
@@ -5791,7 +5791,7 @@ __metadata:
     "@types/react-is": "npm:^19.2.0"
     "@typescript-eslint/parser": "npm:^8.58.1"
     autoprefixer: "npm:^10.4.27"
-    axios: "npm:^1.14.0"
+    axios: "npm:^1.15.0"
     clsx: "npm:^2.1.1"
     copy-webpack-plugin: "npm:^13.0.1"
     css-loader: "npm:^7.1.4"
