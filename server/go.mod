@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/getsentry/sentry-go v0.45.0
-	github.com/getsentry/sentry-go/gin v0.44.1
+	github.com/getsentry/sentry-go/gin v0.45.0
 	github.com/getsentry/sentry-go/logrus v0.44.1
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
