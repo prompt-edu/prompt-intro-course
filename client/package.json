@@ -37,7 +37,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^5.99.0",
     "@tanstack/react-table": "^8.21.3",
-    "@tumaet/prompt-shared-state": "^1.0.10",
+    "@tumaet/prompt-shared-state": "^1.0.11",
     "@tumaet/prompt-ui-components": "^1.0.10",
     "axios": "^1.15.0",
     "clsx": "^2.1.1",
