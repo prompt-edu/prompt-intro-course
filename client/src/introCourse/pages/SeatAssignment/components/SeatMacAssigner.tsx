@@ -117,7 +117,7 @@ export const SeatMacAssigner = ({ existingSeats }: SeatMacAssignerProps) => {
             )}
             <div className='space-y-4'>
               <div className='flex gap-2'>
-                <div className='relative flex-grow max-w-md w-full'>
+                <div className='relative grow max-w-md w-full'>
                   <Input
                     type='search'
                     placeholder='Search seats or device IDs...'
@@ -129,7 +129,7 @@ export const SeatMacAssigner = ({ existingSeats }: SeatMacAssignerProps) => {
                 </div>
                 <Button
                   onClick={() => setFilterMac(!filterMac)}
-                  variant={filterMac ? 'default' : 'outline'}
+                  variant={filterMac ? 'default' : 'outline-solid'}
                 >
                   <Laptop className='mr-2 h-4 w-4' />
                   {filterMac ? 'Showing Only Macs' : 'Show Only Macs'}

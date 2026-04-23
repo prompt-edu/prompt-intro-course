@@ -98,9 +98,9 @@ export default function IOSUDIDDialog() {
                 <div key={index} className='space-y-4'>
                   <div className='flex gap-3'>
                     {index === 0 ? (
-                      <Smartphone className='h-5 w-5 text-primary flex-shrink-0 mt-1 mr-1' />
+                      <Smartphone className='h-5 w-5 text-primary shrink-0 mt-1 mr-1' />
                     ) : (
-                      <Laptop className='h-5 w-5 text-primary flex-shrink-0 mt-1 mr-1' />
+                      <Laptop className='h-5 w-5 text-primary shrink-0 mt-1 mr-1' />
                     )}
                     <div>
                       <h3 className='text-lg font-semibold'>{instruction.title}</h3>

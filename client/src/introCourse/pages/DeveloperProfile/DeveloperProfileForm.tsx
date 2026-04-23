@@ -85,7 +85,7 @@ export const DeveloperProfileForm = ({
                 </FormDescription>
                 <FormControl>
                   <div className='flex items-center space-x-2'>
-                    <Input placeholder='example@icloud.com' {...field} className='flex-grow' />
+                    <Input placeholder='example@icloud.com' {...field} className='grow' />
                     <AppleIDHelperDialog />
                   </div>
                 </FormControl>
@@ -107,7 +107,7 @@ export const DeveloperProfileForm = ({
                 </FormDescription>
                 <FormControl>
                   <div className='flex items-center space-x-2'>
-                    <Input placeholder='i.e. ab12cde' {...field} className='flex-grow' />
+                    <Input placeholder='i.e. ab12cde' {...field} className='grow' />
                     <GitLabHelperDialog />
                   </div>
                 </FormControl>

@@ -90,7 +90,7 @@ export const SeatAssignmentPage = () => {
 
   if (isPending) {
     return (
-      <div className='flex justify-center items-center flex-grow'>
+      <div className='flex justify-center items-center grow'>
         <Loader2 className='h-12 w-12 animate-spin text-primary' />
       </div>
     )
@@ -134,7 +134,7 @@ export const SeatAssignmentPage = () => {
           <CardContent className='pt-6'>
             <div className='flex items-center gap-2 mb-4'>
               <Button
-                variant={viewMode === 'table' ? 'default' : 'outline'}
+                variant={viewMode === 'table' ? 'default' : 'outline-solid'}
                 size='sm'
                 onClick={() => setViewMode('table')}
               >
@@ -142,7 +142,7 @@ export const SeatAssignmentPage = () => {
                 Table
               </Button>
               <Button
-                variant={viewMode === 'grid' ? 'default' : 'outline'}
+                variant={viewMode === 'grid' ? 'default' : 'outline-solid'}
                 size='sm'
                 onClick={() => setViewMode('grid')}
               >

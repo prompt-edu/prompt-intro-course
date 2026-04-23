@@ -63,7 +63,7 @@ export function TutorTable() {
   return (
     <div className='space-y-4'>
       <div className='flex items-center gap-2'>
-        <div className='relative flex-grow max-w-md w-full'>
+        <div className='relative grow max-w-md w-full'>
           <Input
             type='search'
             placeholder='Search tutors...'

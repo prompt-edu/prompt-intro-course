@@ -77,7 +77,7 @@ export const StudentSeatAssignmentDisplay = () => {
         </CardHeader>
         <CardContent>
           <div className='flex items-center gap-4'>
-            <Avatar className='h-16 w-16 border-2 border-background shadow-sm'>
+            <Avatar className='h-16 w-16 border-2 border-background shadow-xs'>
               <AvatarImage src={getGravatarUrl(tutorEmail)} alt={`${tutorFullName}'s avatar`} />
               <AvatarFallback className='text-lg font-bold'>{tutorInitial}</AvatarFallback>
             </Avatar>

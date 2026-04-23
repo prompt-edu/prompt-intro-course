@@ -1,4 +1,3 @@
-import '@tumaet/prompt-ui-components/index.css'
 import './screenshot.css'
 import React from 'react'
 import { createRoot } from 'react-dom/client'

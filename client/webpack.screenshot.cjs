@@ -47,17 +47,9 @@ module.exports = {
             loader: 'postcss-loader',
             options: {
               postcssOptions: {
-                // Inline Tailwind config — production tailwind.config.js uses ESM
-                // imports that don't resolve in CJS postcss-loader context
-                plugins: [
-                  ['tailwindcss', {
-                    content: [
-                      'src/**/*.{ts,tsx}',
-                      'node_modules/@tumaet/prompt-ui-components/dist/**/*.{js,ts,tsx}',
-                    ],
-                  }],
-                  'autoprefixer',
-                ],
+                plugins: {
+                  '@tailwindcss/postcss': {},
+                },
               },
             },
           },

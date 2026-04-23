@@ -299,7 +299,7 @@ const StudentViewPage = () => {
             </CardHeader>
             <CardContent>
               <div className='flex items-center gap-4'>
-                <Avatar className='h-16 w-16 border-2 border-background shadow-sm'>
+                <Avatar className='h-16 w-16 border-2 border-background shadow-xs'>
                   <AvatarFallback className='text-lg font-bold'>{tutorInitial}</AvatarFallback>
                 </Avatar>
                 <div>

@@ -85,7 +85,7 @@ export const PeerAssignmentActions = ({
   })
 
   const statusVariant =
-    uniqueStudents === 0 ? 'secondary' : uniqueStudents >= totalStudents ? 'default' : 'outline'
+    uniqueStudents === 0 ? 'secondary' : uniqueStudents >= totalStudents ? 'default' : 'outline-solid'
 
   const isLoading =
     generateMutation.isPending ||

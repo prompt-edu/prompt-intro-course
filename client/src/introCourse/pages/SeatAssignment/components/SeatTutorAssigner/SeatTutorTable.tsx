@@ -114,7 +114,7 @@ export const SeatTutorTable = ({
   return (
     <div className='flex-1 space-y-4'>
       <div className='flex flex-col sm:flex-row gap-2'>
-        <div className='relative flex-grow max-w-md w-full'>
+        <div className='relative grow max-w-md w-full'>
           <Input
             type='search'
             placeholder='Search seats or tutors...'

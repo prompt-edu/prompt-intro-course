@@ -50,7 +50,7 @@ export function IntroCourseStep({
               <div className='flex items-center space-x-4'>
                 <span
                   className={cn(
-                    'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium',
+                    'shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium',
                     isCompleted
                       ? 'bg-green-500 text-white'
                       : isDisabled
