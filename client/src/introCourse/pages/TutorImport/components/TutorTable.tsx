@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { getAllTutors } from '../../../network/queries/getAllTutors'
 import { Tutor } from '../../../interfaces/Tutor'
-import translations from '@/lib/translations.json'
+import { translations } from '@tumaet/prompt-shared-state'
 import { UpdateTutor } from '../../../interfaces/UpdateTutor'
 import { updateTutorGitLabUsername } from '../../../network/mutations/updateTutor'
 

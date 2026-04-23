@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { KeycloakGroupCreation } from './components/KeycloakGroupCreation'
 import { TutorImportDialog } from './components/TutorImportDialog'
 import { TutorTable } from './components/TutorTable'
-import { useGetCoursePhase } from '@/hooks/useGetCoursePhase'
 import { Loader2, RefreshCw, AlertTriangle } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getAllTutors } from '../../network/queries/getAllTutors'
 import { importTutors } from '../../network/mutations/importTutors'
 import { Tutor } from '../../interfaces/Tutor'
+import { useGetCoursePhase } from '@tumaet/prompt-shared-state'
 import {
   ManagementPageHeader,
   ErrorPage,

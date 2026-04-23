@@ -1,11 +1,11 @@
 ARG IMAGE_TAG=latest
 FROM ghcr.io/prompt-edu/prompt/prompt-clients-base:${IMAGE_TAG} AS core-base
 
-
 WORKDIR /app/intro_course_developer_component
+COPY package.json yarn.lock .yarnrc.yml ./
+RUN yarn install --immutable
+
 COPY . ./
-RUN yarn install
-RUN ln -sfn /app/intro_course_developer_component/node_modules /app/node_modules
 
 RUN yarn build
 

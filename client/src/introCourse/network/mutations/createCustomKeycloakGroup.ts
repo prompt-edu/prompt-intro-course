@@ -1,4 +1,4 @@
-import { axiosInstance } from '@/network/configService'
+import { introCourseAxiosInstance } from '../introCourseServerConfig'
 import { CreateKeycloakGroup } from '../../interfaces/CreateKeycloakGroup'
 
 export const createCustomKeycloakGroup = async (
@@ -6,7 +6,7 @@ export const createCustomKeycloakGroup = async (
   group: CreateKeycloakGroup,
 ): Promise<void> => {
   try {
-    await axiosInstance.put(`/api/keycloak/${courseID}/group`, group, {
+    await introCourseAxiosInstance.put(`/api/keycloak/${courseID}/group`, group, {
       headers: {
         'Content-Type': 'application/json-path+json',
       },

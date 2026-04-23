@@ -15,10 +15,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createGitlabRepo } from '../../../network/mutations/createGitlabRepo'
 import { useParams } from 'react-router-dom'
 import { GitlabRepoRequest } from '../../../interfaces/GitlabRepoRequest'
-import { useCourseStore } from '@tumaet/prompt-shared-state'
+import {
+  useCourseStore,
+  useGetCoursePhase,
+  useModifyCoursePhase,
+} from '@tumaet/prompt-shared-state'
 import { createIntroCourseGitlabInfrastructure } from '../../../network/mutations/createIntroCourseGitlabInfrastructure'
-import { useGetCoursePhase } from '@/hooks/useGetCoursePhase'
-import { useModifyCoursePhase } from '@/hooks/useModifyCoursePhase'
 
 interface CreateGitlabReposDialogProps {
   participantsWithDevProfiles: ParticipationWithDevProfiles[]

@@ -1,6 +1,9 @@
-import { ErrorPage, ManagementPageHeader } from '@tumaet/prompt-ui-components'
-import { CoursePhaseParticipationsTable } from '@/components/pages/CoursePhaseParticipationsTable/CoursePhaseParticipationsTable'
-import { getCoursePhaseParticipations } from '@/network/queries/getCoursePhaseParticipations'
+import {
+  CoursePhaseParticipationsTable,
+  ErrorPage,
+  ManagementPageHeader,
+} from '@tumaet/prompt-ui-components'
+import { getCoursePhaseParticipations } from '@tumaet/prompt-shared-state'
 import { useQuery } from '@tanstack/react-query'
 import { CoursePhaseParticipationsWithResolution } from '@tumaet/prompt-shared-state'
 import { Loader2 } from 'lucide-react'

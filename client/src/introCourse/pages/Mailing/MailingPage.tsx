@@ -3,11 +3,11 @@ import {
   AlertDescription,
   AlertTitle,
   Button,
+  CoursePhaseMailing,
   ErrorPage,
   ManagementPageHeader,
 } from '@tumaet/prompt-ui-components'
-import { CoursePhaseMailing } from '@/components/pages/Mailing/CoursePhaseMailing'
-import { getCoursePhase } from '@/network/queries/getCoursePhase'
+import { getCoursePhase } from '@tumaet/prompt-shared-state'
 import { useQuery } from '@tanstack/react-query'
 import { CoursePhaseWithMetaData } from '@tumaet/prompt-shared-state'
 import { AlertTriangle, Loader2 } from 'lucide-react'

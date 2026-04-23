@@ -32,7 +32,7 @@ import {
   useCustomElementWidth,
 } from '@tumaet/prompt-ui-components'
 import type { CoursePhaseParticipationsWithResolution } from '@tumaet/prompt-shared-state'
-import { getCoursePhaseParticipations } from '@/network/queries/getCoursePhaseParticipations'
+import { getCoursePhaseParticipations } from '@tumaet/prompt-shared-state'
 import { getAllDeveloperProfiles } from '../../network/queries/getAllDeveloperProfiles'
 import type { DeveloperProfile } from '../../interfaces/DeveloperProfile'
 import { ProfileDetailsDialog } from './components/ProfileDetailsDialog'
