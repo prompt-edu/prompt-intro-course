@@ -2,15 +2,22 @@ import { useCourseStore } from '@tumaet/prompt-shared-state'
 import { useParams } from 'react-router-dom'
 import { Loader2, TriangleAlert } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
-import { getOwnCoursePhaseParticipation } from '@/network/queries/getOwnCoursePhaseParticipation'
-import UnauthorizedPage from '@/components/UnauthorizedPage'
+import {
+  CoursePhaseParticipationWithStudent,
+  getOwnCoursePhaseParticipation,
+} from '@tumaet/prompt-shared-state'
 import { useEffect, useState } from 'react'
 import { useIntroCourseStore } from './zustand/useIntroCourseStore'
 import { getOwnDeveloperProfile } from './network/queries/getOwnDeveloperProfile'
 import { DeveloperProfile } from './interfaces/DeveloperProfile'
 import { OwnPeerAssignment } from './interfaces/PeerAssignment'
-import { Alert, AlertDescription, AlertTitle, ErrorPage } from '@tumaet/prompt-ui-components'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  ErrorPage,
+  UnauthorizedPage,
+} from '@tumaet/prompt-ui-components'
 import { SeatAssignment } from './pages/SeatAssignment/interfaces/SeatAssignment'
 import { getOwnSeatPlanAssignment } from './network/queries/getOwnSeatPlanAssignment'
 import { getOwnPeerAssignment } from './network/queries/getOwnPeerAssignment'

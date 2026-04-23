@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ManagementPageHeader, ErrorPage, Button, Card, CardContent } from '@tumaet/prompt-ui-components'
-import { getCoursePhaseParticipations } from '@/network/queries/getCoursePhaseParticipations'
+import { getCoursePhaseParticipations } from '@tumaet/prompt-shared-state'
 import { useQuery } from '@tanstack/react-query'
 import { CoursePhaseParticipationsWithResolution } from '@tumaet/prompt-shared-state'
 import { Grid3X3, Loader2, Table2 } from 'lucide-react'

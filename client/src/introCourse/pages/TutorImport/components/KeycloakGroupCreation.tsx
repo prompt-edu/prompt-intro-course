@@ -3,10 +3,13 @@ import { useParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Button, Card, CardContent } from '@tumaet/prompt-ui-components'
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
-import { useModifyCoursePhase } from '@/hooks/useModifyCoursePhase'
 import { createCustomKeycloakGroup } from '../../../network/mutations/createCustomKeycloakGroup'
 import { CreateKeycloakGroup } from '../../../interfaces/CreateKeycloakGroup'
-import { CoursePhaseWithMetaData, UpdateCoursePhase } from '@tumaet/prompt-shared-state'
+import {
+  CoursePhaseWithMetaData,
+  UpdateCoursePhase,
+  useModifyCoursePhase,
+} from '@tumaet/prompt-shared-state'
 
 const KEYCLOAK_GROUP_NAME = 'introCourseTutors'
 

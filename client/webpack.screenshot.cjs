@@ -1,6 +1,6 @@
 /**
  * Minimal webpack config for screenshot harness.
- * Skips Module Federation (no @/ shared_library deps).
+ * Skips Module Federation.
  */
 const path = require('path')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
@@ -78,10 +78,6 @@ module.exports = {
   },
   resolve: {
     extensions: ['.ts', '.tsx', '.js', '.mjs', '.jsx'],
-    alias: {
-      '@/env': path.resolve(__dirname, 'src/screenshotStubs/env.ts'),
-      '@/utils/parseURL': path.resolve(__dirname, 'src/screenshotStubs/parseURL.ts'),
-    },
   },
   plugins: [
     new HtmlWebpackPlugin({

@@ -1,6 +1,5 @@
 import { useIntroCourseStore } from '../../zustand/useIntroCourseStore'
 import { Monitor, User, Users, ExternalLink } from 'lucide-react'
-import { getGravatarUrl } from '@/lib/getGravatarUrl'
 import {
   Avatar,
   AvatarFallback,
@@ -14,7 +13,7 @@ import {
   CardDescription,
 } from '@tumaet/prompt-ui-components'
 import { GITLAB_INTROCOURSE_BASE_URL } from '../../network/introCourseServerConfig'
-import { useCourseStore } from '@tumaet/prompt-shared-state'
+import { getGravatarUrl, useCourseStore } from '@tumaet/prompt-shared-state'
 import { useParams } from 'react-router-dom'
 
 export const StudentSeatAssignmentDisplay = () => {

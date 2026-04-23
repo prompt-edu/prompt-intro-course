@@ -7,8 +7,10 @@ import { getAllTutors } from '../../../network/queries/getAllTutors'
 import { getSeatPlan } from '../../../network/queries/getSeatPlan'
 import { getAllDeveloperProfiles } from '../../../network/queries/getAllDeveloperProfiles'
 import { getPeerAssignments } from '../../../network/queries/getPeerAssignments'
-import { getCoursePhaseParticipations } from '@/network/queries/getCoursePhaseParticipations'
-import { CoursePhaseParticipationsWithResolution } from '@tumaet/prompt-shared-state'
+import {
+  CoursePhaseParticipationsWithResolution,
+  getCoursePhaseParticipations,
+} from '@tumaet/prompt-shared-state'
 
 export const usePeerAssignmentData = (phaseId: string | undefined) => {
   const {

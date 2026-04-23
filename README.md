@@ -13,25 +13,24 @@ Standalone repository for the PROMPT intro course services.
 
 1. Copy `.env.template` to `.env` and adapt values if needed.
    Intro-course-specific runtime variables previously kept in `prompt2` now live in this repository.
-2. Link the shared library from the main PROMPT repository:
-   ```bash
-   ln -sfn ../prompt2/clients/shared_library shared_library
-   ```
-3. Start the intro-course database:
+2. Start the intro-course database:
    ```bash
    docker compose up -d
    ```
-4. Run server:
+3. Run server:
    ```bash
    cd server
    go run main.go
    ```
-5. Install client dependencies and run the client:
+4. Install client dependencies and run the client:
    ```bash
    cd client
    yarn install
    yarn dev
    ```
+
+The client consumes the published `@tumaet/prompt-shared-state` and
+`@tumaet/prompt-ui-components` packages directly.
 
 Use a Node LTS release (recommended: Node 22) for local client tooling.
 

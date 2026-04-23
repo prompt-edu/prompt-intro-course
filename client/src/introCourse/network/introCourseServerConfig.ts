@@ -1,6 +1,5 @@
 import axios from 'axios'
-import { env } from '@/env'
-import { parseURL } from '@/utils/parseURL'
+import { env, parseURL } from '@tumaet/prompt-shared-state'
 
 const introCourseServer = env.INTRO_COURSE_HOST || ''
 
