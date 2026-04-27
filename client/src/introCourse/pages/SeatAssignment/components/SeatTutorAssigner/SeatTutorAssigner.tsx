@@ -115,7 +115,7 @@ export const SeatTutorAssigner = ({ seats, tutors, numberOfStudents }: SeatTutor
                   <div className='truncate' title={`${tutor.firstName} ${tutor.lastName}`}>
                     {tutor.firstName} {tutor.lastName}
                   </div>
-                  <Badge variant={count > 0 ? 'default' : 'outline'}>{count} seats</Badge>
+                  <Badge variant={count > 0 ? 'default' : 'outline-solid'}>{count} seats</Badge>
                 </div>
               ))}
               {tutors.length === 0 && (
