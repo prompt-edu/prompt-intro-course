@@ -3043,9 +3043,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tumaet/prompt-ui-components@npm:^1.1.0":
-  version: 1.1.0
-  resolution: "@tumaet/prompt-ui-components@npm:1.1.0"
+"@tumaet/prompt-ui-components@npm:^1.1.1":
+  version: 1.1.1
+  resolution: "@tumaet/prompt-ui-components@npm:1.1.1"
   dependencies:
     "@hookform/resolvers": "npm:^5.2.2"
     "@radix-ui/react-accordion": "npm:^1.2.12"
@@ -3113,7 +3113,7 @@ __metadata:
     react: ^19.2.5
     react-dom: ^19.2.5
     react-router-dom: ^7.14.1
-  checksum: 10c0/f6b85ff78c5795f5e136aff26b7dcc59fc223dda8993dd8ae86fc373d37e77fd640fe5110772067875737bd17826877b7be53fa33d6c8caecd850aefaabd051b
+  checksum: 10c0/f1c022e3caae2cbbf2106c42d762fcd14577ff7d3dec9c1ba775563bc0266a1bfda0754aa37537be025b02abea61b02ed6432f25306e1e54c782b6d7614e96ad
   languageName: node
   linkType: hard
 
@@ -5969,7 +5969,7 @@ __metadata:
     "@tanstack/react-query": "npm:^5.100.5"
     "@tanstack/react-table": "npm:^8.21.3"
     "@tumaet/prompt-shared-state": "npm:^1.1.1"
-    "@tumaet/prompt-ui-components": "npm:^1.1.0"
+    "@tumaet/prompt-ui-components": "npm:^1.1.1"
     "@types/file-saver": "npm:^2.0.7"
     "@types/node": "npm:^25.6.0"
     "@types/react": "npm:^19.2.14"
