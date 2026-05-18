@@ -3,7 +3,7 @@ module github.com/prompt-edu/prompt-intro-course/server
 go 1.26
 
 require (
-	github.com/getsentry/sentry-go v0.45.1
+	github.com/getsentry/sentry-go v0.46.2
 	github.com/getsentry/sentry-go/gin v0.45.1
 	github.com/getsentry/sentry-go/logrus v0.45.1
 	github.com/gin-gonic/gin v1.12.0
