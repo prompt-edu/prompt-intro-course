@@ -1,6 +1,6 @@
 module github.com/prompt-edu/prompt-intro-course/server
 
-go 1.26
+go 1.26.4
 
 require (
 	github.com/getsentry/sentry-go v0.45.1
