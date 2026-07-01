@@ -44,7 +44,7 @@
     "file-saver": "^2.0.5",
     "i18n-iso-countries": "^7.14.0",
     "js-sha256": "^0.11.1",
-    "lucide-react": "^1.14.0",
+    "lucide-react": "^1.23.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.79.0",

@@ -6148,7 +6148,7 @@ __metadata:
     html-webpack-plugin: "npm:^5.6.7"
     i18n-iso-countries: "npm:^7.14.0"
     js-sha256: "npm:^0.11.1"
-    lucide-react: "npm:^1.14.0"
+    lucide-react: "npm:^1.23.0"
     postcss: "npm:^8.5.15"
     postcss-loader: "npm:8.2.1"
     react: "npm:^19.2.7"
@@ -6634,12 +6634,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lucide-react@npm:^1.14.0":
-  version: 1.14.0
-  resolution: "lucide-react@npm:1.14.0"
+"lucide-react@npm:^1.23.0":
+  version: 1.23.0
+  resolution: "lucide-react@npm:1.23.0"
   peerDependencies:
     react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
-  checksum: 10c0/25c5dd878945842ffb519532f1a66f59f2d461e7be7bd322091b0ecd3cd32561c1ae3d9b50161432d39a72bf8c8f1a039268f2f20a035e520dd3f49dd46ffaf2
+  checksum: 10c0/1cb2108d81c9713e20dd1beb7b6ac5bfc17307d5f38388f84921cf6a124efb4b933c73929bede42f00bd08aa2df340b0904acdf4fb90206ccd52971e943e775b
   languageName: node
   linkType: hard
 
