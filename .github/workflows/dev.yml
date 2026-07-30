@@ -39,6 +39,24 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: server/go.mod
+      - name: Pre-pull test container images
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for image in postgres:15 testcontainers/ryuk:0.13.0; do
+            for attempt in 1 2 3; do
+              if docker pull "$image"; then
+                break
+              fi
+
+              if [[ "$attempt" == "3" ]]; then
+                exit 1
+              fi
+
+              sleep "$((attempt * 10))"
+            done
+          done
       - name: Run server tests
         run: |
           cd server
