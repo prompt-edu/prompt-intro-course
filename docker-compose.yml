@@ -1,6 +1,6 @@
 services:
   db-intro-course:
-    image: postgres:15.17-alpine
+    image: postgres:15.18-alpine
     ports:
       - "5433:5432"
     environment:
