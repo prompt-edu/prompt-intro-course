@@ -1,35 +1,35 @@
-import { useState } from 'react'
-import type React from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
-import { Laptop, Smartphone, Tablet, Watch, AlertTriangle, CheckCircle } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
+  Button,
+  Checkbox,
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-  DialogDescription,
-  Button,
-  Input,
-  Checkbox,
-  Separator,
   Form,
   FormControl,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
+  Input,
+  Separator,
 } from '@tumaet/prompt-ui-components'
-import { updateDeveloperProfile } from '../../../network/mutations/updateDeveloperProfile'
+import { AlertTriangle, CheckCircle, Laptop, Smartphone, Tablet, Watch } from 'lucide-react'
+import type React from 'react'
+import { useState } from 'react'
+import { useForm } from 'react-hook-form'
 import type { PostDeveloperProfile } from '../../../interfaces/PostDeveloperProfile'
+import { updateDeveloperProfile } from '../../../network/mutations/updateDeveloperProfile'
+import { updateGitLabStatusCreated } from '../../../network/mutations/updateGitlabStatus'
 import {
-  instructorDevProfile,
   type InstructorDeveloperFormValues,
+  instructorDevProfile,
 } from '../../../validations/instructorDevProfile'
 import type { ParticipationWithDevProfiles } from '../interfaces/pariticipationWithDevProfiles'
-import { updateGitLabStatusCreated } from '../../../network/mutations/updateGitlabStatus'
 
 interface ProfileDetailsDialogProps {
   participantWithProfile: ParticipationWithDevProfiles

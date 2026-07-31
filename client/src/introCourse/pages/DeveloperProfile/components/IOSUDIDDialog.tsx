@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   Button,
   Dialog,
@@ -10,7 +9,8 @@ import {
   DialogTrigger,
   Separator,
 } from '@tumaet/prompt-ui-components'
-import { Smartphone, Laptop, HelpCircle } from 'lucide-react'
+import { HelpCircle, Laptop, Smartphone } from 'lucide-react'
+import { useState } from 'react'
 
 export default function IOSUDIDDialog() {
   const [open, setOpen] = useState(false)
@@ -95,7 +95,7 @@ export default function IOSUDIDDialog() {
           <div className='overflow-y-auto flex-1 py-4'>
             <div className='space-y-6'>
               {instructions.map((instruction, index) => (
-                <div key={index} className='space-y-4'>
+                <div key={instruction.title} className='space-y-4'>
                   <div className='flex gap-3'>
                     {index === 0 ? (
                       <Smartphone className='h-5 w-5 text-primary shrink-0 mt-1 mr-1' />
@@ -115,7 +115,7 @@ export default function IOSUDIDDialog() {
                   {instruction.substeps && (
                     <div className='ml-11 border-l border-border space-y-4'>
                       {instruction.substeps.map((substep, subIndex) => (
-                        <div key={subIndex} className='space-y-1 ml-4'>
+                        <div key={substep.title} className='space-y-1 ml-4'>
                           <div className='flex items-start gap-2'>
                             <h4 className='font-medium'>
                               {subIndex + 1}. {substep.title}

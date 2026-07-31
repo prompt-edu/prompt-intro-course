@@ -1,6 +1,3 @@
-import * as React from 'react'
-import { ExternalLink, HelpCircle } from 'lucide-react'
-
 import {
   Button,
   Dialog,
@@ -12,6 +9,8 @@ import {
   ScrollArea,
   Separator,
 } from '@tumaet/prompt-ui-components'
+import { ExternalLink, HelpCircle } from 'lucide-react'
+import * as React from 'react'
 
 export const GitLabHelperDialog = () => {
   const [open, setOpen] = React.useState(false)

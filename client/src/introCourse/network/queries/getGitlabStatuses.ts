@@ -1,4 +1,4 @@
-import { GitlabStatus } from '../../interfaces/GitlabStatus'
+import type { GitlabStatus } from '../../interfaces/GitlabStatus'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
 export const getGitlabStatuses = async (coursePhaseID: string): Promise<GitlabStatus[]> => {

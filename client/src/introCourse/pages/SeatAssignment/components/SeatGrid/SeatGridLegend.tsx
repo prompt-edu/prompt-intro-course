@@ -1,7 +1,7 @@
 import { GraduationCap, Laptop } from 'lucide-react'
-import { TUTOR_COLORS, type SeatGridViewMode } from '../../utils/seatGrid'
-import { Tutor } from '../../../../interfaces/Tutor'
-import { Seat } from '../../../../interfaces/Seat'
+import type { Seat } from '../../../../interfaces/Seat'
+import type { Tutor } from '../../../../interfaces/Tutor'
+import { type SeatGridViewMode, TUTOR_COLORS } from '../../utils/seatGrid'
 
 interface SeatGridLegendProps {
   tutors: Tutor[]
@@ -57,37 +57,37 @@ export const SeatGridLegend = ({
         </div>
       )}
 
-      {viewMode === 'peerGroup' && peerGroupCount > 0 ? (
-        // Peer group legend
-        Array.from({ length: peerGroupCount }, (_, i) => i + 1).map((group) => {
-          const color = TUTOR_COLORS[(group - 1) % TUTOR_COLORS.length]
-          const size = peerGroupSizes.get(group) ?? 0
-          return (
-            <div key={group} className='flex items-center gap-1.5 text-sm'>
-              <div className={`w-3 h-3 rounded-full ${color.dot}`} />
-              <span>P{group}</span>
-              <span className='text-muted-foreground'>({size})</span>
-            </div>
-          )
-        })
-      ) : viewMode !== 'seat' ? (
-        // Tutor legend
-        tutors.map((tutor) => {
-          const colorIdx = tutorColorMap.get(tutor.id) ?? 0
-          const color = TUTOR_COLORS[colorIdx % TUTOR_COLORS.length]
-          const count = studentCounts.get(tutor.id) ?? 0
+      {viewMode === 'peerGroup' && peerGroupCount > 0
+        ? // Peer group legend
+          Array.from({ length: peerGroupCount }, (_, i) => i + 1).map((group) => {
+            const color = TUTOR_COLORS[(group - 1) % TUTOR_COLORS.length]
+            const size = peerGroupSizes.get(group) ?? 0
+            return (
+              <div key={group} className='flex items-center gap-1.5 text-sm'>
+                <div className={`w-3 h-3 rounded-full ${color.dot}`} />
+                <span>P{group}</span>
+                <span className='text-muted-foreground'>({size})</span>
+              </div>
+            )
+          })
+        : viewMode !== 'seat'
+          ? // Tutor legend
+            tutors.map((tutor) => {
+              const colorIdx = tutorColorMap.get(tutor.id) ?? 0
+              const color = TUTOR_COLORS[colorIdx % TUTOR_COLORS.length]
+              const count = studentCounts.get(tutor.id) ?? 0
 
-          return (
-            <div key={tutor.id} className='flex items-center gap-1.5 text-sm'>
-              <div className={`w-3 h-3 rounded-full ${color.dot}`} />
-              <span>
-                {tutor.firstName} {tutor.lastName}
-              </span>
-              <span className='text-muted-foreground'>({count})</span>
-            </div>
-          )
-        })
-      ) : null}
+              return (
+                <div key={tutor.id} className='flex items-center gap-1.5 text-sm'>
+                  <div className={`w-3 h-3 rounded-full ${color.dot}`} />
+                  <span>
+                    {tutor.firstName} {tutor.lastName}
+                  </span>
+                  <span className='text-muted-foreground'>({count})</span>
+                </div>
+              )
+            })
+          : null}
     </div>
   )
 }

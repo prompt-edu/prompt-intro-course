@@ -1,23 +1,10 @@
-import { useState } from 'react'
-import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import type { CoursePhaseParticipationsWithResolution } from '@tumaet/prompt-shared-state'
+import { getCoursePhaseParticipations } from '@tumaet/prompt-shared-state'
 import {
-  Laptop,
-  Loader2,
-  Smartphone,
-  Tablet,
-  Watch,
-  Check,
-  X,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Download,
-  TriangleAlert,
-} from 'lucide-react'
-import {
-  ManagementPageHeader,
+  Button,
   ErrorPage,
+  ManagementPageHeader,
   Table,
   TableBody,
   TableCell,
@@ -25,27 +12,40 @@ import {
   TableHeader,
   TableRow,
   Tooltip,
+  TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-  TooltipContent,
-  Button,
   useCustomElementWidth,
 } from '@tumaet/prompt-ui-components'
-import type { CoursePhaseParticipationsWithResolution } from '@tumaet/prompt-shared-state'
-import { getCoursePhaseParticipations } from '@tumaet/prompt-shared-state'
-import { getAllDeveloperProfiles } from '../../network/queries/getAllDeveloperProfiles'
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Check,
+  Download,
+  Laptop,
+  Loader2,
+  Smartphone,
+  Tablet,
+  TriangleAlert,
+  Watch,
+  X,
+} from 'lucide-react'
+import { useState } from 'react'
+import { useParams } from 'react-router-dom'
 import type { DeveloperProfile } from '../../interfaces/DeveloperProfile'
+import type { GitlabStatus } from '../../interfaces/GitlabStatus'
+import { getAllDeveloperProfiles } from '../../network/queries/getAllDeveloperProfiles'
+import { getGitlabStatuses } from '../../network/queries/getGitlabStatuses'
+import { CreateGitlabReposDialog } from './components/CreateGitlabReposDialog'
+import { FilterMenu } from './components/FilterMenu'
 import { ProfileDetailsDialog } from './components/ProfileDetailsDialog'
+import { useDownloadDeveloperProfiles } from './hooks/useDownloadDeveloperProfiles'
+import { useGetFilteredParticipations } from './hooks/useGetFilteredParticipations'
 import { useGetParticipationsWithProfiles } from './hooks/useGetParticipationsWithProfiles'
 import { useGetSortedParticipations } from './hooks/useGetSortedParticipations'
-import { FilterMenu } from './components/FilterMenu'
-import { DevProfileFilter } from './interfaces/devProfileFilter'
-import { useGetFilteredParticipations } from './hooks/useGetFilteredParticipations'
-import { useDownloadDeveloperProfiles } from './hooks/useDownloadDeveloperProfiles'
-import { GitlabStatus } from '../../interfaces/GitlabStatus'
-import { getGitlabStatuses } from '../../network/queries/getGitlabStatuses'
-import { ParticipationWithDevProfiles } from './interfaces/pariticipationWithDevProfiles'
-import { CreateGitlabReposDialog } from './components/CreateGitlabReposDialog'
+import type { DevProfileFilter } from './interfaces/devProfileFilter'
+import type { ParticipationWithDevProfiles } from './interfaces/pariticipationWithDevProfiles'
 
 export const DeveloperProfilesLecturerPage = () => {
   // State for the detail dialog

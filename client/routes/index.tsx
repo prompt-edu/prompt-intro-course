@@ -1,12 +1,12 @@
-import { DeveloperProfilesLecturerPage } from '../src/introCourse/pages/DeveloperProfilesLecturer/DeveloperProfilesLecturerPage'
-import { TutorImportPage } from '../src/introCourse/pages/TutorImport/TutorImportPage'
+import { type ExtendedRouteObject, Role } from '@tumaet/prompt-shared-state'
 import { IntroCourseDataShell } from '../src/introCourse/IntroCourseDataShell'
 import { IntroCoursePage } from '../src/introCourse/IntroCoursePage'
-import { ExtendedRouteObject, Role } from '@tumaet/prompt-shared-state'
-import { SeatAssignmentPage } from '../src/introCourse/pages/SeatAssignment/SeatAssignmentPage'
-import { PeerAssignmentPage } from '../src/introCourse/pages/PeerAssignment/PeerAssignmentPage'
-import { MailingPage } from '../src/introCourse/pages/Mailing/MailingPage'
+import { DeveloperProfilesLecturerPage } from '../src/introCourse/pages/DeveloperProfilesLecturer/DeveloperProfilesLecturerPage'
 import { IntroCourseParticipantsPage } from '../src/introCourse/pages/IntroCourseParticipantsPage/IntroCourseParticipantsPage'
+import { MailingPage } from '../src/introCourse/pages/Mailing/MailingPage'
+import { PeerAssignmentPage } from '../src/introCourse/pages/PeerAssignment/PeerAssignmentPage'
+import { SeatAssignmentPage } from '../src/introCourse/pages/SeatAssignment/SeatAssignmentPage'
+import { TutorImportPage } from '../src/introCourse/pages/TutorImport/TutorImportPage'
 
 const routes: ExtendedRouteObject[] = [
   {

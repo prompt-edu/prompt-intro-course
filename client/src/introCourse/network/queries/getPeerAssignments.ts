@@ -1,9 +1,7 @@
-import { PeerAssignment } from '../../interfaces/PeerAssignment'
+import type { PeerAssignment } from '../../interfaces/PeerAssignment'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
-export const getPeerAssignments = async (
-  coursePhaseID: string,
-): Promise<PeerAssignment[]> => {
+export const getPeerAssignments = async (coursePhaseID: string): Promise<PeerAssignment[]> => {
   try {
     return (
       await introCourseAxiosInstance.get(

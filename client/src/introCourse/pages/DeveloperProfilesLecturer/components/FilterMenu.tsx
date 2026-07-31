@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@tumaet/prompt-ui-components'
 import { Filter, Laptop, Smartphone, Tablet, Watch } from 'lucide-react'
-import { DevProfileFilter } from '../interfaces/devProfileFilter'
+import type { DevProfileFilter } from '../interfaces/devProfileFilter'
 
 interface FilterMenuProps {
   filters: DevProfileFilter

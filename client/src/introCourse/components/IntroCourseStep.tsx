@@ -1,4 +1,3 @@
-import * as React from 'react'
 import {
   Card,
   CardContent,
@@ -9,6 +8,7 @@ import {
   Separator,
 } from '@tumaet/prompt-ui-components'
 import { CheckCircle, ChevronDown, ChevronUp, Lock } from 'lucide-react'
+import type * as React from 'react'
 
 interface CourseStepProps {
   number: number

@@ -1,5 +1,5 @@
+import { Role, type SidebarMenuItemProps } from '@tumaet/prompt-shared-state'
 import { Presentation } from 'lucide-react'
-import { SidebarMenuItemProps, Role } from '@tumaet/prompt-shared-state'
 
 const sidebarItems: SidebarMenuItemProps = {
   title: 'Intro Course',

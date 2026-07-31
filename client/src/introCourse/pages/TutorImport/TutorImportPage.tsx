@@ -1,22 +1,22 @@
+import { useQuery } from '@tanstack/react-query'
+import { useGetCoursePhase } from '@tumaet/prompt-shared-state'
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  ErrorPage,
+  ManagementPageHeader,
+  Separator,
+} from '@tumaet/prompt-ui-components'
+import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
+import { useParams } from 'react-router-dom'
+import type { Tutor } from '../../interfaces/Tutor'
+import { importTutors } from '../../network/mutations/importTutors'
+import { getAllTutors } from '../../network/queries/getAllTutors'
 import { KeycloakGroupCreation } from './components/KeycloakGroupCreation'
 import { TutorImportDialog } from './components/TutorImportDialog'
 import { TutorTable } from './components/TutorTable'
-import { Loader2, RefreshCw, AlertTriangle } from 'lucide-react'
-import { useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { getAllTutors } from '../../network/queries/getAllTutors'
-import { importTutors } from '../../network/mutations/importTutors'
-import { Tutor } from '../../interfaces/Tutor'
-import { useGetCoursePhase } from '@tumaet/prompt-shared-state'
-import {
-  ManagementPageHeader,
-  ErrorPage,
-  Separator,
-  Button,
-  Alert,
-  AlertDescription,
-} from '@tumaet/prompt-ui-components'
 
 export const TutorImportPage = () => {
   const { courseId, phaseId } = useParams<{ courseId: string; phaseId: string }>()
@@ -43,14 +43,21 @@ export const TutorImportPage = () => {
     setSyncStatus({ loading: true, warnings: null })
     try {
       // Re-import the same tutors — the server upserts and retries Keycloak
-      const result = await importTutors(phaseId, courseId, tutors.map((t) => ({
-        id: t.id,
-        firstName: t.firstName,
-        lastName: t.lastName,
-        email: t.email,
-        matriculationNumber: t.matriculationNumber,
-        universityLogin: t.universityLogin,
-      } as any)))
+      const result = await importTutors(
+        phaseId,
+        courseId,
+        tutors.map(
+          (t) =>
+            ({
+              id: t.id,
+              firstName: t.firstName,
+              lastName: t.lastName,
+              email: t.email,
+              matriculationNumber: t.matriculationNumber,
+              universityLogin: t.universityLogin,
+            }) as any,
+        ),
+      )
       if (result.warnings && result.warnings.length > 0) {
         setSyncStatus({ loading: false, warnings: result.warnings })
       } else {
@@ -114,8 +121,10 @@ export const TutorImportPage = () => {
             <Alert>
               <AlertTriangle className='h-4 w-4' />
               <AlertDescription>
-                {syncStatus.warnings.map((w, i) => (
-                  <p key={i} className='text-sm'>{w}</p>
+                {syncStatus.warnings.map((w) => (
+                  <p key={w} className='text-sm'>
+                    {w}
+                  </p>
                 ))}
               </AlertDescription>
             </Alert>

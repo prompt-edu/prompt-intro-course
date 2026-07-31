@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
-import { Seat } from '../../../interfaces/Seat'
+import type { Seat } from '../../../interfaces/Seat'
 import { updateSeatPlan } from '../../../network/mutations/updateSeatPlan'
 
 export const useUpdateSeats = (setError: (error: string | null) => void) => {

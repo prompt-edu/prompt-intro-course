@@ -1,27 +1,27 @@
-import { useState, useRef, useCallback, type ChangeEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
-import { Upload, AlertCircle, CheckCircle2 } from 'lucide-react'
-import type { Seat } from '../../../../interfaces/Seat'
-import { createSeatPlan } from '../../../../network/mutations/createSeatPlan'
-import { deleteSeatPlan } from '../../../../network/mutations/deleteSeatPlan'
-import { RECHNERHALLE_SEATS } from '../../utils/rechnerHalle'
-import { readCSVFile } from '../../utils/fileUpload'
-import { SeatPlanDialog } from './SeatPlanDialog'
-import { ResetSeatPlanDialog } from './ResetSeatPlanDialog'
 import {
+  Alert,
+  AlertDescription,
   Button,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-  Alert,
-  AlertDescription,
+  Label,
   RadioGroup,
   RadioGroupItem,
-  Label,
 } from '@tumaet/prompt-ui-components'
+import { AlertCircle, CheckCircle2, Upload } from 'lucide-react'
+import { type ChangeEvent, useCallback, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import type { Seat } from '../../../../interfaces/Seat'
+import { createSeatPlan } from '../../../../network/mutations/createSeatPlan'
+import { deleteSeatPlan } from '../../../../network/mutations/deleteSeatPlan'
+import { readCSVFile } from '../../utils/fileUpload'
+import { RECHNERHALLE_SEATS } from '../../utils/rechnerHalle'
+import { ResetSeatPlanDialog } from './ResetSeatPlanDialog'
+import { SeatPlanDialog } from './SeatPlanDialog'
 
 interface SeatUploaderProps {
   existingSeats: Seat[]

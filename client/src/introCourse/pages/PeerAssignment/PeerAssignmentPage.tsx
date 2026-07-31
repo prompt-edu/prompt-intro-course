@@ -1,4 +1,4 @@
-import { ManagementPageHeader, ErrorPage } from '@tumaet/prompt-ui-components'
+import { ErrorPage, ManagementPageHeader } from '@tumaet/prompt-ui-components'
 import { Loader2 } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { PeerAssignmentActions } from './components/PeerAssignmentActions'

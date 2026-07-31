@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { Button, Card, CardContent } from '@tumaet/prompt-ui-components'
-import { AlertCircle, CheckCircle2 } from 'lucide-react'
-import { createCustomKeycloakGroup } from '../../../network/mutations/createCustomKeycloakGroup'
-import { CreateKeycloakGroup } from '../../../interfaces/CreateKeycloakGroup'
 import {
-  CoursePhaseWithMetaData,
-  UpdateCoursePhase,
+  type CoursePhaseWithMetaData,
+  type UpdateCoursePhase,
   useModifyCoursePhase,
 } from '@tumaet/prompt-shared-state'
+import { Button, Card, CardContent } from '@tumaet/prompt-ui-components'
+import { AlertCircle, CheckCircle2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import type { CreateKeycloakGroup } from '../../../interfaces/CreateKeycloakGroup'
+import { createCustomKeycloakGroup } from '../../../network/mutations/createCustomKeycloakGroup'
 
 const KEYCLOAK_GROUP_NAME = 'introCourseTutors'
 

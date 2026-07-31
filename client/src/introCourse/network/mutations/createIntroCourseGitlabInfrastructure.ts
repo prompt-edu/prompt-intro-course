@@ -1,4 +1,4 @@
-import { GitlabCourseInfrastructureRequest } from '../../interfaces/GitlabCourseInfrastructureRequest'
+import type { GitlabCourseInfrastructureRequest } from '../../interfaces/GitlabCourseInfrastructureRequest'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
 export const createIntroCourseGitlabInfrastructure = async (

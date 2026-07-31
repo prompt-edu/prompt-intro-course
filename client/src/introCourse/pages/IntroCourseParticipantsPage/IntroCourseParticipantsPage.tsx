@@ -1,11 +1,13 @@
+import { useQuery } from '@tanstack/react-query'
+import {
+  type CoursePhaseParticipationsWithResolution,
+  getCoursePhaseParticipations,
+} from '@tumaet/prompt-shared-state'
 import {
   CoursePhaseParticipationsTable,
   ErrorPage,
   ManagementPageHeader,
 } from '@tumaet/prompt-ui-components'
-import { getCoursePhaseParticipations } from '@tumaet/prompt-shared-state'
-import { useQuery } from '@tanstack/react-query'
-import { CoursePhaseParticipationsWithResolution } from '@tumaet/prompt-shared-state'
 import { Loader2 } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 

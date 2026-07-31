@@ -1,8 +1,8 @@
+import type { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
 import { create } from 'zustand'
-import { DeveloperProfile } from '../interfaces/DeveloperProfile'
-import { OwnPeerAssignment } from '../interfaces/PeerAssignment'
-import { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
-import { SeatAssignment } from '../pages/SeatAssignment/interfaces/SeatAssignment'
+import type { DeveloperProfile } from '../interfaces/DeveloperProfile'
+import type { OwnPeerAssignment } from '../interfaces/PeerAssignment'
+import type { SeatAssignment } from '../pages/SeatAssignment/interfaces/SeatAssignment'
 
 interface IntroCourseStoreState {
   developerProfile?: DeveloperProfile

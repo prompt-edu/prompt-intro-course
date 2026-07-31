@@ -1,16 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
-import { Tutor } from '../../../interfaces/Tutor'
-import { Seat } from '../../../interfaces/Seat'
-import { DeveloperProfile } from '../../../interfaces/DeveloperProfile'
-import { PeerAssignment } from '../../../interfaces/PeerAssignment'
-import { getAllTutors } from '../../../network/queries/getAllTutors'
-import { getSeatPlan } from '../../../network/queries/getSeatPlan'
-import { getAllDeveloperProfiles } from '../../../network/queries/getAllDeveloperProfiles'
-import { getPeerAssignments } from '../../../network/queries/getPeerAssignments'
 import {
-  CoursePhaseParticipationsWithResolution,
+  type CoursePhaseParticipationsWithResolution,
   getCoursePhaseParticipations,
 } from '@tumaet/prompt-shared-state'
+import type { DeveloperProfile } from '../../../interfaces/DeveloperProfile'
+import type { PeerAssignment } from '../../../interfaces/PeerAssignment'
+import type { Seat } from '../../../interfaces/Seat'
+import type { Tutor } from '../../../interfaces/Tutor'
+import { getAllDeveloperProfiles } from '../../../network/queries/getAllDeveloperProfiles'
+import { getAllTutors } from '../../../network/queries/getAllTutors'
+import { getPeerAssignments } from '../../../network/queries/getPeerAssignments'
+import { getSeatPlan } from '../../../network/queries/getSeatPlan'
 
 export const usePeerAssignmentData = (phaseId: string | undefined) => {
   const {
@@ -69,7 +69,11 @@ export const usePeerAssignmentData = (phaseId: string | undefined) => {
   })
 
   const isPending =
-    isPendingTutors || isSeatsPending || isProfilesPending || isPeersPending || isParticipationsPending
+    isPendingTutors ||
+    isSeatsPending ||
+    isProfilesPending ||
+    isPeersPending ||
+    isParticipationsPending
   const isError =
     isTutorsError || isSeatsError || isProfilesError || isPeersError || isParticipationsError
 

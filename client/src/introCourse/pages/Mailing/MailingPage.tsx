@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query'
+import { type CoursePhaseWithMetaData, getCoursePhase } from '@tumaet/prompt-shared-state'
 import {
   Alert,
   AlertDescription,
@@ -7,9 +9,6 @@ import {
   ErrorPage,
   ManagementPageHeader,
 } from '@tumaet/prompt-ui-components'
-import { getCoursePhase } from '@tumaet/prompt-shared-state'
-import { useQuery } from '@tanstack/react-query'
-import { CoursePhaseWithMetaData } from '@tumaet/prompt-shared-state'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 

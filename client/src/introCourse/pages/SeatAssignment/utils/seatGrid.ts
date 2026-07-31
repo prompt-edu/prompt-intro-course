@@ -1,6 +1,6 @@
-import { Seat } from '../../../interfaces/Seat'
-import { PeerAssignment } from '../../../interfaces/PeerAssignment'
-import { type RowLayout, RECHNERHALLE_LAYOUT, getPhysicalPositions } from './rechnerHalle'
+import type { PeerAssignment } from '../../../interfaces/PeerAssignment'
+import type { Seat } from '../../../interfaces/Seat'
+import { getPhysicalPositions, RECHNERHALLE_LAYOUT, type RowLayout } from './rechnerHalle'
 
 export interface ParsedSeat {
   room: number
@@ -108,13 +108,58 @@ export function buildPeerGroups(peerAssignments: PeerAssignment[]): Map<string, 
 
 // 9-color palette for tutor groups
 export const TUTOR_COLORS = [
-  { bg: 'bg-blue-100 dark:bg-blue-900/30', border: 'border-blue-300', text: 'text-blue-800 dark:text-blue-200', dot: 'bg-blue-500' },
-  { bg: 'bg-green-100 dark:bg-green-900/30', border: 'border-green-300', text: 'text-green-800 dark:text-green-200', dot: 'bg-green-500' },
-  { bg: 'bg-amber-100 dark:bg-amber-900/30', border: 'border-amber-300', text: 'text-amber-800 dark:text-amber-200', dot: 'bg-amber-500' },
-  { bg: 'bg-purple-100 dark:bg-purple-900/30', border: 'border-purple-300', text: 'text-purple-800 dark:text-purple-200', dot: 'bg-purple-500' },
-  { bg: 'bg-pink-100 dark:bg-pink-900/30', border: 'border-pink-300', text: 'text-pink-800 dark:text-pink-200', dot: 'bg-pink-500' },
-  { bg: 'bg-cyan-100 dark:bg-cyan-900/30', border: 'border-cyan-300', text: 'text-cyan-800 dark:text-cyan-200', dot: 'bg-cyan-500' },
-  { bg: 'bg-orange-100 dark:bg-orange-900/30', border: 'border-orange-300', text: 'text-orange-800 dark:text-orange-200', dot: 'bg-orange-500' },
-  { bg: 'bg-teal-100 dark:bg-teal-900/30', border: 'border-teal-300', text: 'text-teal-800 dark:text-teal-200', dot: 'bg-teal-500' },
-  { bg: 'bg-rose-100 dark:bg-rose-900/30', border: 'border-rose-300', text: 'text-rose-800 dark:text-rose-200', dot: 'bg-rose-500' },
+  {
+    bg: 'bg-blue-100 dark:bg-blue-900/30',
+    border: 'border-blue-300',
+    text: 'text-blue-800 dark:text-blue-200',
+    dot: 'bg-blue-500',
+  },
+  {
+    bg: 'bg-green-100 dark:bg-green-900/30',
+    border: 'border-green-300',
+    text: 'text-green-800 dark:text-green-200',
+    dot: 'bg-green-500',
+  },
+  {
+    bg: 'bg-amber-100 dark:bg-amber-900/30',
+    border: 'border-amber-300',
+    text: 'text-amber-800 dark:text-amber-200',
+    dot: 'bg-amber-500',
+  },
+  {
+    bg: 'bg-purple-100 dark:bg-purple-900/30',
+    border: 'border-purple-300',
+    text: 'text-purple-800 dark:text-purple-200',
+    dot: 'bg-purple-500',
+  },
+  {
+    bg: 'bg-pink-100 dark:bg-pink-900/30',
+    border: 'border-pink-300',
+    text: 'text-pink-800 dark:text-pink-200',
+    dot: 'bg-pink-500',
+  },
+  {
+    bg: 'bg-cyan-100 dark:bg-cyan-900/30',
+    border: 'border-cyan-300',
+    text: 'text-cyan-800 dark:text-cyan-200',
+    dot: 'bg-cyan-500',
+  },
+  {
+    bg: 'bg-orange-100 dark:bg-orange-900/30',
+    border: 'border-orange-300',
+    text: 'text-orange-800 dark:text-orange-200',
+    dot: 'bg-orange-500',
+  },
+  {
+    bg: 'bg-teal-100 dark:bg-teal-900/30',
+    border: 'border-teal-300',
+    text: 'text-teal-800 dark:text-teal-200',
+    dot: 'bg-teal-500',
+  },
+  {
+    bg: 'bg-rose-100 dark:bg-rose-900/30',
+    border: 'border-rose-300',
+    text: 'text-rose-800 dark:text-rose-200',
+    dot: 'bg-rose-500',
+  },
 ]

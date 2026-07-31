@@ -5,12 +5,13 @@
   "license": "MIT",
   "scripts": {
     "dev": "rspack serve --mode development",
-    "lint": "eslint \"src/**/*.{js,jsx,ts,tsx}\"",
-    "lint:fix": "eslint \"src/**/*.{js,jsx,ts,tsx}\" --fix",
+    "lint": "biome check src",
+    "lint:fix": "biome check src --fix",
     "build": "rspack --mode=production --env NODE_ENV=production",
     "check-performance": "rspack --mode=production --env NODE_ENV=production --env BUNDLE_SIZE=true"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.5",
     "@module-federation/runtime-tools": "^2.8.0",
     "@rspack/cli": "^2.1.5",
     "@rspack/core": "^2.1.5",
@@ -21,9 +22,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/react-is": "^19.2.0",
-    "@typescript-eslint/parser": "^8.65.0",
     "css-loader": "^7.1.4",
-    "eslint": "^10.7.0",
     "postcss": "^8.5.22",
     "postcss-loader": "8.2.1",
     "style-loader": "^4.0.0",

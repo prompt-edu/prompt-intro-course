@@ -1,4 +1,4 @@
-import { Tutor } from '../../interfaces/Tutor'
+import type { Tutor } from '../../interfaces/Tutor'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
 export const getAllTutors = async (coursePhaseID: string): Promise<Tutor[]> => {

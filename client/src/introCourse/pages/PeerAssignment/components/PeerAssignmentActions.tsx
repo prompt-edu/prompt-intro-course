@@ -1,10 +1,6 @@
-import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
-import { Shuffle, Trash2, GitBranch, Unlink, Loader2 } from 'lucide-react'
+import { useCourseStore } from '@tumaet/prompt-shared-state'
 import {
-  Badge,
-  Button,
   Alert,
   AlertDescription,
   AlertDialog,
@@ -16,11 +12,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
+  Badge,
+  Button,
 } from '@tumaet/prompt-ui-components'
-import { useCourseStore } from '@tumaet/prompt-shared-state'
-import { PeerAssignment, SyncResult } from '../../../interfaces/PeerAssignment'
-import { generatePeerAssignments } from '../../../network/mutations/generatePeerAssignments'
+import { GitBranch, Loader2, Shuffle, Trash2, Unlink } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import type { PeerAssignment, SyncResult } from '../../../interfaces/PeerAssignment'
 import { deletePeerAssignments } from '../../../network/mutations/deletePeerAssignments'
+import { generatePeerAssignments } from '../../../network/mutations/generatePeerAssignments'
 import { syncPeerAssignmentsToGitlab } from '../../../network/mutations/syncPeerAssignmentsToGitlab'
 import { unsyncPeerAssignmentsFromGitlab } from '../../../network/mutations/unsyncPeerAssignmentsFromGitlab'
 
@@ -85,7 +85,11 @@ export const PeerAssignmentActions = ({
   })
 
   const statusVariant =
-    uniqueStudents === 0 ? 'secondary' : uniqueStudents >= totalStudents ? 'default' : 'outline-solid'
+    uniqueStudents === 0
+      ? 'secondary'
+      : uniqueStudents >= totalStudents
+        ? 'default'
+        : 'outline-solid'
 
   const isLoading =
     generateMutation.isPending ||
@@ -184,8 +188,8 @@ export const PeerAssignmentActions = ({
             </p>
             {syncResults
               .filter((r) => !r.success)
-              .map((r, i) => (
-                <p key={i} className='text-sm text-destructive'>
+              .map((r) => (
+                <p key={`${r.studentID}-${r.peerID}`} className='text-sm text-destructive'>
                   Failed: {r.studentID.slice(0, 8)}... → {r.peerID.slice(0, 8)}...: {r.error}
                 </p>
               ))}

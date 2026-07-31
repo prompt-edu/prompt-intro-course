@@ -1,7 +1,7 @@
-import { Seat } from '../../../interfaces/Seat'
-import { PeerAssignment } from '../../../interfaces/PeerAssignment'
-import { Tutor } from '../../../interfaces/Tutor'
-import { DeveloperWithProfile } from '../interfaces/DeveloperWithProfile'
+import type { PeerAssignment } from '../../../interfaces/PeerAssignment'
+import type { Seat } from '../../../interfaces/Seat'
+import type { Tutor } from '../../../interfaces/Tutor'
+import type { DeveloperWithProfile } from '../interfaces/DeveloperWithProfile'
 import { parseSeatName } from './seatGrid'
 
 function shuffle<T>(arr: T[]): T[] {
@@ -39,7 +39,9 @@ export function autoAssignTutors(seats: Seat[], tutors: Tutor[]): Seat[] {
   })
 
   const seatIndex = new Map<string, number>()
-  updated.forEach((s, i) => seatIndex.set(s.seatName, i))
+  updated.forEach((s, i) => {
+    seatIndex.set(s.seatName, i)
+  })
 
   const totalSeats = sorted.length
   const blockSize = Math.floor(totalSeats / tutors.length)
@@ -196,7 +198,9 @@ export function smartAssign(
 
   // Build seat index for O(1) lookup
   const seatIndex = new Map<string, number>()
-  updatedSeats.forEach((s, i) => seatIndex.set(s.seatName, i))
+  updatedSeats.forEach((s, i) => {
+    seatIndex.set(s.seatName, i)
+  })
 
   // For each tutor group, assign students to that tutor's seats
   for (const tutorId of tutorIds) {

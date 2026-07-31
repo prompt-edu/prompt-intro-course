@@ -1,16 +1,9 @@
-import { useCourseStore } from '@tumaet/prompt-shared-state'
-import { useParams } from 'react-router-dom'
-import { Loader2, TriangleAlert } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  CoursePhaseParticipationWithStudent,
+  type CoursePhaseParticipationWithStudent,
   getOwnCoursePhaseParticipation,
+  useCourseStore,
 } from '@tumaet/prompt-shared-state'
-import { useEffect, useState } from 'react'
-import { useIntroCourseStore } from './zustand/useIntroCourseStore'
-import { getOwnDeveloperProfile } from './network/queries/getOwnDeveloperProfile'
-import { DeveloperProfile } from './interfaces/DeveloperProfile'
-import { OwnPeerAssignment } from './interfaces/PeerAssignment'
 import {
   Alert,
   AlertDescription,
@@ -18,9 +11,16 @@ import {
   ErrorPage,
   UnauthorizedPage,
 } from '@tumaet/prompt-ui-components'
-import { SeatAssignment } from './pages/SeatAssignment/interfaces/SeatAssignment'
-import { getOwnSeatPlanAssignment } from './network/queries/getOwnSeatPlanAssignment'
+import { Loader2, TriangleAlert } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import type { DeveloperProfile } from './interfaces/DeveloperProfile'
+import type { OwnPeerAssignment } from './interfaces/PeerAssignment'
+import { getOwnDeveloperProfile } from './network/queries/getOwnDeveloperProfile'
 import { getOwnPeerAssignment } from './network/queries/getOwnPeerAssignment'
+import { getOwnSeatPlanAssignment } from './network/queries/getOwnSeatPlanAssignment'
+import type { SeatAssignment } from './pages/SeatAssignment/interfaces/SeatAssignment'
+import { useIntroCourseStore } from './zustand/useIntroCourseStore'
 
 interface IntroCourseDataShellProps {
   children: React.ReactNode

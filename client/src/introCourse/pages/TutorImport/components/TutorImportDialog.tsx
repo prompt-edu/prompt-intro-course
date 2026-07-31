@@ -1,11 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Loader2, UserPlus, AlertTriangle } from 'lucide-react'
-import { useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCourseStore, Student } from '@tumaet/prompt-shared-state'
-import { getStudentsOfCoursePhase } from '../../../network/queries/getStudentsOfCoursePhase'
-import { importTutors, ImportTutorsResult } from '../../../network/mutations/importTutors'
-import { StudentSelection } from './StudentSelection'
+import { type Student, useCourseStore } from '@tumaet/prompt-shared-state'
 import {
   Alert,
   AlertDescription,
@@ -17,13 +11,19 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Label,
 } from '@tumaet/prompt-ui-components'
+import { AlertTriangle, Loader2, UserPlus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { type ImportTutorsResult, importTutors } from '../../../network/mutations/importTutors'
+import { getStudentsOfCoursePhase } from '../../../network/queries/getStudentsOfCoursePhase'
+import { StudentSelection } from './StudentSelection'
 
 export function TutorImportDialog() {
   // Destination course/phase come from URL parameters.
@@ -70,11 +70,11 @@ export function TutorImportDialog() {
   }
 
   // (De)select all students.
-  const handleSelectAll = (students: Student[]) => {
-    if (selectedStudents.length === students.length) {
+  const handleSelectAll = (selectableStudents: Student[]) => {
+    if (selectedStudents.length === selectableStudents.length) {
       setSelectedStudents([])
     } else {
-      setSelectedStudents(students.map((s) => s.id).filter((id) => id !== undefined))
+      setSelectedStudents(selectableStudents.map((s) => s.id).filter((id) => id !== undefined))
     }
   }
 
@@ -213,12 +213,14 @@ export function TutorImportDialog() {
                 <p className='font-medium mb-1'>
                   Tutors imported successfully, but Keycloak group assignment had issues:
                 </p>
-                {importWarnings.map((w, i) => (
-                  <p key={i} className='text-sm text-muted-foreground'>{w}</p>
+                {importWarnings.map((w) => (
+                  <p key={w} className='text-sm text-muted-foreground'>
+                    {w}
+                  </p>
                 ))}
                 <p className='text-sm mt-2'>
-                  You can retry the Keycloak assignment by re-importing the same tutors, or
-                  assign them manually in the Keycloak admin console.
+                  You can retry the Keycloak assignment by re-importing the same tutors, or assign
+                  them manually in the Keycloak admin console.
                 </p>
               </AlertDescription>
             </Alert>
