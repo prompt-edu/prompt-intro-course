@@ -1,6 +1,6 @@
 /**
  * E2E Playwright screenshots — captures all views from the real React app.
- * Requires: Go dev server on :8082, webpack dev server on :3006
+ * Requires: Go dev server on :8082, Rspack dev server on :3006
  */
 const { chromium } = require('playwright')
 
