@@ -1,9 +1,9 @@
 /**
- * Minimal webpack config for screenshot harness.
+ * Minimal Rspack config for the screenshot harness.
  * Skips Module Federation.
  */
-const path = require('path')
-const HtmlWebpackPlugin = require('html-webpack-plugin')
+const path = require('node:path')
+const rspack = require('@rspack/core')
 
 module.exports = {
   target: 'web',
@@ -30,10 +30,12 @@ module.exports = {
       {
         test: /\.tsx?$/,
         use: {
-          loader: 'ts-loader',
+          loader: 'builtin:swc-loader',
           options: {
-            configFile: path.resolve(__dirname, 'tsconfig.json'),
-            transpileOnly: true,
+            jsc: {
+              parser: { syntax: 'typescript', tsx: true },
+              transform: { react: { runtime: 'automatic' } },
+            },
           },
         },
         exclude: /node_modules/,
@@ -67,14 +69,15 @@ module.exports = {
     filename: 'screenshot.js',
     path: path.resolve(__dirname, 'build-screenshot'),
     publicPath: '/',
+    clean: true,
   },
   resolve: {
     extensions: ['.ts', '.tsx', '.js', '.mjs', '.jsx'],
   },
   plugins: [
-    new HtmlWebpackPlugin({
+    new rspack.HtmlRspackPlugin({
       template: 'public/template.html',
     }),
   ],
-  cache: { type: 'filesystem' },
+  cache: { type: 'persistent' },
 }

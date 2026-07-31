@@ -1,6 +1,6 @@
 /**
  * E2E screenshot harness — fetches real data from Go API, renders real components.
- * Usage: start Go dev server on :8082, then webpack dev server on :3006
+ * Usage: start Go dev server on :8082, then Rspack dev server on :3006
  */
 import { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -33,7 +33,7 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
 })
 
-// Use relative URL — webpack dev server proxies /intro-course to Go server
+// Use relative URL — Rspack dev server proxies /intro-course to Go server
 const API = '/intro-course/api/course_phase/4179d58a-d00d-4fa7-94a5-397bc69fab02'
 
 // ── Student name lookup (PROMPT Core isn't running, so we provide names locally) ──

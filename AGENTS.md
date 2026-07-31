@@ -6,7 +6,7 @@ This document provides essential context for AI assistants working on the standa
 
 **PROMPT Intro Course** is the extracted intro-course part of the PROMPT platform. It contains:
 
-- **Client**: intro-course developer micro-frontend (Webpack Module Federation remote)
+- **Client**: intro-course developer micro-frontend (Rspack Module Federation remote)
 - **Server**: intro-course backend service (Go + Gin + PostgreSQL)
 - **Deployment**: dedicated Docker Compose and GitHub Actions workflows for intro-course services only
 
@@ -88,7 +88,7 @@ Server defaults are resolved in `server/utils/getEnv.go` and `server/main.go`.
 ### Frontend (`client/`)
 
 - React + TypeScript
-- Webpack 5 + Module Federation
+- Rspack 2 + Module Federation
 - TanStack React Query
 - Zustand
 - Tailwind CSS
@@ -221,7 +221,7 @@ Roles used in this repo:
 
 ## Module Federation Pattern (Client)
 
-In `client/webpack.config.ts`:
+In `client/rspack.config.mjs`:
 
 - Remote name: `intro_course_developer_component`
 - Dev port: `3005`
