@@ -13,7 +13,6 @@ import (
 	sentrylogrus "github.com/getsentry/sentry-go/logrus"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
-	promptSDK "github.com/prompt-edu/prompt-sdk"
 	"github.com/prompt-edu/prompt-intro-course/server/config"
 	"github.com/prompt-edu/prompt-intro-course/server/copy"
 	db "github.com/prompt-edu/prompt-intro-course/server/db/sqlc"
@@ -23,6 +22,7 @@ import (
 	"github.com/prompt-edu/prompt-intro-course/server/seatPlan"
 	"github.com/prompt-edu/prompt-intro-course/server/tutor"
 	"github.com/prompt-edu/prompt-intro-course/server/utils"
+	promptSDK "github.com/prompt-edu/prompt-sdk"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -62,7 +62,6 @@ func initSentry() {
 		Environment:      utils.GetEnv("ENVIRONMENT", "development"),
 		Debug:            false,
 		Transport:        transport,
-		EnableLogs:       true,
 		AttachStacktrace: true,
 		SendDefaultPII:   true,
 		EnableTracing:    true,
@@ -83,16 +82,13 @@ func initSentry() {
 		client,
 	)
 
-	eventHook := sentrylogrus.NewEventHookFromClient(
-		[]log.Level{log.ErrorLevel, log.FatalLevel, log.PanicLevel},
-		client,
-	)
+	eventHook := newSentryEventHook([]log.Level{log.ErrorLevel, log.FatalLevel, log.PanicLevel})
 
 	log.AddHook(logHook)
 	log.AddHook(eventHook)
 
 	log.RegisterExitHandler(func() {
-		eventHook.Flush(5 * time.Second)
+		sentry.Flush(5 * time.Second)
 		logHook.Flush(5 * time.Second)
 	})
 
