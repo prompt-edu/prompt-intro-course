@@ -1,4 +1,4 @@
-import { DeveloperProfile } from '../../interfaces/DeveloperProfile'
+import type { DeveloperProfile } from '../../interfaces/DeveloperProfile'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
 export const getOwnDeveloperProfile = async (coursePhaseID: string): Promise<DeveloperProfile> => {

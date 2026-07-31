@@ -1,4 +1,4 @@
-import { SeatAssignment } from '../../pages/SeatAssignment/interfaces/SeatAssignment'
+import type { SeatAssignment } from '../../pages/SeatAssignment/interfaces/SeatAssignment'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
 export const getOwnSeatPlanAssignment = async (coursePhaseID: string): Promise<SeatAssignment> => {

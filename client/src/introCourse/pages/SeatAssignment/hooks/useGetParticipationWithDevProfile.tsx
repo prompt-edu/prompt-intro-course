@@ -1,6 +1,6 @@
-import { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
+import type { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
 import { useMemo } from 'react'
-import { DeveloperProfile } from '../../../interfaces/DeveloperProfile'
+import type { DeveloperProfile } from '../../../interfaces/DeveloperProfile'
 
 export const useGetParticipationsWithDevProfile = (
   participants: CoursePhaseParticipationWithStudent[],

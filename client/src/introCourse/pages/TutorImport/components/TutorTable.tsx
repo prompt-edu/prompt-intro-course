@@ -1,21 +1,21 @@
-import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { translations } from '@tumaet/prompt-shared-state'
 import {
+  Input,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Input,
 } from '@tumaet/prompt-ui-components'
 import { SearchIcon } from 'lucide-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { getAllTutors } from '../../../network/queries/getAllTutors'
-import { Tutor } from '../../../interfaces/Tutor'
-import { translations } from '@tumaet/prompt-shared-state'
-import { UpdateTutor } from '../../../interfaces/UpdateTutor'
+import type { Tutor } from '../../../interfaces/Tutor'
+import type { UpdateTutor } from '../../../interfaces/UpdateTutor'
 import { updateTutorGitLabUsername } from '../../../network/mutations/updateTutor'
+import { getAllTutors } from '../../../network/queries/getAllTutors'
 
 export function TutorTable() {
   const { phaseId } = useParams<{ phaseId: string }>()
@@ -90,13 +90,15 @@ export function TutorTable() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 3 }).map((_, index) => (
-                <TableRow key={index}>
-                  {Array.from({ length: 7 }).map((__, cellIndex) => (
-                    <TableCell key={cellIndex}>
-                      <div className='h-5 w-full animate-pulse rounded bg-muted' />
-                    </TableCell>
-                  ))}
+              ['row-1', 'row-2', 'row-3'].map((rowId) => (
+                <TableRow key={rowId}>
+                  {['cell-1', 'cell-2', 'cell-3', 'cell-4', 'cell-5', 'cell-6', 'cell-7'].map(
+                    (cellId) => (
+                      <TableCell key={cellId}>
+                        <div className='h-5 w-full animate-pulse rounded bg-muted' />
+                      </TableCell>
+                    ),
+                  )}
                 </TableRow>
               ))
             ) : tutors?.length === 0 ? (

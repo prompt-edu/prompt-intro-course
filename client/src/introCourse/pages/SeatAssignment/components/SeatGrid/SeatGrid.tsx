@@ -1,7 +1,5 @@
-import { Fragment, useState, useMemo, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
-import { Users, GraduationCap, Armchair } from 'lucide-react'
+import type { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
 import {
   Alert,
   AlertDescription,
@@ -13,22 +11,23 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from '@tumaet/prompt-ui-components'
-import { Seat } from '../../../../interfaces/Seat'
-import { Tutor } from '../../../../interfaces/Tutor'
-import { PeerAssignment } from '../../../../interfaces/PeerAssignment'
-import { updateSeatPlan } from '../../../../network/mutations/updateSeatPlan'
+import { Armchair, GraduationCap, Users } from 'lucide-react'
+import { Fragment, useCallback, useMemo, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import type { PeerAssignment } from '../../../../interfaces/PeerAssignment'
+import type { Seat } from '../../../../interfaces/Seat'
+import type { Tutor } from '../../../../interfaces/Tutor'
 import { updatePeerAssignments } from '../../../../network/mutations/updatePeerAssignments'
+import { updateSeatPlan } from '../../../../network/mutations/updateSeatPlan'
+import { RECHNERHALLE_LAYOUT } from '../../utils/rechnerHalle'
 import {
+  buildPeerGroups,
   buildPhysicalSeatMap,
   getMaxPhysicalPosition,
-  buildPeerGroups,
-  TUTOR_COLORS,
   type SeatGridViewMode,
 } from '../../utils/seatGrid'
-import { RECHNERHALLE_LAYOUT } from '../../utils/rechnerHalle'
 import { SeatCell } from './SeatCell'
 import { SeatGridLegend } from './SeatGridLegend'
-import { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
 
 interface SeatGridProps {
   seats: Seat[]
@@ -55,7 +54,8 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
   })
 
   const peerMutation = useMutation({
-    mutationFn: (assignments: PeerAssignment[]) => updatePeerAssignments(phaseId ?? '', assignments),
+    mutationFn: (assignments: PeerAssignment[]) =>
+      updatePeerAssignments(phaseId ?? '', assignments),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['peerAssignments', phaseId] })
     },
@@ -83,9 +83,13 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
   // Tutor color assignment: stable mapping of tutorID -> color index
   const tutorColorMap = useMemo(() => {
     const map = new Map<string, number>()
-    const uniqueTutors = [...new Set(seats.filter((s) => s.assignedTutor).map((s) => s.assignedTutor!))]
+    const uniqueTutors = [
+      ...new Set(seats.filter((s) => s.assignedTutor).map((s) => s.assignedTutor!)),
+    ]
     uniqueTutors.sort()
-    uniqueTutors.forEach((id, idx) => map.set(id, idx))
+    uniqueTutors.forEach((id, idx) => {
+      map.set(id, idx)
+    })
     return map
   }, [seats])
 
@@ -229,7 +233,13 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
       const seatB = seat
 
       // Tutor-to-tutor: swap entire blocks
-      if (seatA.isTutorSeat && seatB.isTutorSeat && seatA.assignedTutor && seatB.assignedTutor && seatA.assignedTutor !== seatB.assignedTutor) {
+      if (
+        seatA.isTutorSeat &&
+        seatB.isTutorSeat &&
+        seatA.assignedTutor &&
+        seatB.assignedTutor &&
+        seatA.assignedTutor !== seatB.assignedTutor
+      ) {
         swapTutors(seatA.assignedTutor, seatB.assignedTutor)
         setSelectedSeat(null)
         return
@@ -289,7 +299,9 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
       <ToggleGroup
         type='single'
         value={viewMode}
-        onValueChange={(value) => { if (value) setViewMode(value as SeatGridViewMode) }}
+        onValueChange={(value) => {
+          if (value) setViewMode(value as SeatGridViewMode)
+        }}
         className='mb-3'
       >
         <ToggleGroupItem value='tutor' size='sm'>
@@ -308,52 +320,53 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
         </ToggleGroupItem>
       </ToggleGroup>
 
-      {selectedSeat && (() => {
-        const selSeat = seatByName.get(selectedSeat)
-        const selStudent = selSeat?.assignedStudent
-        const selPeerGroup = selStudent ? peerGroupMap.get(selStudent) : undefined
-        return (
-          <Alert className='mb-3'>
-            <AlertDescription className='flex flex-wrap items-center gap-3'>
-              <span>Click another seat to swap, or click the same seat to deselect.</span>
-              {selSeat && !selSeat.isTutorSeat && (
-                <Select
-                  value={selSeat.assignedTutor ?? ''}
-                  onValueChange={(val) => changeTutor(selectedSeat, val)}
-                >
-                  <SelectTrigger className='w-40 h-8'>
-                    <SelectValue placeholder='Tutor' />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tutors.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.firstName} {t.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              {selStudent && hasPeerGroups && (
-                <Select
-                  value={selPeerGroup != null ? String(selPeerGroup) : ''}
-                  onValueChange={(val) => moveStudentToGroup(selStudent, Number(val))}
-                >
-                  <SelectTrigger className='w-28 h-8'>
-                    <SelectValue placeholder='Peer Group' />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: peerGroupCount }, (_, i) => i + 1).map((g) => (
-                      <SelectItem key={g} value={String(g)}>
-                        P{g}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </AlertDescription>
-          </Alert>
-        )
-      })()}
+      {selectedSeat &&
+        (() => {
+          const selSeat = seatByName.get(selectedSeat)
+          const selStudent = selSeat?.assignedStudent
+          const selPeerGroup = selStudent ? peerGroupMap.get(selStudent) : undefined
+          return (
+            <Alert className='mb-3'>
+              <AlertDescription className='flex flex-wrap items-center gap-3'>
+                <span>Click another seat to swap, or click the same seat to deselect.</span>
+                {selSeat && !selSeat.isTutorSeat && (
+                  <Select
+                    value={selSeat.assignedTutor ?? ''}
+                    onValueChange={(val) => changeTutor(selectedSeat, val)}
+                  >
+                    <SelectTrigger className='w-40 h-8'>
+                      <SelectValue placeholder='Tutor' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tutors.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.firstName} {t.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {selStudent && hasPeerGroups && (
+                  <Select
+                    value={selPeerGroup != null ? String(selPeerGroup) : ''}
+                    onValueChange={(val) => moveStudentToGroup(selStudent, Number(val))}
+                  >
+                    <SelectTrigger className='w-28 h-8'>
+                      <SelectValue placeholder='Peer Group' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: peerGroupCount }, (_, i) => i + 1).map((g) => (
+                        <SelectItem key={g} value={String(g)}>
+                          P{g}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </AlertDescription>
+            </Alert>
+          )
+        })()}
 
       {error && (
         <Alert variant='destructive' className='mb-3'>
@@ -375,7 +388,6 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
             R{r.row}
           </div>
         ))}
-
         {/* Position rows */}
         {Array.from({ length: maxPhysicalPos }, (_, i) => i + 1).map((physPos) => (
           <Fragment key={physPos}>
@@ -406,17 +418,23 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
               const isPeerOfSelected =
                 seat.assignedStudent != null && selectedPeers.has(seat.assignedStudent)
 
-              const peerGroup = seat.assignedStudent ? peerGroupMap.get(seat.assignedStudent) : undefined
+              const peerGroup = seat.assignedStudent
+                ? peerGroupMap.get(seat.assignedStudent)
+                : undefined
 
               return (
                 <SeatCell
                   key={key}
                   seat={seat}
-                  tutorColorIndex={seat.assignedTutor ? (tutorColorMap.get(seat.assignedTutor) ?? -1) : -1}
-                  peerGroupColorIndex={peerGroup != null ? (peerGroup - 1) : -1}
+                  tutorColorIndex={
+                    seat.assignedTutor ? (tutorColorMap.get(seat.assignedTutor) ?? -1) : -1
+                  }
+                  peerGroupColorIndex={peerGroup != null ? peerGroup - 1 : -1}
                   studentLabel={
                     seat.isTutorSeat
-                      ? (seat.assignedTutor ? (tutorNameMap.get(seat.assignedTutor) ?? null) : null)
+                      ? seat.assignedTutor
+                        ? (tutorNameMap.get(seat.assignedTutor) ?? null)
+                        : null
                       : getStudentInitials(seat.assignedStudent)
                   }
                   peerGroupLabel={peerGroup != null ? `P${peerGroup}` : null}
@@ -439,7 +457,6 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
         peerGroupCount={peerGroupCount}
         peerGroupMap={peerGroupMap}
       />
-
     </div>
   )
 }

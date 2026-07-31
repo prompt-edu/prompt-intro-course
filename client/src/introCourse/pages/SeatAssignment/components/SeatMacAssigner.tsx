@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react'
-import type { Seat } from '../../../interfaces/Seat'
-import { AlertCircle, Laptop, ChevronUp, ChevronDown, SearchIcon } from 'lucide-react'
-import { useUpdateSeats } from '../hooks/useUpdateSeats'
 import {
+  Alert,
+  AlertDescription,
+  Button,
   Card,
   CardContent,
   CardDescription,
@@ -11,16 +10,17 @@ import {
   CardTitle,
   Input,
   Switch,
-  Alert,
-  AlertDescription,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Button,
 } from '@tumaet/prompt-ui-components'
+import { AlertCircle, ChevronDown, ChevronUp, Laptop, SearchIcon } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import type { Seat } from '../../../interfaces/Seat'
+import { useUpdateSeats } from '../hooks/useUpdateSeats'
 
 interface SeatMacAssignerProps {
   existingSeats: Seat[]

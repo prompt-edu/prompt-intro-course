@@ -1,25 +1,25 @@
-import { useState } from 'react'
-import { AlertCircle, UserCheck, X, CheckSquare, ChevronDown, ChevronUp } from 'lucide-react'
-import type { Seat } from '../../../../interfaces/Seat'
-import type { Tutor } from '../../../../interfaces/Tutor'
-import { SeatTutorTable } from './SeatTutorTable'
-import { useUpdateSeats } from '../../hooks/useUpdateSeats'
 import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-  Alert,
-  AlertDescription,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Badge,
-  Button,
 } from '@tumaet/prompt-ui-components'
+import { AlertCircle, CheckSquare, ChevronDown, ChevronUp, UserCheck, X } from 'lucide-react'
+import { useState } from 'react'
+import type { Seat } from '../../../../interfaces/Seat'
+import type { Tutor } from '../../../../interfaces/Tutor'
+import { useUpdateSeats } from '../../hooks/useUpdateSeats'
+import { SeatTutorTable } from './SeatTutorTable'
 
 interface SeatTutorAssignerProps {
   seats: Seat[]
@@ -35,7 +35,7 @@ export const SeatTutorAssigner = ({ seats, tutors, numberOfStudents }: SeatTutor
   const mutation = useUpdateSeats(setError)
 
   const handleTutorAssignment = (seatName: string, tutorId: string | null) => {
-    const seat = seats.find((seat) => seat.seatName === seatName)
+    const seat = seats.find((candidateSeat) => candidateSeat.seatName === seatName)
     if (!seat) return
     mutation.mutate([{ ...seat, assignedTutor: tutorId }])
   }
@@ -43,11 +43,13 @@ export const SeatTutorAssigner = ({ seats, tutors, numberOfStudents }: SeatTutor
   const handleTutorSeatToggle = (seatName: string, isTutorSeat: boolean) => {
     const seat = seats.find((s) => s.seatName === seatName)
     if (!seat) return
-    mutation.mutate([{
-      ...seat,
-      isTutorSeat,
-      assignedStudent: isTutorSeat ? null : seat.assignedStudent,
-    }])
+    mutation.mutate([
+      {
+        ...seat,
+        isTutorSeat,
+        assignedStudent: isTutorSeat ? null : seat.assignedStudent,
+      },
+    ])
   }
 
   const handleBatchTutorAssignment = (tutorId: string | null) => {

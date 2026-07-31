@@ -1,4 +1,4 @@
-import { GitlabRepoRequest } from '../../interfaces/GitlabRepoRequest'
+import type { GitlabRepoRequest } from '../../interfaces/GitlabRepoRequest'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
 export const createGitlabRepo = async (

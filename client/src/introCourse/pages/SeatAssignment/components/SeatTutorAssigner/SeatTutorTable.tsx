@@ -1,26 +1,26 @@
-import { useEffect, useState } from 'react'
-import { GraduationCap, SearchIcon } from 'lucide-react'
-import { Seat } from '../../../../interfaces/Seat'
-import { Tutor } from '../../../../interfaces/Tutor'
-import { TutorAssignmentFilterOptions } from '../../interfaces/TutorAssignmentFilterOptions'
-import { TutorAssignmentFilter } from './TutorAssignmentFilter'
-import { useGetFilteredSeats } from '../../hooks/useGetFilteredSeats'
 import {
+  Badge,
   Checkbox,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Badge,
-  Input,
 } from '@tumaet/prompt-ui-components'
+import { GraduationCap, SearchIcon } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import type { Seat } from '../../../../interfaces/Seat'
+import type { Tutor } from '../../../../interfaces/Tutor'
+import { useGetFilteredSeats } from '../../hooks/useGetFilteredSeats'
+import type { TutorAssignmentFilterOptions } from '../../interfaces/TutorAssignmentFilterOptions'
+import { TutorAssignmentFilter } from './TutorAssignmentFilter'
 
 interface SeatTutorTableProps {
   allSeats: Seat[]

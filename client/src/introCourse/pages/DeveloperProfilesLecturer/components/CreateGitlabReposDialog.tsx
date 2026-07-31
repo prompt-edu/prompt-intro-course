@@ -1,3 +1,9 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  useCourseStore,
+  useGetCoursePhase,
+  useModifyCoursePhase,
+} from '@tumaet/prompt-shared-state'
 import {
   Button,
   Dialog,
@@ -8,19 +14,13 @@ import {
   DialogTrigger,
   Input,
 } from '@tumaet/prompt-ui-components'
-import { CheckCircle, Loader2, AlertCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { ParticipationWithDevProfiles } from '../interfaces/pariticipationWithDevProfiles'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createGitlabRepo } from '../../../network/mutations/createGitlabRepo'
 import { useParams } from 'react-router-dom'
-import { GitlabRepoRequest } from '../../../interfaces/GitlabRepoRequest'
-import {
-  useCourseStore,
-  useGetCoursePhase,
-  useModifyCoursePhase,
-} from '@tumaet/prompt-shared-state'
+import type { GitlabRepoRequest } from '../../../interfaces/GitlabRepoRequest'
+import { createGitlabRepo } from '../../../network/mutations/createGitlabRepo'
 import { createIntroCourseGitlabInfrastructure } from '../../../network/mutations/createIntroCourseGitlabInfrastructure'
+import type { ParticipationWithDevProfiles } from '../interfaces/pariticipationWithDevProfiles'
 
 interface CreateGitlabReposDialogProps {
   participantsWithDevProfiles: ParticipationWithDevProfiles[]
@@ -198,8 +198,8 @@ export const CreateGitlabReposDialog = ({
           )}
 
           <div className='mt-4 max-h-40 overflow-auto border rounded p-2 text-xs'>
-            {logs.map((log, index) => (
-              <div key={index}>{log}</div>
+            {logs.map((log) => (
+              <div key={log}>{log}</div>
             ))}
           </div>
 

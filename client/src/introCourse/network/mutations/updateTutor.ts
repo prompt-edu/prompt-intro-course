@@ -1,4 +1,4 @@
-import { UpdateTutor } from '../../interfaces/UpdateTutor'
+import type { UpdateTutor } from '../../interfaces/UpdateTutor'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
 export const updateTutorGitLabUsername = async (

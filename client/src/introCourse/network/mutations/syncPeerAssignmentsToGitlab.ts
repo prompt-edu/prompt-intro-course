@@ -1,4 +1,4 @@
-import { SyncResult } from '../../interfaces/PeerAssignment'
+import type { SyncResult } from '../../interfaces/PeerAssignment'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
 export const syncPeerAssignmentsToGitlab = async (

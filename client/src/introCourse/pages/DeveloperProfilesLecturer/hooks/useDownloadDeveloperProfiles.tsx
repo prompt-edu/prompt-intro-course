@@ -1,10 +1,7 @@
+import { type CoursePhaseParticipationWithStudent, translations } from '@tumaet/prompt-shared-state'
 import { useCallback } from 'react'
-import {
-  translations,
-  type CoursePhaseParticipationWithStudent,
-} from '@tumaet/prompt-shared-state'
 import type { DeveloperProfile } from '../../../interfaces/DeveloperProfile'
-import { GitlabStatus } from '../../../interfaces/GitlabStatus'
+import type { GitlabStatus } from '../../../interfaces/GitlabStatus'
 
 export type ParticipantWithProfile = {
   participation: CoursePhaseParticipationWithStudent

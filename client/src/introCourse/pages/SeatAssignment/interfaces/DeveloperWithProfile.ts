@@ -1,5 +1,5 @@
-import { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
-import { DeveloperProfile } from '../../../interfaces/DeveloperProfile'
+import type { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
+import type { DeveloperProfile } from '../../../interfaces/DeveloperProfile'
 
 export type DeveloperWithProfile = {
   participation: CoursePhaseParticipationWithStudent

@@ -1,12 +1,12 @@
-import { DeveloperProfileForm } from './DeveloperProfileForm'
-import { useIntroCourseStore } from '../../zustand/useIntroCourseStore'
-import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@tumaet/prompt-ui-components'
 import { AlertCircle, CheckCircle } from 'lucide-react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { postDeveloperProfile } from '../../network/mutations/postDeveloperProfile'
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { PostDeveloperProfile } from '../../interfaces/PostDeveloperProfile'
+import type { PostDeveloperProfile } from '../../interfaces/PostDeveloperProfile'
+import { postDeveloperProfile } from '../../network/mutations/postDeveloperProfile'
+import { useIntroCourseStore } from '../../zustand/useIntroCourseStore'
+import { DeveloperProfileForm } from './DeveloperProfileForm'
 
 interface DeveloperProfilePageProps {
   onContinue: () => void

@@ -1,9 +1,9 @@
-import { useState } from 'react'
 import { ManagementPageHeader } from '@tumaet/prompt-ui-components'
+import { useState } from 'react'
 import { IntroCourseStep } from './components/IntroCourseStep'
-import { useIntroCourseStore } from './zustand/useIntroCourseStore'
 import { DeveloperProfilePage } from './pages/DeveloperProfile/DeveloperProfilePage'
 import { StudentSeatAssignmentDisplay } from './pages/StudentSeatAssignmentDisplay/StudentSeatAssignmentDisplay'
+import { useIntroCourseStore } from './zustand/useIntroCourseStore'
 
 export const IntroCoursePage = () => {
   // TODO: replace with actual state management

@@ -22,4 +22,4 @@ jobs:
           cache-dependency-path: ./client/yarn.lock
       - run: yarn install
       - name: Run client lint
-        run: yarn lint
+        run: yarn biome check .

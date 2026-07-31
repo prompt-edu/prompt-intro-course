@@ -1,9 +1,7 @@
-import { OwnPeerAssignment } from '../../interfaces/PeerAssignment'
+import type { OwnPeerAssignment } from '../../interfaces/PeerAssignment'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
-export const getOwnPeerAssignment = async (
-  coursePhaseID: string,
-): Promise<OwnPeerAssignment> => {
+export const getOwnPeerAssignment = async (coursePhaseID: string): Promise<OwnPeerAssignment> => {
   try {
     return (
       await introCourseAxiosInstance.get(

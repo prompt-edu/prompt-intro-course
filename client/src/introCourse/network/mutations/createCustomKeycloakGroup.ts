@@ -1,5 +1,5 @@
+import type { CreateKeycloakGroup } from '../../interfaces/CreateKeycloakGroup'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
-import { CreateKeycloakGroup } from '../../interfaces/CreateKeycloakGroup'
 
 export const createCustomKeycloakGroup = async (
   courseID: string,

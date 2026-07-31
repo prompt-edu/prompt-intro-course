@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
-import { Tutor } from '../../../interfaces/Tutor'
-import { Seat } from '../../../interfaces/Seat'
-import { TutorAssignmentFilterOptions } from '../interfaces/TutorAssignmentFilterOptions'
+import type { Seat } from '../../../interfaces/Seat'
+import type { Tutor } from '../../../interfaces/Tutor'
+import type { TutorAssignmentFilterOptions } from '../interfaces/TutorAssignmentFilterOptions'
 import { getTutorName } from '../utils/getTutorName'
 
 export const useGetFilteredSeats = (

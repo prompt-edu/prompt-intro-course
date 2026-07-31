@@ -2,18 +2,9 @@
  * E2E screenshot harness — fetches real data from Go API, renders real components.
  * Usage: start Go dev server on :8082, then Rspack dev server on :3006
  */
-import { useEffect, useState } from 'react'
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { SeatGrid } from './introCourse/pages/SeatAssignment/components/SeatGrid/SeatGrid'
-import { SeatTutorTable } from './introCourse/pages/SeatAssignment/components/SeatTutorAssigner/SeatTutorTable'
-import { PeerGroupList } from './introCourse/pages/PeerAssignment/components/PeerGroupList'
-import { Seat } from './introCourse/interfaces/Seat'
-import { Tutor } from './introCourse/interfaces/Tutor'
-import { PeerAssignment } from './introCourse/interfaces/PeerAssignment'
-import { DeveloperProfile } from './introCourse/interfaces/DeveloperProfile'
 import type { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
-import { Monitor, User, Users, ExternalLink } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -28,6 +19,16 @@ import {
   CardTitle,
   Skeleton,
 } from '@tumaet/prompt-ui-components'
+import { ExternalLink, Monitor, User, Users } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import type { DeveloperProfile } from './introCourse/interfaces/DeveloperProfile'
+import type { PeerAssignment } from './introCourse/interfaces/PeerAssignment'
+import type { Seat } from './introCourse/interfaces/Seat'
+import type { Tutor } from './introCourse/interfaces/Tutor'
+import { PeerGroupList } from './introCourse/pages/PeerAssignment/components/PeerGroupList'
+import { SeatGrid } from './introCourse/pages/SeatAssignment/components/SeatGrid/SeatGrid'
+import { SeatTutorTable } from './introCourse/pages/SeatAssignment/components/SeatTutorAssigner/SeatTutorTable'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -38,20 +39,62 @@ const API = '/intro-course/api/course_phase/4179d58a-d00d-4fa7-94a5-397bc69fab02
 
 // ── Student name lookup (PROMPT Core isn't running, so we provide names locally) ──
 const studentNames: [string, string][] = [
-  ['Max','Mueller'],['Anna','Schneider'],['Lukas','Wagner'],['Sophie','Fischer'],
-  ['Leon','Weber'],['Emma','Braun'],['Paul','Hoffmann'],['Marie','Schulz'],
-  ['Jonas','Koch'],['Tim','Klein'],['Felix','Groß'],['Hannah','Bauer'],
-  ['Lena','Berger'],['Tom','Richter'],['Laura','Krause'],['Nico','Wolf'],
-  ['Mia','Schmitt'],['Finn','Neumann'],['Sara','Schwarz'],['Eric','Zimmermann'],
-  ['Robin','Braun'],['Jan','Beck'],['Fiona','Keller'],['Henry','Hartmann'],
-  ['Ben','Lang'],['Lisa','Schäfer'],['Lea','Werner'],['Lars','Seidel'],
-  ['Timo','Meyer'],['Julia','Lange'],['Nina','Schmid'],['Alex','Meier'],
-  ['Diana','Krug'],['Nora','Hahn'],['Jakob','Kaiser'],['Clara','Weiß'],
-  ['Max','König'],['Anne','Frank'],['Hugo','Peters'],['Pia','Brandt'],
-  ['Cleo','Ludwig'],['Oscar','Sommer'],['Ella','Maier'],['Karl','Wirth'],
-  ['Kurt','Jung'],['Eva','Horn'],['Zoe','Stein'],['Sam','Vogel'],
-  ['Noah','Fiedler'],['Ralf','Krüger'],['Lara','Koenig'],['Theo','Günther'],
-  ['Peter','Fuchs'],['Ida','Becker'],['Tina','Wendt'],['Vera','Roth'],
+  ['Max', 'Mueller'],
+  ['Anna', 'Schneider'],
+  ['Lukas', 'Wagner'],
+  ['Sophie', 'Fischer'],
+  ['Leon', 'Weber'],
+  ['Emma', 'Braun'],
+  ['Paul', 'Hoffmann'],
+  ['Marie', 'Schulz'],
+  ['Jonas', 'Koch'],
+  ['Tim', 'Klein'],
+  ['Felix', 'Groß'],
+  ['Hannah', 'Bauer'],
+  ['Lena', 'Berger'],
+  ['Tom', 'Richter'],
+  ['Laura', 'Krause'],
+  ['Nico', 'Wolf'],
+  ['Mia', 'Schmitt'],
+  ['Finn', 'Neumann'],
+  ['Sara', 'Schwarz'],
+  ['Eric', 'Zimmermann'],
+  ['Robin', 'Braun'],
+  ['Jan', 'Beck'],
+  ['Fiona', 'Keller'],
+  ['Henry', 'Hartmann'],
+  ['Ben', 'Lang'],
+  ['Lisa', 'Schäfer'],
+  ['Lea', 'Werner'],
+  ['Lars', 'Seidel'],
+  ['Timo', 'Meyer'],
+  ['Julia', 'Lange'],
+  ['Nina', 'Schmid'],
+  ['Alex', 'Meier'],
+  ['Diana', 'Krug'],
+  ['Nora', 'Hahn'],
+  ['Jakob', 'Kaiser'],
+  ['Clara', 'Weiß'],
+  ['Max', 'König'],
+  ['Anne', 'Frank'],
+  ['Hugo', 'Peters'],
+  ['Pia', 'Brandt'],
+  ['Cleo', 'Ludwig'],
+  ['Oscar', 'Sommer'],
+  ['Ella', 'Maier'],
+  ['Karl', 'Wirth'],
+  ['Kurt', 'Jung'],
+  ['Eva', 'Horn'],
+  ['Zoe', 'Stein'],
+  ['Sam', 'Vogel'],
+  ['Noah', 'Fiedler'],
+  ['Ralf', 'Krüger'],
+  ['Lara', 'Koenig'],
+  ['Theo', 'Günther'],
+  ['Peter', 'Fuchs'],
+  ['Ida', 'Becker'],
+  ['Tina', 'Wendt'],
+  ['Vera', 'Roth'],
 ]
 
 function buildParticipations(seats: Seat[]): CoursePhaseParticipationWithStudent[] {
@@ -107,10 +150,10 @@ function useApiData() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/seat_plan`).then(r => r.json()),
-      fetch(`${API}/tutor`).then(r => r.json()),
-      fetch(`${API}/peer_assignments`).then(r => r.json()),
-      fetch(`${API}/developer-profile/all`).then(r => r.json()),
+      fetch(`${API}/seat_plan`).then((r) => r.json()),
+      fetch(`${API}/tutor`).then((r) => r.json()),
+      fetch(`${API}/peer_assignments`).then((r) => r.json()),
+      fetch(`${API}/developer-profile/all`).then((r) => r.json()),
     ])
       .then(([s, t, p, d]) => {
         setSeats(s)
@@ -119,7 +162,7 @@ function useApiData() {
         setProfiles(d)
         setLoading(false)
       })
-      .catch(e => {
+      .catch((e) => {
         setError(e.message)
         setLoading(false)
       })
@@ -135,8 +178,8 @@ const SeatGridPage = () => {
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} />
 
-  const studentCount = seats.filter(s => s.assignedStudent).length
-  const totalStudentSeats = seats.filter(s => !s.isTutorSeat).length
+  const studentCount = seats.filter((s) => s.assignedStudent).length
+  const totalStudentSeats = seats.filter((s) => !s.isTutorSeat).length
 
   return (
     <div className='p-6 max-w-5xl mx-auto'>
@@ -242,8 +285,8 @@ const StudentViewPage = () => {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/seat_plan/own-assignment`).then(r => r.json()),
-      fetch(`${API}/peer_assignments/own`).then(r => r.json()),
+      fetch(`${API}/seat_plan/own-assignment`).then((r) => r.json()),
+      fetch(`${API}/peer_assignments/own`).then((r) => r.json()),
     ])
       .then(([seat, peers]) => {
         setData(seat)

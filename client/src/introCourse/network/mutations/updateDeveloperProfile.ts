@@ -1,4 +1,4 @@
-import { PostDeveloperProfile } from '../../interfaces/PostDeveloperProfile'
+import type { PostDeveloperProfile } from '../../interfaces/PostDeveloperProfile'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
 export const updateDeveloperProfile = async (

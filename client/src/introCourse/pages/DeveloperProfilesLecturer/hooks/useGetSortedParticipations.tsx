@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ParticipationWithDevProfiles } from '../interfaces/pariticipationWithDevProfiles'
+import type { ParticipationWithDevProfiles } from '../interfaces/pariticipationWithDevProfiles'
 
 export const useGetSortedParticipations = (
   sortConfig:

@@ -1,6 +1,6 @@
-import { DevProfileFilter } from '../interfaces/devProfileFilter'
 import { useMemo } from 'react'
-import { ParticipationWithDevProfiles } from '../interfaces/pariticipationWithDevProfiles'
+import type { DevProfileFilter } from '../interfaces/devProfileFilter'
+import type { ParticipationWithDevProfiles } from '../interfaces/pariticipationWithDevProfiles'
 
 export const useGetFilteredParticipations = (
   participants: ParticipationWithDevProfiles[],

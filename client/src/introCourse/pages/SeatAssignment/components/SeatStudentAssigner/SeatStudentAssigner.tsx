@@ -1,29 +1,9 @@
-import { useState, useMemo, useCallback, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  ChevronDown,
-  ChevronUp,
-  Download,
-  Upload,
-  AlertCircle,
-  UserCheck,
-  Users,
-  Laptop,
-  Sparkles,
-  X,
-} from 'lucide-react'
-import { useParams } from 'react-router-dom'
-import { Seat } from '../../../../interfaces/Seat'
-import { DeveloperWithProfile } from '../../interfaces/DeveloperWithProfile'
-import { Tutor } from '../../../../interfaces/Tutor'
-import { PeerAssignment } from '../../../../interfaces/PeerAssignment'
-import { useUpdateSeats } from '../../hooks/useUpdateSeats'
-import { useAssignStudents } from '../../hooks/useAssignStudents'
-import { useDownloadAssignment } from '../../hooks/useDownloadAssignment'
-import { smartAssign } from '../../utils/smartAssignment'
-import { importSeatAssignments, ImportSeatAssignment } from '../../../../network/mutations/importSeatAssignments'
-import { ResetSeatAssignmentDialog } from './ResetSeatAssignmentDialog'
-import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
   Card,
   CardContent,
   CardDescription,
@@ -32,22 +12,45 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-  Button,
-  Alert,
-  AlertDescription,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Badge,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
 } from '@tumaet/prompt-ui-components'
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Laptop,
+  Sparkles,
+  Upload,
+  UserCheck,
+  Users,
+  X,
+} from 'lucide-react'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import type { PeerAssignment } from '../../../../interfaces/PeerAssignment'
+import type { Seat } from '../../../../interfaces/Seat'
+import type { Tutor } from '../../../../interfaces/Tutor'
+import {
+  type ImportSeatAssignment,
+  importSeatAssignments,
+} from '../../../../network/mutations/importSeatAssignments'
+import { useAssignStudents } from '../../hooks/useAssignStudents'
+import { useDownloadAssignment } from '../../hooks/useDownloadAssignment'
+import { useUpdateSeats } from '../../hooks/useUpdateSeats'
+import type { DeveloperWithProfile } from '../../interfaces/DeveloperWithProfile'
+import { smartAssign } from '../../utils/smartAssignment'
+import { ResetSeatAssignmentDialog } from './ResetSeatAssignmentDialog'
 
 interface SeatStudentAssignerProps {
   seats: Seat[]
@@ -88,105 +91,120 @@ export const SeatStudentAssigner = ({
   }, [seats, mutation])
 
   // Smart assign function — fills remaining unassigned students into empty seats
-  const smartAssignStudents = useCallback((resetStudentsFirst = false) => {
-    let workingSeats = seats
-    if (resetStudentsFirst) {
-      workingSeats = seats.map((s) => ({ ...s, assignedStudent: null }))
-    }
+  const smartAssignStudents = useCallback(
+    (resetStudentsFirst = false) => {
+      let workingSeats = seats
+      if (resetStudentsFirst) {
+        workingSeats = seats.map((s) => ({ ...s, assignedStudent: null }))
+      }
 
-    // Auto-assign tutors if needed
-    const hasTutors = workingSeats.some((s) => s.assignedTutor)
-    if (!hasTutors && tutors.length > 0) {
-      // Will be handled inside smartAssign
-    }
+      // Auto-assign tutors if needed
+      const hasTutors = workingSeats.some((s) => s.assignedTutor)
+      if (!hasTutors && tutors.length > 0) {
+        // Will be handled inside smartAssign
+      }
 
-    const currentAssigned = resetStudentsFirst ? 0 : assignedStudents
-    const emptyStudentSeats = workingSeats.filter(
-      (seat) => (seat.assignedTutor || !hasTutors) && !seat.isTutorSeat && !seat.assignedStudent,
-    ).length
-    const unassignedCount = developerWithProfiles.length - currentAssigned
-    if (emptyStudentSeats < unassignedCount) {
-      setError(
-        `Not enough empty student seats. Need ${unassignedCount} seats, but only have ${emptyStudentSeats} available.`,
-      )
-      return
-    }
-    setError(null)
-    const updatedSeats = smartAssign(workingSeats, developerWithProfiles, peerAssignments, tutors)
-    mutation.mutate(updatedSeats)
-  }, [seats, developerWithProfiles, assignedStudents, peerAssignments, tutors, mutation])
+      const currentAssigned = resetStudentsFirst ? 0 : assignedStudents
+      const emptyStudentSeats = workingSeats.filter(
+        (seat) => (seat.assignedTutor || !hasTutors) && !seat.isTutorSeat && !seat.assignedStudent,
+      ).length
+      const unassignedCount = developerWithProfiles.length - currentAssigned
+      if (emptyStudentSeats < unassignedCount) {
+        setError(
+          `Not enough empty student seats. Need ${unassignedCount} seats, but only have ${emptyStudentSeats} available.`,
+        )
+        return
+      }
+      setError(null)
+      const updatedSeats = smartAssign(workingSeats, developerWithProfiles, peerAssignments, tutors)
+      mutation.mutate(updatedSeats)
+    },
+    [seats, developerWithProfiles, assignedStudents, peerAssignments, tutors, mutation],
+  )
 
   // CSV import — parses CSV client-side, sends to server for name resolution and atomic save
   const { phaseId } = useParams<{ phaseId: string }>()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const handleImportCSV = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const text = e.target?.result as string
-      if (!text) return
-      const lines = text.split('\n').filter((l) => l.trim())
-      if (lines.length < 2) {
-        setError('CSV file must have a header and at least one data row.')
-        return
-      }
-
-      const header = lines[0].split(',').map((h) => h.trim().toLowerCase())
-      const findCol = (name: string) => header.findIndex((h) => h === name.toLowerCase())
-      const seatCol = findCol('seat')
-      const seatMacCol = findCol('seat mac')
-      const studentNameCol = findCol('assigned student')
-      const tutorNameCol = findCol('assigned tutor')
-      const tutorSeatCol = findCol('tutor seat')
-      const peerGroupCol = findCol('peer group')
-
-      if (seatCol < 0) {
-        setError('CSV must have a "Seat" column.')
-        return
-      }
-
-      // Parse CSV into structured assignments — send raw names to server
-      const assignments: ImportSeatAssignment[] = []
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
-        const seatName = cols[seatCol]
-        if (!seatName) continue
-
-        assignments.push({
-          seatName,
-          seatMac: seatMacCol >= 0 ? cols[seatMacCol]?.toLowerCase() === 'yes' : false,
-          assignedStudent: studentNameCol >= 0 ? (cols[studentNameCol] || '') : '',
-          assignedTutor: tutorNameCol >= 0 ? (cols[tutorNameCol] || '') : '',
-          isTutorSeat: tutorSeatCol >= 0 ? cols[tutorSeatCol]?.toLowerCase() === 'yes' : false,
-          peerGroup: peerGroupCol >= 0 ? (cols[peerGroupCol] || '') : '',
-        })
-      }
-
-      try {
-        const result = await importSeatAssignments(phaseId ?? '', assignments)
-        queryClient.invalidateQueries({ queryKey: ['seatPlan', phaseId] })
-        queryClient.invalidateQueries({ queryKey: ['peerAssignments', phaseId] })
-
-        if (result.warnings && result.warnings.length > 0) {
-          setError(`Imported ${result.seatsUpdated} seats, ${result.peerGroupsImported} peer groups. Warnings: ${result.warnings.slice(0, 5).join('; ')}${result.warnings.length > 5 ? ` (+${result.warnings.length - 5} more)` : ''}`)
-        } else {
-          setError(null)
+  const handleImportCSV = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        const text = e.target?.result as string
+        if (!text) return
+        const lines = text.split('\n').filter((l) => l.trim())
+        if (lines.length < 2) {
+          setError('CSV file must have a header and at least one data row.')
+          return
         }
-      } catch (err) {
-        setError(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+
+        const header = lines[0].split(',').map((h) => h.trim().toLowerCase())
+        const findCol = (name: string) => header.findIndex((h) => h === name.toLowerCase())
+        const seatCol = findCol('seat')
+        const seatMacCol = findCol('seat mac')
+        const studentNameCol = findCol('assigned student')
+        const tutorNameCol = findCol('assigned tutor')
+        const tutorSeatCol = findCol('tutor seat')
+        const peerGroupCol = findCol('peer group')
+
+        if (seatCol < 0) {
+          setError('CSV must have a "Seat" column.')
+          return
+        }
+
+        // Parse CSV into structured assignments — send raw names to server
+        const assignments: ImportSeatAssignment[] = []
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
+          const seatName = cols[seatCol]
+          if (!seatName) continue
+
+          assignments.push({
+            seatName,
+            seatMac: seatMacCol >= 0 ? cols[seatMacCol]?.toLowerCase() === 'yes' : false,
+            assignedStudent: studentNameCol >= 0 ? cols[studentNameCol] || '' : '',
+            assignedTutor: tutorNameCol >= 0 ? cols[tutorNameCol] || '' : '',
+            isTutorSeat: tutorSeatCol >= 0 ? cols[tutorSeatCol]?.toLowerCase() === 'yes' : false,
+            peerGroup: peerGroupCol >= 0 ? cols[peerGroupCol] || '' : '',
+          })
+        }
+
+        try {
+          const result = await importSeatAssignments(phaseId ?? '', assignments)
+          queryClient.invalidateQueries({ queryKey: ['seatPlan', phaseId] })
+          queryClient.invalidateQueries({ queryKey: ['peerAssignments', phaseId] })
+
+          if (result.warnings && result.warnings.length > 0) {
+            setError(
+              `Imported ${result.seatsUpdated} seats, ${result.peerGroupsImported} peer groups. Warnings: ${result.warnings.slice(0, 5).join('; ')}${result.warnings.length > 5 ? ` (+${result.warnings.length - 5} more)` : ''}`,
+            )
+          } else {
+            setError(null)
+          }
+        } catch (err) {
+          setError(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        }
       }
-    }
-    reader.readAsText(file)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }, [phaseId, queryClient])
+      reader.readAsText(file)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    },
+    [phaseId, queryClient],
+  )
 
   // Download assignments as CSV
-  const downloadAssignments = useDownloadAssignment(seats, developerWithProfiles, tutors, peerAssignments)
+  const downloadAssignments = useDownloadAssignment(
+    seats,
+    developerWithProfiles,
+    tutors,
+    peerAssignments,
+  )
 
   // Unassigned students (for manual assignment)
   const unassignedStudents = useMemo(() => {
-    const assignedSet = new Set(seats.filter((s) => s.assignedStudent).map((s) => s.assignedStudent!))
+    const assignedSet = new Set(
+      seats.filter((s) => s.assignedStudent).map((s) => s.assignedStudent!),
+    )
     return developerWithProfiles.filter(
       (dev) => !assignedSet.has(dev.participation.courseParticipationID),
     )
@@ -258,9 +276,7 @@ export const SeatStudentAssigner = ({
               <div className='space-y-1'>
                 <div className='text-sm font-medium'>Assignment Status</div>
                 <div className='flex items-center'>
-                  {assignmentStatus === 'none' && (
-                    <Badge variant='secondary'>Not Assigned</Badge>
-                  )}
+                  {assignmentStatus === 'none' && <Badge variant='secondary'>Not Assigned</Badge>}
                   {assignmentStatus === 'partial' && (
                     <Badge variant='outline'>
                       Partially Assigned ({assignedStudents}/{totalStudents})
@@ -281,11 +297,7 @@ export const SeatStudentAssigner = ({
                   className='hidden'
                   onChange={handleImportCSV}
                 />
-                <Button
-                  variant='outline'
-                  size='sm'
-                  onClick={() => fileInputRef.current?.click()}
-                >
+                <Button variant='outline' size='sm' onClick={() => fileInputRef.current?.click()}>
                   <Upload className='mr-2 h-4 w-4' />
                   Import
                 </Button>
@@ -422,8 +434,7 @@ export const SeatStudentAssigner = ({
                       .sort((a, b) => a.seatName.localeCompare(b.seatName))
                       .map((seat) => {
                         const student = developerWithProfiles.find(
-                          (dev) =>
-                            dev.participation.courseParticipationID === seat.assignedStudent,
+                          (dev) => dev.participation.courseParticipationID === seat.assignedStudent,
                         )
                         return (
                           <TableRow key={seat.seatName}>

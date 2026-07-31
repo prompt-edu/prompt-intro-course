@@ -11,9 +11,21 @@ const VIEWS = [
   // Seat grid — tutor view (default)
   { route: '/grid', name: 'screenshot-seat-grid-tutor', width: 1280, height: 900 },
   // Seat grid — peer group view (click button)
-  { route: '/grid', name: 'screenshot-seat-grid-peer', width: 1280, height: 900, clickButton: 'Peer Group' },
+  {
+    route: '/grid',
+    name: 'screenshot-seat-grid-peer',
+    width: 1280,
+    height: 900,
+    clickButton: 'Peer Group',
+  },
   // Seat grid — seat view (click button)
-  { route: '/grid', name: 'screenshot-seat-grid-seat', width: 1280, height: 900, clickButton: 'Seat' },
+  {
+    route: '/grid',
+    name: 'screenshot-seat-grid-seat',
+    width: 1280,
+    height: 900,
+    clickButton: 'Seat',
+  },
   // Admin tutor assignment table
   { route: '/tutor-table', name: 'screenshot-admin-table', width: 1100, height: 800 },
   // Admin peer review groups
@@ -42,7 +54,7 @@ async function main() {
     // Click a view mode button if needed
     if (view.clickButton) {
       const btn = page.locator('button', { hasText: view.clickButton })
-      if (await btn.count() > 0) {
+      if ((await btn.count()) > 0) {
         await btn.click()
         await page.waitForTimeout(500)
       }
@@ -60,4 +72,7 @@ async function main() {
   console.log(`\nAll ${VIEWS.length} screenshots saved to ${OUT}/`)
 }
 
-main().catch(e => { console.error(e); process.exit(1) })
+main().catch((e) => {
+  console.error(e)
+  process.exit(1)
+})

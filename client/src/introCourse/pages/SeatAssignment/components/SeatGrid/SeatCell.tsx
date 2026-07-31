@@ -1,7 +1,7 @@
-import { GraduationCap, Laptop } from 'lucide-react'
 import { cn } from '@tumaet/prompt-ui-components'
-import { Seat } from '../../../../interfaces/Seat'
-import { parseSeatName, TUTOR_COLORS, type SeatGridViewMode } from '../../utils/seatGrid'
+import { GraduationCap, Laptop } from 'lucide-react'
+import type { Seat } from '../../../../interfaces/Seat'
+import { parseSeatName, type SeatGridViewMode, TUTOR_COLORS } from '../../utils/seatGrid'
 
 interface SeatCellProps {
   seat: Seat
@@ -56,7 +56,18 @@ export const SeatCell = ({
     >
       {/* Peer group badge — top right */}
       {peerGroupLabel && !isTutor && (
-        <span style={{ position: 'absolute', top: 1, right: 2, fontSize: 9, fontWeight: 700, lineHeight: 1, zIndex: 10 }} className='text-muted-foreground'>
+        <span
+          style={{
+            position: 'absolute',
+            top: 1,
+            right: 2,
+            fontSize: 9,
+            fontWeight: 700,
+            lineHeight: 1,
+            zIndex: 10,
+          }}
+          className='text-muted-foreground'
+        >
           {peerGroupLabel}
         </span>
       )}
@@ -74,9 +85,7 @@ export const SeatCell = ({
           {seat.seatName.replace(/^1-/, '')}
         </span>
       ) : (
-        <span className='text-[10px] text-muted-foreground'>
-          {parsed?.position}
-        </span>
+        <span className='text-[10px] text-muted-foreground'>{parsed?.position}</span>
       )}
 
       {/* Student/tutor initials or empty */}
@@ -87,9 +96,7 @@ export const SeatCell = ({
           <span className='text-muted-foreground/50'>-</span>
         )
       ) : studentLabel ? (
-        <span className={cn('font-semibold text-xs', useColor && color?.text)}>
-          {studentLabel}
-        </span>
+        <span className={cn('font-semibold text-xs', useColor && color?.text)}>{studentLabel}</span>
       ) : (
         <span className='text-muted-foreground/50'>-</span>
       )}

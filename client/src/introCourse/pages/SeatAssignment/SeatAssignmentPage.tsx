@@ -1,23 +1,31 @@
-import { useState } from 'react'
-import { ManagementPageHeader, ErrorPage, Button, Card, CardContent } from '@tumaet/prompt-ui-components'
-import { getCoursePhaseParticipations } from '@tumaet/prompt-shared-state'
 import { useQuery } from '@tanstack/react-query'
-import { CoursePhaseParticipationsWithResolution } from '@tumaet/prompt-shared-state'
+import {
+  type CoursePhaseParticipationsWithResolution,
+  getCoursePhaseParticipations,
+} from '@tumaet/prompt-shared-state'
+import {
+  Button,
+  Card,
+  CardContent,
+  ErrorPage,
+  ManagementPageHeader,
+} from '@tumaet/prompt-ui-components'
 import { Grid3X3, Loader2, Table2 } from 'lucide-react'
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { DeveloperProfile } from '../../interfaces/DeveloperProfile'
-import { Tutor } from '../../interfaces/Tutor'
-import { PeerAssignment } from '../../interfaces/PeerAssignment'
+import type { DeveloperProfile } from '../../interfaces/DeveloperProfile'
+import type { PeerAssignment } from '../../interfaces/PeerAssignment'
+import type { Seat } from '../../interfaces/Seat'
+import type { Tutor } from '../../interfaces/Tutor'
 import { getAllDeveloperProfiles } from '../../network/queries/getAllDeveloperProfiles'
 import { getAllTutors } from '../../network/queries/getAllTutors'
-import { getSeatPlan } from '../../network/queries/getSeatPlan'
 import { getPeerAssignments } from '../../network/queries/getPeerAssignments'
-import { Seat } from '../../interfaces/Seat'
-import { SeatUploader } from './components/SeatUploader/SeatUploader'
-import { SeatMacAssigner } from './components/SeatMacAssigner'
-import { SeatTutorAssigner } from './components/SeatTutorAssigner/SeatTutorAssigner'
-import { SeatStudentAssigner } from './components/SeatStudentAssigner/SeatStudentAssigner'
+import { getSeatPlan } from '../../network/queries/getSeatPlan'
 import { SeatGrid } from './components/SeatGrid/SeatGrid'
+import { SeatMacAssigner } from './components/SeatMacAssigner'
+import { SeatStudentAssigner } from './components/SeatStudentAssigner/SeatStudentAssigner'
+import { SeatTutorAssigner } from './components/SeatTutorAssigner/SeatTutorAssigner'
+import { SeatUploader } from './components/SeatUploader/SeatUploader'
 import { useGetParticipationsWithDevProfile } from './hooks/useGetParticipationWithDevProfile'
 
 export const SeatAssignmentPage = () => {

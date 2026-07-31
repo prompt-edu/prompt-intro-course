@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
-import { Seat } from '../../../interfaces/Seat'
+import type { Seat } from '../../../interfaces/Seat'
+import type { DeveloperWithProfile } from '../interfaces/DeveloperWithProfile'
 import { useUpdateSeats } from './useUpdateSeats'
-import { DeveloperWithProfile } from '../interfaces/DeveloperWithProfile'
 
 export const useAssignStudents = (
   seats: Seat[],

@@ -1,5 +1,5 @@
+import type { Student } from '@tumaet/prompt-shared-state'
 import { Button, Checkbox, Label } from '@tumaet/prompt-ui-components'
-import { Student } from '@tumaet/prompt-shared-state'
 
 interface StudentSelectionProps {
   students: Student[]

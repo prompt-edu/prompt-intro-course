@@ -1,30 +1,40 @@
-import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
-import { ArrowLeftRight, Users, Pencil, X, Plus, Save, Undo2, Loader2, UserPlus } from 'lucide-react'
+import type { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
 import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  Badge,
-  Button,
-  Alert,
-  AlertDescription,
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Command,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandItem,
 } from '@tumaet/prompt-ui-components'
-import { PeerAssignment } from '../../../interfaces/PeerAssignment'
-import { Seat } from '../../../interfaces/Seat'
-import { Tutor } from '../../../interfaces/Tutor'
-import { DeveloperProfile } from '../../../interfaces/DeveloperProfile'
-import { CoursePhaseParticipationWithStudent } from '@tumaet/prompt-shared-state'
+import {
+  ArrowLeftRight,
+  Loader2,
+  Pencil,
+  Plus,
+  Save,
+  Undo2,
+  UserPlus,
+  Users,
+  X,
+} from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import type { DeveloperProfile } from '../../../interfaces/DeveloperProfile'
+import type { PeerAssignment } from '../../../interfaces/PeerAssignment'
+import type { Seat } from '../../../interfaces/Seat'
+import type { Tutor } from '../../../interfaces/Tutor'
 import { updatePeerAssignments } from '../../../network/mutations/updatePeerAssignments'
 
 interface PeerGroupListProps {
@@ -88,7 +98,10 @@ function groupsToAssignments(groups: PeerGroup[]): PeerAssignment[] {
 }
 
 /** Group PeerGroup[] by tutor based on seat assignments. */
-function groupByTutor(groups: PeerGroup[], studentSeatMap: Map<string, Seat>): Map<string, PeerGroup[]> {
+function groupByTutor(
+  groups: PeerGroup[],
+  studentSeatMap: Map<string, Seat>,
+): Map<string, PeerGroup[]> {
   const byTutor = new Map<string, PeerGroup[]>()
   for (const group of groups) {
     const seat = studentSeatMap.get(group.members[0])
@@ -213,36 +226,27 @@ export const PeerGroupList = ({
     setAddingToGroup(null)
   }, [])
 
-  const removeFromGroup = useCallback(
-    (groupIndex: number, memberId: string) => {
-      setEditGroups((prev) => {
-        const updated = prev.map((g) => ({ members: [...g.members] }))
-        updated[groupIndex].members = updated[groupIndex].members.filter((m) => m !== memberId)
-        // Remove empty groups
-        return updated.filter((g) => g.members.length >= 2)
-      })
-    },
-    [],
-  )
+  const removeFromGroup = useCallback((groupIndex: number, memberId: string) => {
+    setEditGroups((prev) => {
+      const updated = prev.map((g) => ({ members: [...g.members] }))
+      updated[groupIndex].members = updated[groupIndex].members.filter((m) => m !== memberId)
+      // Remove empty groups
+      return updated.filter((g) => g.members.length >= 2)
+    })
+  }, [])
 
-  const addToGroup = useCallback(
-    (groupIndex: number, studentId: string) => {
-      setEditGroups((prev) => {
-        const updated = prev.map((g) => ({ members: [...g.members] }))
-        updated[groupIndex].members.push(studentId)
-        return updated
-      })
-      setAddingToGroup(null)
-    },
-    [],
-  )
+  const addToGroup = useCallback((groupIndex: number, studentId: string) => {
+    setEditGroups((prev) => {
+      const updated = prev.map((g) => ({ members: [...g.members] }))
+      updated[groupIndex].members.push(studentId)
+      return updated
+    })
+    setAddingToGroup(null)
+  }, [])
 
-  const createNewGroup = useCallback(
-    (studentId: string) => {
-      setEditGroups((prev) => [...prev, { members: [studentId] }])
-    },
-    [],
-  )
+  const createNewGroup = useCallback((studentId: string) => {
+    setEditGroups((prev) => [...prev, { members: [studentId] }])
+  }, [])
 
   // Flatten to find the actual flat index of a group across tutors
   const flatGroupIndex = useCallback(
@@ -261,7 +265,9 @@ export const PeerGroupList = ({
   const getEditGroupIndex = useCallback(
     (group: PeerGroup): number => {
       return editGroups.findIndex(
-        (g) => g.members.length === group.members.length && g.members.every((m) => group.members.includes(m)),
+        (g) =>
+          g.members.length === group.members.length &&
+          g.members.every((m) => group.members.includes(m)),
       )
     },
     [editGroups],
@@ -305,7 +311,12 @@ export const PeerGroupList = ({
               )}
               Save Changes
             </Button>
-            <Button variant='outline' size='sm' onClick={cancelEdit} disabled={saveMutation.isPending}>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={cancelEdit}
+              disabled={saveMutation.isPending}
+            >
               <Undo2 className='h-4 w-4 mr-1' />
               Cancel
             </Button>
@@ -351,13 +362,13 @@ export const PeerGroupList = ({
                         <CommandList>
                           <CommandEmpty>No groups found</CommandEmpty>
                           {editGroups.map((group, idx) => {
-                            const firstMember = getStudentLabel(group.members[0])
                             return (
                               <CommandItem
-                                key={idx}
+                                key={group.members.join('-')}
                                 onSelect={() => addToGroup(idx, studentId)}
                               >
-                                Group: {group.members.map((m) => getStudentLabel(m).name).join(', ')}
+                                Group:{' '}
+                                {group.members.map((m) => getStudentLabel(m).name).join(', ')}
                               </CommandItem>
                             )
                           })}
@@ -390,20 +401,18 @@ export const PeerGroupList = ({
           <Card key={tutorId}>
             <CardHeader className='pb-3'>
               <div className='flex items-center justify-between'>
-                <CardTitle className='text-base'>
-                  {tutorLabel}
-                </CardTitle>
+                <CardTitle className='text-base'>{tutorLabel}</CardTitle>
                 <Badge variant='secondary'>{studentCount} students</Badge>
               </div>
             </CardHeader>
             <CardContent>
               <div className='space-y-2'>
-                {groups.map((group, groupIdx) => {
+                {groups.map((group) => {
                   const editIdx = isEditing ? getEditGroupIndex(group) : -1
 
                   return (
                     <div
-                      key={groupIdx}
+                      key={group.members.join('-')}
                       className='flex items-center gap-2 p-2 rounded-md bg-muted/30 flex-wrap'
                     >
                       {group.members.map((memberId, memberIdx) => {
@@ -415,9 +424,7 @@ export const PeerGroupList = ({
                             )}
                             <div className='text-sm flex items-center gap-1'>
                               <span className='font-medium'>{name}</span>
-                              {gitlab && (
-                                <span className='text-muted-foreground'>({gitlab})</span>
-                              )}
+                              {gitlab && <span className='text-muted-foreground'>({gitlab})</span>}
                               {seatName && (
                                 <Badge variant='outline' className='text-xs'>
                                   {seatName}
@@ -472,7 +479,13 @@ export const PeerGroupList = ({
                           </Popover>
                         )}
                         <Badge variant='secondary' className='text-xs'>
-                          {group.members.length === 2 ? 'Pair' : group.members.length === 3 ? 'Triple' : group.members.length === 4 ? 'Quad' : `${group.members.length}`}
+                          {group.members.length === 2
+                            ? 'Pair'
+                            : group.members.length === 3
+                              ? 'Triple'
+                              : group.members.length === 4
+                                ? 'Quad'
+                                : `${group.members.length}`}
                         </Badge>
                       </div>
                     </div>

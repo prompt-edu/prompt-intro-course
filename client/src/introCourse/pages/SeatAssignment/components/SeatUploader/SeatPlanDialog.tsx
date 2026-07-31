@@ -9,7 +9,7 @@ import {
 } from '@tumaet/prompt-ui-components'
 import { Eye } from 'lucide-react'
 import { useState } from 'react'
-import { Seat } from '../../../../interfaces/Seat'
+import type { Seat } from '../../../../interfaces/Seat'
 
 interface SeatPlanDialogProps {
   seatPlan: Seat[]
