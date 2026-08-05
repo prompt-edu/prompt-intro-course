@@ -4854,7 +4854,7 @@ __metadata:
     css-loader: "npm:^7.1.4"
     file-saver: "npm:^2.0.5"
     i18n-iso-countries: "npm:^7.14.0"
-    js-sha256: "npm:^0.12.0"
+    js-sha256: "npm:^1.0.0"
     lucide-react: "npm:^1.27.0"
     postcss: "npm:^8.5.25"
     postcss-loader: "npm:8.2.1"
@@ -4950,10 +4950,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"js-sha256@npm:^0.12.0":
-  version: 0.12.0
-  resolution: "js-sha256@npm:0.12.0"
-  checksum: 10c0/a145ed4e2d7f7e758e39a0327733efce90252bb5146aa0b38bd47771ce848aecfd5cb8c2ec1e16c9e1e36a15f1cd4f5bc49a9adc6f480de9fcab2346929988c7
+"js-sha256@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "js-sha256@npm:1.0.0"
+  checksum: 10c0/24749f9ce929d3121324ba168f120802177939ca8b5411ef3ac69e6333b005a1be92279be50b41e24c1e30094d4eb6e231be7471e50fa5aa54a600f6fcd05612
   languageName: node
   linkType: hard
 
