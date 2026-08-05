@@ -15,7 +15,7 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/testcontainers/testcontainers-go v0.43.0
 	gitlab.com/gitlab-org/api/client-go v1.46.0
-	gitlab.com/gitlab-org/api/client-go/v2 v2.53.0
+	gitlab.com/gitlab-org/api/client-go/v2 v2.51.0
 )
 
 require (
