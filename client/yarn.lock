@@ -850,7 +850,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hookform/resolvers@npm:^5.5.7":
+"@hookform/resolvers@npm:^5.7.1":
   version: 5.7.1
   resolution: "@hookform/resolvers@npm:5.7.1"
   dependencies:
@@ -3527,12 +3527,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/react-dom@npm:^19.2.3":
-  version: 19.2.3
-  resolution: "@types/react-dom@npm:19.2.3"
+"@types/react-dom@npm:^19.2.4":
+  version: 19.2.4
+  resolution: "@types/react-dom@npm:19.2.4"
   peerDependencies:
     "@types/react": ^19.2.0
-  checksum: 10c0/b486ebe0f4e2fb35e2e108df1d8fc0927ca5d6002d5771e8a739de11239fe62d0e207c50886185253c99eb9dedfeeb956ea7429e5ba17f6693c7acb4c02f8cd1
+  checksum: 10c0/b7d854ce17bb51a3a067168268a90f0123d10dc490f63f1ff5409f07ac715febeb8f5b7b473404a9d437106571e0312fc2937a945634d590abfc9aa46a14b01b
   languageName: node
   linkType: hard
 
@@ -3554,12 +3554,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/react@npm:^19.2.17":
-  version: 19.2.17
-  resolution: "@types/react@npm:19.2.17"
+"@types/react@npm:^19.2.18":
+  version: 19.2.18
+  resolution: "@types/react@npm:19.2.18"
   dependencies:
     csstype: "npm:^3.2.2"
-  checksum: 10c0/bc2c4af96b3e480604424de70d5ebda90c5f4b485df471858c0bc2d7d70364b606ec3c4d8579f94f01aa0c6c0591f56bcf14cba5689f5eea4b74250ccdc3a232
+  checksum: 10c0/d04216172b4b4362b310017c210dfbe019fb4f4e7dffd0313e70b3acb3051d5c3e76e7e84e3cf4c6a3c824993ffadfe3949e589a6398a09d4200e7670e2962de
   languageName: node
   linkType: hard
 
@@ -3822,7 +3822,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"axios@npm:^1.18.1":
+"axios@npm:^1.19.0":
   version: 1.19.0
   resolution: "axios@npm:1.19.0"
   dependencies:
@@ -4834,7 +4834,7 @@ __metadata:
   resolution: "intro_course_developer_component@workspace:."
   dependencies:
     "@biomejs/biome": "npm:2.5.6"
-    "@hookform/resolvers": "npm:^5.5.7"
+    "@hookform/resolvers": "npm:^5.7.1"
     "@module-federation/runtime-tools": "npm:^2.8.1"
     "@rspack/cli": "npm:^2.1.7"
     "@rspack/core": "npm:^2.1.7"
@@ -4846,21 +4846,21 @@ __metadata:
     "@tumaet/prompt-ui-components": "npm:^1.1.6"
     "@types/file-saver": "npm:^2.0.7"
     "@types/node": "npm:^25.9.5"
-    "@types/react": "npm:^19.2.17"
-    "@types/react-dom": "npm:^19.2.3"
+    "@types/react": "npm:^19.2.18"
+    "@types/react-dom": "npm:^19.2.4"
     "@types/react-is": "npm:^19.2.0"
-    axios: "npm:^1.18.1"
+    axios: "npm:^1.19.0"
     clsx: "npm:^2.1.1"
     css-loader: "npm:^7.1.4"
     file-saver: "npm:^2.0.5"
     i18n-iso-countries: "npm:^7.14.0"
     js-sha256: "npm:^1.0.0"
-    lucide-react: "npm:^1.27.0"
+    lucide-react: "npm:^1.28.0"
     postcss: "npm:^8.5.25"
     postcss-loader: "npm:8.2.1"
     react: "npm:^19.2.8"
     react-dom: "npm:^19.2.8"
-    react-hook-form: "npm:^7.83.0"
+    react-hook-form: "npm:^7.84.0"
     react-is: "npm:^19.2.8"
     react-router-dom: "npm:^7.18.2"
     style-loader: "npm:^4.0.0"
@@ -5141,12 +5141,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lucide-react@npm:^1.22.0, lucide-react@npm:^1.27.0":
+"lucide-react@npm:^1.22.0":
   version: 1.28.0
   resolution: "lucide-react@npm:1.28.0"
   peerDependencies:
     react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
   checksum: 10c0/7a18911a68d6227865ca03120e3423665478131648ffbd47d62b242ef25a5982c6312ca7041b5a4d60cf0d8ea66d0f97f50dbe848ae60ab0143471da41ef057e
+  languageName: node
+  linkType: hard
+
+"lucide-react@npm:^1.28.0":
+  version: 1.30.0
+  resolution: "lucide-react@npm:1.30.0"
+  peerDependencies:
+    react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+  checksum: 10c0/9631a04f7873eca357b036c37be6b1b4da15e10c783b9f7de2d260d826d4c62591e2bb75c229fb6251d1b9998abbaa2d41bf8067d9c6cd8b51f442d7ed383c08
   languageName: node
   linkType: hard
 
@@ -6171,12 +6180,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-hook-form@npm:^7.83.0":
-  version: 7.84.0
-  resolution: "react-hook-form@npm:7.84.0"
+"react-hook-form@npm:^7.84.0":
+  version: 7.85.0
+  resolution: "react-hook-form@npm:7.85.0"
   peerDependencies:
     react: ^16.8.0 || ^17 || ^18 || ^19
-  checksum: 10c0/9af7e9850ac3c41e6a03fe2fc5a236525603dd8ab983194ffb8e893dba1d26b518ae02989192786d8c1f109793adb93d6de46385bee2b04ff06267f7431bdf8e
+  checksum: 10c0/53e81f4116129efa8e08c620cd334f74541174a82f3e4ce7a8839193c69a561b9bed070b4a46f24654c4860c474ddbb504d2ad402297708c8c2b80f1f6116d59
   languageName: node
   linkType: hard
 
