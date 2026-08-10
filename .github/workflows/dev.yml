@@ -62,6 +62,15 @@ jobs:
           cd server
           go test ./...
 
+  # Browser-level tests against the real core shell hosting this repo's remote.
+  # Gated on lint/vet so an obvious mistake fails in seconds rather than minutes,
+  # and run in parallel with test-server. Deployment does not depend on it.
+  test-e2e:
+    needs: [lint-server, vet-server, lint-client]
+    uses: ./.github/workflows/test-e2e.yml
+    permissions:
+      contents: read
+
   build:
     needs: [test-server, lint-client, vet-server]
     uses: ./.github/workflows/build-and-push.yml

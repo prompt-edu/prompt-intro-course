@@ -1,0 +1,49 @@
+name: E2E Tests
+
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare report directories
+        run: mkdir -p e2e/playwright-report e2e/test-results
+
+      # Builds the intro-course server/client and the Playwright runner, and pulls
+      # the prebuilt PROMPT core images from ghcr.io (public, no login needed).
+      # The runner's build also typechecks the suite.
+      - name: Build the e2e stack
+        run: docker compose -f docker-compose.e2e.yml --env-file e2e/.env.e2e build
+
+      - name: Run e2e suite (Playwright runner)
+        run: docker compose -f docker-compose.e2e.yml --env-file e2e/.env.e2e run --rm e2e-runner
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml --env-file e2e/.env.e2e down -v
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 14
+
+      # Traces, videos, and the global-setup diagnostic screenshots.
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-test-results
+          path: e2e/test-results
+          retention-days: 14
+          if-no-files-found: ignore
