@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    // CommonJS is required: playwright.config.ts uses require.resolve for the
+    // globalSetup path. moduleResolution is left implied by the module setting --
+    // spelling out node10 is deprecated in TypeScript 6+.
+    "module": "CommonJS",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": ["src", "tests", "playwright.config.ts"]
+}
