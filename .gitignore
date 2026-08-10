@@ -1,10 +1,16 @@
 # Node / frontend
 client/node_modules/
 client/build/
-client/build-screenshot/
 client/dist/
 client/.yarn/
 shared_library
+
+# E2E (Playwright)
+e2e/node_modules/
+e2e/.auth/
+e2e/playwright-report/
+e2e/test-results/
+e2e/.cache/
 
 # Go / server
 server/bin/
@@ -19,4 +25,7 @@ server/.cache/
 .env
 .env.*
 !.env.template
+# Test-only credentials for the ephemeral e2e stack, committed on purpose so
+# `make test-e2e` works with zero setup.
+!e2e/.env.e2e
 .context/
