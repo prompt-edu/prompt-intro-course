@@ -60,6 +60,21 @@ export function TutorTable() {
     return <div>Failed to load tutors</div>
   }
 
+  const query = searchQuery.trim().toLowerCase()
+  const filteredTutors = query
+    ? tutors?.filter((tutor) =>
+        [
+          tutor.firstName,
+          tutor.lastName,
+          `${tutor.firstName} ${tutor.lastName}`,
+          tutor.email,
+          tutor.matriculationNumber,
+          tutor.universityLogin,
+          tutor.gitlabUsername,
+        ].some((field) => field?.toLowerCase().includes(query)),
+      )
+    : tutors
+
   return (
     <div className='space-y-4'>
       <div className='flex items-center gap-2'>
@@ -101,15 +116,15 @@ export function TutorTable() {
                   )}
                 </TableRow>
               ))
-            ) : tutors?.length === 0 ? (
+            ) : filteredTutors?.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className='h-24 text-center'>
                   No tutors found.
                 </TableCell>
               </TableRow>
             ) : (
-              tutors?.map((tutor) => (
-                <TableRow key={tutor.id}>
+              filteredTutors?.map((tutor) => (
+                <TableRow key={tutor.id} data-testid={`tutor-row-${tutor.id}`}>
                   <TableCell className='font-medium'>{tutor.firstName}</TableCell>
                   <TableCell className='font-medium'>{tutor.lastName}</TableCell>
                   <TableCell>{tutor.email}</TableCell>
@@ -119,6 +134,7 @@ export function TutorTable() {
                     <div>
                       <Input
                         placeholder='GitLab Username'
+                        data-testid={`tutor-gitlab-input-${tutor.id}`}
                         value={gitlabUsernames[tutor.id] ?? tutor.gitlabUsername ?? ''}
                         onChange={(e) =>
                           setGitlabUsernames((prev) => ({
