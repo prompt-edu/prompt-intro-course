@@ -1,0 +1,398 @@
+# ============================================================================
+# E2E stack: the real PROMPT core shell hosting the real intro-course module.
+#
+# Run it with `make test-e2e` (see e2e/README.md). Everything is ephemeral — no
+# host volumes on any database, so every run re-seeds from scratch.
+#
+# The core client and core server are NOT built here; they are pulled prebuilt
+# from ghcr.io. Two properties of the published core client make that work:
+#   1. It is a production build, so its Module Federation remote for this repo is
+#      baked in as the relative URL /intro-course-developer/remoteEntry.js. Serving
+#      our remote under that prefix (see e2e/nginx/client-core.conf) is all that is
+#      required — there is no env var for it.
+#   2. INTRO_COURSE_HOST is already in its env.template.js. Left empty, the
+#      component's axios baseURL falls back to the browser origin, so its API calls
+#      are same-origin and proxied by the same nginx.
+#
+# Service NAMES are deliberately identical to prompt2's e2e stack (client-core,
+# server-core, keycloak), so e2e/keycloak/realm.json is a near-verbatim copy of
+# that stack's realm — its redirect URIs and web origins already list those hosts.
+# The published HOST ports are offset (see CLIENT_PORT / CORE_API_PORT /
+# KEYCLOAK_PORT in e2e/.env.e2e) so this stack can run next to that one.
+# ============================================================================
+
+services:
+  # ── Keycloak ──────────────────────────────────────────────────────────────
+  keycloak-db:
+    image: "postgres:15.18-alpine"
+    container_name: prompt-intro-e2e-keycloak-db
+    environment:
+      - POSTGRES_USER=${KEYCLOAK_DB_USER}
+      - POSTGRES_PASSWORD=${KEYCLOAK_DB_PASSWORD}
+      - POSTGRES_DB=${KEYCLOAK_DB_NAME}
+      - TZ=Europe/Berlin
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER} -d ${KEYCLOAK_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.3
+    container_name: prompt-intro-e2e-keycloak
+    command:
+      - start-dev
+      - --import-realm
+      - --health-enabled=true
+      - --hostname-strict=false
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: ${KEYCLOAK_DB_HOST}
+      KC_DB_URL_PORT: ${KEYCLOAK_DB_PORT}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_IMPORT_REALM: /opt/keycloak/data/import/realm.json
+      # No fixed KC_HOSTNAME: with hostname-strict=false the issuer is derived
+      # from the request host. Both the containerized runner and the servers reach
+      # Keycloak as `keycloak:8080` (Docker DNS), so the issuer matches what the
+      # servers (KEYCLOAK_HOST=http://keycloak:8080) validate against.
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    ports:
+      - "${KEYCLOAK_PORT}:8080"
+    volumes:
+      - ./e2e/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 4<>/dev/tcp/localhost/9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # ── Core ──────────────────────────────────────────────────────────────────
+  db:
+    image: "postgres:15.18-alpine"
+    container_name: prompt-intro-e2e-db
+    environment:
+      - POSTGRES_USER=${DB_CORE_USER}
+      - POSTGRES_PASSWORD=${DB_CORE_PASSWORD}
+      - POSTGRES_DB=${DB_CORE_NAME}
+      - TZ=Europe/Berlin
+    # Seed loaded on first init (db is ephemeral → always fresh each run). The two
+    # files run in filename order: 10_core_seed.sql is a verbatim copy of prompt2's
+    # dump, 20_intro_course.sql adds the intro-course phase type, phase, and
+    # participations on top.
+    volumes:
+      - ./e2e/seed/core:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d ${DB_CORE_NAME} -U ${DB_CORE_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server-core:
+    image: "ghcr.io/prompt-edu/prompt/prompt-server-core:${CORE_IMAGE_TAG}"
+    container_name: prompt-intro-e2e-server-core
+    depends_on:
+      db:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      seaweedfs-s3:
+        condition: service_healthy
+    ports:
+      - "${CORE_API_PORT}:8080"
+    environment:
+      - CORE_HOST
+      - DB_USER=${DB_CORE_USER}
+      - DB_PASSWORD=${DB_CORE_PASSWORD}
+      - DB_HOST=${DB_CORE_HOST}
+      - DB_PORT=${DB_CORE_PORT}
+      - DB_NAME=${DB_CORE_NAME}
+      - SSL_MODE
+      - SERVER_ADDRESS
+      - KEYCLOAK_HOST
+      - KEYCLOAK_REALM_NAME
+      - KEYCLOAK_CLIENT_ID
+      - KEYCLOAK_CLIENT_SECRET
+      - KEYCLOAK_ID_OF_CLIENT
+      - KEYCLOAK_AUTHORIZED_PARTY
+      - DEBUG
+      - S3_BUCKET
+      - S3_REGION
+      - S3_ENDPOINT
+      - S3_ACCESS_KEY
+      - S3_SECRET_KEY
+      - S3_FORCE_PATH_STYLE
+      - MAX_FILE_UPLOAD_SIZE_MB
+      - ALLOWED_FILE_TYPES
+    # No container healthcheck: the core image is distroless (no shell/wget).
+    # Readiness is polled by the runner's global-setup against /api/hello, which
+    # only answers once migrations, Keycloak OIDC discovery, the phase-type
+    # bootstrap, and both S3 buckets have succeeded.
+
+  client-core:
+    image: "ghcr.io/prompt-edu/prompt/prompt-clients-core:${CORE_IMAGE_TAG}"
+    container_name: prompt-intro-e2e-client-core
+    depends_on:
+      # nginx resolves ALL its proxy upstreams at startup and refuses to boot if a
+      # name does not resolve, so every service it proxies to must exist first --
+      # including server-core, for the /api/ location.
+      server-core:
+        condition: service_started
+      server-intro-course:
+        condition: service_started
+      client-intro-course:
+        condition: service_started
+    volumes:
+      - ./e2e/nginx/client-core.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${CLIENT_PORT}:80"
+    environment:
+      - ENVIRONMENT
+      # The *client's* CORE_HOST is the API base baked into env.js, while the
+      # *servers'* CORE_HOST is the browser origin used for CORS.
+      - CORE_HOST=${CORE_API_HOST}
+      - INTRO_COURSE_HOST
+      - KEYCLOAK_HOST
+      - KEYCLOAK_REALM_NAME
+      - CHAIR_NAME_SHORT
+      - CHAIR_NAME_LONG
+      - GITHUB_SHA
+      - GITHUB_REF
+      - SERVER_CORE_IMAGE_TAG
+    healthcheck:
+      # 127.0.0.1 (not localhost): nginx listens on IPv4 only, and busybox wget
+      # resolves localhost to ::1 first → connection refused.
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:80/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # ── Intro course (this repo) ───────────────────────────────────────────────
+  db-intro-course:
+    image: "postgres:15.18-alpine"
+    container_name: prompt-intro-e2e-db-intro-course
+    environment:
+      - POSTGRES_USER=${DB_INTRO_COURSE_USER}
+      - POSTGRES_PASSWORD=${DB_INTRO_COURSE_PASSWORD}
+      - POSTGRES_DB=${DB_INTRO_COURSE_NAME}
+      - TZ=Europe/Berlin
+    # initdb runs these in filename order: the migrations build the schema, the
+    # existing fixture fills it, and the pin file records the applied version so
+    # the server's boot-time `migrate up` is a no-op for 0001..0006 (and still
+    # applies any future 0007+ on top).
+    #
+    # Mounting the migrations individually rather than shipping a schema dump keeps
+    # server/db/migration/ the single source of truth. When a migration is added,
+    # add a line here and bump the version in 90_schema_migrations.sql.
+    volumes:
+      - ./server/db/migration/0001_schema.up.sql:/docker-entrypoint-initdb.d/01_0001_schema.sql:ro
+      - ./server/db/migration/0002_seat_plan.up.sql:/docker-entrypoint-initdb.d/02_0002_seat_plan.sql:ro
+      - ./server/db/migration/0003_udid.up.sql:/docker-entrypoint-initdb.d/03_0003_udid.sql:ro
+      - ./server/db/migration/0004_add_tutor_gitlab.up.sql:/docker-entrypoint-initdb.d/04_0004_add_tutor_gitlab.sql:ro
+      - ./server/db/migration/0005_peer_assignment.up.sql:/docker-entrypoint-initdb.d/05_0005_peer_assignment.sql:ro
+      - ./server/db/migration/0006_tutor_seat.up.sql:/docker-entrypoint-initdb.d/06_0006_tutor_seat.sql:ro
+      - ./server/database_dumps/e2e_seed.sql:/docker-entrypoint-initdb.d/50_e2e_seed.sql:ro
+      - ./e2e/seed/intro-course/90_schema_migrations.sql:/docker-entrypoint-initdb.d/90_schema_migrations.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -d ${DB_INTRO_COURSE_NAME} -U ${DB_INTRO_COURSE_USER}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server-intro-course:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: prompt-intro-e2e-server-intro-course
+    depends_on:
+      db-intro-course:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    # No host port: reached only through the client-core nginx proxy.
+    environment:
+      # CORS only; every browser call is same-origin through the proxy, so the
+      # Access-Control-Allow-Origin value is never actually consulted.
+      - CORE_HOST
+      - SERVER_CORE_HOST
+      - SERVER_ADDRESS
+      - SSL_MODE
+      # DB_HOST is read BEFORE DB_HOST_INTRO_COURSE (server/main.go getDatabaseURL),
+      # so it must be set explicitly here — the core DB_HOST must not leak in.
+      - DB_HOST=${DB_INTRO_COURSE_HOST}
+      - DB_PORT=${DB_INTRO_COURSE_PORT}
+      - DB_USER=${DB_INTRO_COURSE_USER}
+      - DB_PASSWORD=${DB_INTRO_COURSE_PASSWORD}
+      - DB_NAME=${DB_INTRO_COURSE_NAME}
+      - KEYCLOAK_HOST
+      - KEYCLOAK_REALM_NAME
+      - KEYCLOAK_AUTHORIZED_PARTY
+      - KEYCLOAK_CLIENT_ID
+      - GITLAB_ACCESS_TOKEN
+      - GITLAB_TEACHING_MATERIAL_PROJECT_ID
+      - SERVER_IMAGE_TAG
+      - DEBUG
+    # Distroless image (no shell/wget), so no container healthcheck. Readiness is
+    # polled by the runner's global-setup via /intro-course/api/info through the
+    # client-core proxy.
+
+  client-intro-course:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        IMAGE_TAG: latest
+    container_name: prompt-intro-e2e-client-intro-course
+    # No host port: the remote is served through the client-core nginx proxy at
+    # /intro-course-developer/ (prefix stripped, like Traefik in prod).
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:80/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # ── SeaweedFS (S3) ────────────────────────────────────────────────────────
+  # Not used by the intro course, but core log.Fatal()s at boot if it cannot reach
+  # the prompt-files and prompt-privacy-exports buckets.
+  seaweedfs-master:
+    image: chrislusf/seaweedfs:4.38
+    container_name: prompt-intro-e2e-seaweedfs-master
+    command: "master -ip=seaweedfs-master -ip.bind=0.0.0.0"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9333/cluster/status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  seaweedfs-volume:
+    image: chrislusf/seaweedfs:4.38
+    container_name: prompt-intro-e2e-seaweedfs-volume
+    command: "volume -mserver=seaweedfs-master:9333 -ip=seaweedfs-volume -ip.bind=0.0.0.0 -port=8080"
+    depends_on:
+      seaweedfs-master:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  seaweedfs-filer:
+    image: chrislusf/seaweedfs:4.38
+    container_name: prompt-intro-e2e-seaweedfs-filer
+    command: "filer -master=seaweedfs-master:9333 -ip=seaweedfs-filer -ip.bind=0.0.0.0"
+    depends_on:
+      seaweedfs-master:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8888/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  seaweedfs-s3:
+    image: chrislusf/seaweedfs:4.38
+    container_name: prompt-intro-e2e-seaweedfs-s3
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        cat >/tmp/s3.json <<EOF
+        {
+          "identities": [
+            {
+              "name": "prompt-s3",
+              "credentials": [
+                {
+                  "accessKey": "$$WEED_S3_DEFAULT_USER",
+                  "secretKey": "$$WEED_S3_DEFAULT_PWD"
+                }
+              ],
+              "actions": ["Admin", "Read", "Write"]
+            }
+          ]
+        }
+        EOF
+        exec weed s3 -filer=seaweedfs-filer:8888 -ip.bind=0.0.0.0 -config=/tmp/s3.json
+    depends_on:
+      seaweedfs-master:
+        condition: service_healthy
+      seaweedfs-filer:
+        condition: service_healthy
+      # Without a registered volume server the master can't assign a volume, so
+      # the first object PUT fails ("Not enough data nodes found"). Gate on it.
+      seaweedfs-volume:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      - WEED_S3_DEFAULT_USER=${S3_ACCESS_KEY}
+      - WEED_S3_DEFAULT_PWD=${S3_SECRET_KEY}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "code=$(wget --server-response --spider -q http://localhost:8333/ 2>&1 | grep -Eo \"HTTP/[0-9.]+ [0-9]+\" | tail -1 | cut -d\" \" -f2); [ \"$$code\" = \"200\" ] || [ \"$$code\" = \"403\" ]",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── Playwright runner ─────────────────────────────────────────────────────
+  # The browser runs inside the compose network so it can address every service by
+  # name: Chromium hard-codes localhost→loopback and ignores /etc/hosts, so a
+  # localhost + host-gateway remap does not work for an in-container browser.
+  # Service names also make the realm's redirect URIs and the token issuer line up.
+  e2e-runner:
+    build:
+      context: ./e2e
+      dockerfile: Dockerfile
+    container_name: prompt-intro-e2e-runner
+    depends_on:
+      client-core:
+        condition: service_healthy
+      server-core:
+        # distroless server has no healthcheck; global-setup polls /api/hello.
+        condition: service_started
+      client-intro-course:
+        condition: service_healthy
+      server-intro-course:
+        # distroless; global-setup polls /intro-course/api/info.
+        condition: service_started
+      db-intro-course:
+        condition: service_healthy
+    environment:
+      - CI
+      - BASE_URL=http://client-core
+      - KEYCLOAK_URL=http://keycloak:8080
+      - CORE_API_URL=http://server-core:8080
+      - INTRO_COURSE_API_URL=http://server-intro-course:8080
+      - KEYCLOAK_REALM_NAME=${KEYCLOAK_REALM_NAME}
+      # For the few teardowns the HTTP API cannot express (see e2e/src/db.ts).
+      - DB_INTRO_COURSE_HOST=${DB_INTRO_COURSE_HOST}
+      - DB_INTRO_COURSE_PORT=${DB_INTRO_COURSE_PORT}
+      - DB_INTRO_COURSE_USER=${DB_INTRO_COURSE_USER}
+      - DB_INTRO_COURSE_PASSWORD=${DB_INTRO_COURSE_PASSWORD}
+      - DB_INTRO_COURSE_NAME=${DB_INTRO_COURSE_NAME}
+    # Source is baked into the image; only the report/results dirs are mounted out
+    # so artifacts survive `docker compose down` (and CI can upload them).
+    volumes:
+      - ./e2e/playwright-report:/work/playwright-report
+      - ./e2e/test-results:/work/test-results
