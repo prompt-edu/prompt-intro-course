@@ -275,7 +275,7 @@ export const SeatStudentAssigner = ({
             <div className='flex flex-col sm:flex-row gap-2 justify-between'>
               <div className='space-y-1'>
                 <div className='text-sm font-medium'>Assignment Status</div>
-                <div className='flex items-center'>
+                <div className='flex items-center' data-testid='seat-assignment-status'>
                   {assignmentStatus === 'none' && <Badge variant='secondary'>Not Assigned</Badge>}
                   {assignmentStatus === 'partial' && (
                     <Badge variant='outline'>

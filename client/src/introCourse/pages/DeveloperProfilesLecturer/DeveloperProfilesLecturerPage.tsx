@@ -165,7 +165,7 @@ export const DeveloperProfilesLecturerPage = () => {
     <div id='table-view' className='space-y-6'>
       <ManagementPageHeader>Developer Profile Management</ManagementPageHeader>
       <div className='flex justify-between items-end'>
-        <div className='text-sm text-muted-foreground'>
+        <div className='text-sm text-muted-foreground' data-testid='developer-profile-summary'>
           Showing {filteredParticipants.length} of {sortedParticipants.length} participants
         </div>
         <div className='flex gap-2'>
@@ -228,6 +228,7 @@ export const DeveloperProfilesLecturerPage = () => {
                 <TableRow
                   key={participation.courseParticipationID}
                   className='cursor-pointer hover:bg-muted/50'
+                  data-testid={`developer-profile-row-${participation.courseParticipationID}`}
                   onClick={() =>
                     setSelectedParticipant({ participation, devProfile, gitlabStatus })
                   }

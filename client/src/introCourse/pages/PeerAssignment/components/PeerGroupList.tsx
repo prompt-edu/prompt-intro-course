@@ -332,7 +332,7 @@ export const PeerGroupList = ({
 
       {/* Unassigned students (edit mode only) */}
       {isEditing && unassignedStudents.length > 0 && (
-        <Card>
+        <Card data-testid='peer-unassigned-students'>
           <CardHeader className='pb-3'>
             <div className='flex items-center justify-between'>
               <CardTitle className='text-base'>Unassigned Students</CardTitle>
@@ -398,7 +398,7 @@ export const PeerGroupList = ({
         const studentCount = groups.reduce((sum, g) => sum + g.members.length, 0)
 
         return (
-          <Card key={tutorId}>
+          <Card key={tutorId} data-testid={`peer-tutor-card-${tutorId}`}>
             <CardHeader className='pb-3'>
               <div className='flex items-center justify-between'>
                 <CardTitle className='text-base'>{tutorLabel}</CardTitle>
@@ -414,11 +414,16 @@ export const PeerGroupList = ({
                     <div
                       key={group.members.join('-')}
                       className='flex items-center gap-2 p-2 rounded-md bg-muted/30 flex-wrap'
+                      data-testid='peer-group'
                     >
                       {group.members.map((memberId, memberIdx) => {
                         const { name, gitlab, seatName } = getStudentLabel(memberId)
                         return (
-                          <div key={memberId} className='flex items-center gap-2'>
+                          <div
+                            key={memberId}
+                            className='flex items-center gap-2'
+                            data-testid={`peer-group-member-${memberId}`}
+                          >
                             {memberIdx > 0 && (
                               <ArrowLeftRight className='h-3 w-3 text-muted-foreground' />
                             )}

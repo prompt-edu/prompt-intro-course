@@ -79,7 +79,7 @@ export default function IOSUDIDDialog() {
     <div className='flex flex-col items-center justify-center'>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button variant='outline'>
+          <Button variant='outline' data-testid='udid-help'>
             <HelpCircle className='h-4 w-4 mr-1' />
             Help
           </Button>

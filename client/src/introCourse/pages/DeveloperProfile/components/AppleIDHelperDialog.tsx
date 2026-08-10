@@ -18,7 +18,7 @@ export const AppleIDHelperDialog = () => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant='outline'>
+        <Button variant='outline' data-testid='apple-id-help'>
           <HelpCircle className='h-4 w-4 mr-1' />
           Help
         </Button>

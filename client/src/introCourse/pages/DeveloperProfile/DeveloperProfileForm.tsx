@@ -129,7 +129,7 @@ export const DeveloperProfileForm = ({
                   are just limited devices and you are NOT allowed to take them home.
                 </FormDescription>
                 <FormControl>
-                  <YesNoButtons value={field.value} onChange={field.onChange} />
+                  <YesNoButtons name='hasMacBook' value={field.value} onChange={field.onChange} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -146,7 +146,11 @@ export const DeveloperProfileForm = ({
                   <FormItem>
                     <FormLabel>Do you have an iPhone?</FormLabel>
                     <FormControl>
-                      <YesNoButtons value={field.value} onChange={field.onChange} />
+                      <YesNoButtons
+                        name='hasIPhone'
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -188,7 +192,7 @@ export const DeveloperProfileForm = ({
                   <FormItem>
                     <FormLabel>Do you have an iPad?</FormLabel>
                     <FormControl>
-                      <YesNoButtons value={field.value} onChange={field.onChange} />
+                      <YesNoButtons name='hasIPad' value={field.value} onChange={field.onChange} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -230,7 +234,11 @@ export const DeveloperProfileForm = ({
                   <FormItem>
                     <FormLabel>Do you have an Apple Watch?</FormLabel>
                     <FormControl>
-                      <YesNoButtons value={field.value} onChange={field.onChange} />
+                      <YesNoButtons
+                        name='hasAppleWatch'
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
