@@ -2585,7 +2585,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@rspack/cli@npm:^2.1.7":
+"@rspack/cli@npm:^2.1.8":
   version: 2.1.8
   resolution: "@rspack/cli@npm:2.1.8"
   peerDependencies:
@@ -2600,7 +2600,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@rspack/core@npm:^2.1.7":
+"@rspack/core@npm:^2.1.8":
   version: 2.1.8
   resolution: "@rspack/core@npm:2.1.8"
   dependencies:
@@ -2629,9 +2629,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@rspack/dev-server@npm:^2.1.0":
-  version: 2.1.0
-  resolution: "@rspack/dev-server@npm:2.1.0"
+"@rspack/dev-server@npm:^2.2.0":
+  version: 2.2.0
+  resolution: "@rspack/dev-server@npm:2.2.0"
   dependencies:
     "@rspack/dev-middleware": "npm:^2.0.3"
   peerDependencies:
@@ -2640,7 +2640,7 @@ __metadata:
   peerDependenciesMeta:
     selfsigned:
       optional: true
-  checksum: 10c0/54d25adb8944da00dc01437108dfaa8af238074ce6b99f854d691c5fb7e982a98f5105d8664c921b167843a133a2d0327597dbcba4eb5c11d9310c80e517fb96
+  checksum: 10c0/c98856c67d1b4d541fcaa02028d504464dda95d775953e979eadb4380ad580d49184b570f7c98af921d8808e31b8afcd50267c170543dc2b1067b6e62274c50d
   languageName: node
   linkType: hard
 
@@ -4836,9 +4836,9 @@ __metadata:
     "@biomejs/biome": "npm:2.5.6"
     "@hookform/resolvers": "npm:^5.7.1"
     "@module-federation/runtime-tools": "npm:^2.8.1"
-    "@rspack/cli": "npm:^2.1.7"
-    "@rspack/core": "npm:^2.1.7"
-    "@rspack/dev-server": "npm:^2.1.0"
+    "@rspack/cli": "npm:^2.1.8"
+    "@rspack/core": "npm:^2.1.8"
+    "@rspack/dev-server": "npm:^2.2.0"
     "@tailwindcss/postcss": "npm:^4.3.3"
     "@tanstack/react-query": "npm:^5.101.4"
     "@tanstack/react-table": "npm:^8.21.3"
