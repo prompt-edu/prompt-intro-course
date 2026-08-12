@@ -168,7 +168,12 @@ func main() {
 			promptTypes.CapabilityPhaseConfig: true,
 		},
 	}, func() bool {
-		return conn.Ping(context.Background()) == nil
+		// Bounded: the endpoint is public, so an unreachable database or an
+		// exhausted pool must report unhealthy rather than park the request
+		// goroutine until a connection frees.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		return conn.Ping(ctx) == nil
 	})
 
 	config.InitConfigModule(api, *query, conn)

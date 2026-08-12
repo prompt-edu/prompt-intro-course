@@ -5,7 +5,12 @@ import {
   INTRO_COURSE_PARTICIPANT_COUNT,
   STUDENT_WITHOUT_PROFILE,
 } from '../../src/data/constants'
-import { putDeveloperProfile, withIntroCourseApi } from './helpers'
+import {
+  getDeveloperProfiles,
+  putDeveloperProfile,
+  withIntroCourseApi,
+  type DeveloperProfileDTO,
+} from './helpers'
 
 test.use({ role: 'course-lecturer' })
 
@@ -109,14 +114,32 @@ test.describe('developer profiles: the lecturer table', () => {
 test.describe('developer profiles: editing a profile', () => {
   const NEW_APPLE_ID = 'edited.by.e2e@icloud.com'
 
+  // Snapshotted rather than rebuilt from the constants: putDeveloperProfile
+  // defaults the three UDIDs to null, so restoring from constants would erase any
+  // UDID the seed grows later, for the rest of the serial run.
+  let profileBackup: DeveloperProfileDTO | undefined
+
+  test.beforeAll(async () => {
+    const profiles = await withIntroCourseApi('course-lecturer', getDeveloperProfiles)
+    profileBackup = profiles.find(
+      (p) => p.courseParticipationID === BACKGROUND_STUDENTS.first.courseParticipationId,
+    )
+    expect(profileBackup).toBeDefined()
+  })
+
   // Restore the edited profile to its seeded values, so the other specs keep
   // seeing the fixture they expect.
   test.afterEach(async () => {
+    if (!profileBackup) return
+    const backup = profileBackup
     await withIntroCourseApi('course-lecturer', (ctx) =>
       putDeveloperProfile(ctx, BACKGROUND_STUDENTS.first.courseParticipationId, {
-        appleID: BACKGROUND_STUDENTS.first.appleId,
-        gitLabUsername: BACKGROUND_STUDENTS.first.gitlabUsername,
-        hasMacBook: BACKGROUND_STUDENTS.first.hasMacbook,
+        appleID: backup.appleID,
+        gitLabUsername: backup.gitLabUsername,
+        hasMacBook: backup.hasMacBook,
+        iPhoneUDID: backup.iPhoneUDID ?? null,
+        iPadUDID: backup.iPadUDID ?? null,
+        appleWatchUDID: backup.appleWatchUDID ?? null,
       }),
     )
   })

@@ -12,7 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
+      # No later step runs an authenticated git command, so the checkout token
+      # does not need to stay in the local git config for the Docker builds.
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Prepare report directories
         run: mkdir -p e2e/playwright-report e2e/test-results

@@ -22,8 +22,9 @@ test-e2e-ui:
 		-v "$(CURDIR)/e2e/src:/work/src" \
 		-v "$(CURDIR)/e2e/playwright-report:/work/playwright-report" \
 		-v "$(CURDIR)/e2e/test-results:/work/test-results" \
-		e2e-runner npx playwright test --ui-host=0.0.0.0 --ui-port=8123; \
-		$(E2E_COMPOSE) down -v
+		e2e-runner npx playwright test --ui-host=0.0.0.0 --ui-port=8123; status=$$?; \
+		$(E2E_COMPOSE) down -v; \
+		exit $$status
 
 test-e2e-down:
 	@$(E2E_COMPOSE) down -v

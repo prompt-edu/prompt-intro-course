@@ -69,26 +69,41 @@ test.describe('tutor import: the tutor table', () => {
     await expect(page.getByText('No tutors found.')).toBeVisible()
   })
 
-  test('editing a GitLab username saves on blur and persists', async ({ page }) => {
-    const tutors = new TutorImportPage(page)
-    const tutor = SEEDED_TUTORS[1]
-    const edited = `${tutor.gitlabUsername}-e2e`
+  // Nested so only the mutating test pays for the restore hook. The restore lives
+  // in a hook rather than the test body: a failed assertion or a timed-out reload
+  // would otherwise leak the edited username into `lists all six seeded tutors`,
+  // which asserts the seeded value against this same shared stack.
+  test.describe('editing a GitLab username', () => {
+    test.afterEach(async ({ page }) => {
+      const tutors = new TutorImportPage(page)
+      const tutor = SEEDED_TUTORS[1]
 
-    const input = tutors.gitlabInput(tutor.id)
-    await input.fill(edited)
-    await input.blur()
+      await tutors.goto()
+      await tutors.ensureKeycloakGroup()
+      const input = tutors.gitlabInput(tutor.id)
+      if ((await input.inputValue()) === tutor.gitlabUsername) return
 
-    await page.reload()
-    await tutors.ensureKeycloakGroup()
-    await expect(tutors.gitlabInput(tutor.id)).toHaveValue(edited)
+      // Restore through the same UI path, then confirm the save landed.
+      await input.fill(tutor.gitlabUsername)
+      await input.blur()
+      await page.reload()
+      await tutors.ensureKeycloakGroup()
+      await expect(tutors.gitlabInput(tutor.id)).toHaveValue(tutor.gitlabUsername)
+    })
 
-    // Restore the seeded value through the same UI path.
-    const restored = tutors.gitlabInput(tutor.id)
-    await restored.fill(tutor.gitlabUsername)
-    await restored.blur()
-    await page.reload()
-    await tutors.ensureKeycloakGroup()
-    await expect(tutors.gitlabInput(tutor.id)).toHaveValue(tutor.gitlabUsername)
+    test('saves on blur and persists', async ({ page }) => {
+      const tutors = new TutorImportPage(page)
+      const tutor = SEEDED_TUTORS[1]
+      const edited = `${tutor.gitlabUsername}-e2e`
+
+      const input = tutors.gitlabInput(tutor.id)
+      await input.fill(edited)
+      await input.blur()
+
+      await page.reload()
+      await tutors.ensureKeycloakGroup()
+      await expect(tutors.gitlabInput(tutor.id)).toHaveValue(edited)
+    })
   })
 
   test('the import dialog opens', async ({ page }) => {
