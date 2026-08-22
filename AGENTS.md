@@ -26,14 +26,26 @@ server/                       # Intro course backend (default localhost:8082)
   developerProfile/           # Student profile survey and device data
   seatPlan/                   # Seat plan creation + assignment
   tutor/                      # Tutor import + GitLab username management
+  peerAssignment/             # Peer review groups + GitLab sync
   infrastructureSetup/        # GitLab course/student repo setup
   config/                     # prompt-sdk config endpoint registration
   copy/                       # prompt-sdk copy endpoint registration
+  database_dumps/             # SQL fixtures for Go tests and the e2e stack
+  testutils/                  # Testcontainers + mock auth helpers
   db/
     migration/                # SQL migrations
     query/                    # sqlc query definitions
     sqlc/                     # generated sqlc code
 
+e2e/                          # Playwright E2E suite (see e2e/README.md)
+  keycloak/                   # Realm import for the e2e stack
+  nginx/                      # client-core routing override (stands in for Traefik)
+  seed/                       # Core + intro-course database seeds
+  src/                        # env, global-setup, fixtures, page objects, constants
+  tests/                      # Specs (browser + api projects)
+
+docker-compose.e2e.yml        # Full E2E stack: core (prebuilt) + this repo + Keycloak
+Makefile                      # E2E entrypoints
 .github/workflows/            # CI/CD for intro-course repo
 ```
 
@@ -236,8 +248,11 @@ When changing exposed modules or remote name, update host integration in main PR
 
 Relevant workflows in `.github/workflows/`:
 
-- `lint-server.yml`: server linting
-- `dev.yml`: PR/push pipeline (lint, test, build, deploy to dev on push)
+- `lint-server.yml`: server linting (golangci-lint)
+- `vet-server.yml`: `go vet`
+- `lint-client.yml`: client linting (Biome)
+- `test-e2e.yml`: Playwright E2E suite against the full Compose stack
+- `dev.yml`: PR/push pipeline (lint, test, e2e, build, deploy to dev on push)
 - `build-and-push.yml`: builds/pushes server and client images
 - `deploy.yml`: deploys intro-course services via `docker-compose.prod.yml`
 - `prod.yml`: production release/deploy flow
@@ -271,6 +286,38 @@ cd client
 yarn lint
 ```
 
+- The client has no unit-test runner. Client behaviour is covered by the E2E suite below.
+
+### End-to-End (Playwright)
+
+```bash
+make test-e2e        # build the stack, run the suite, tear down
+make test-e2e-ui     # Playwright UI mode on http://127.0.0.1:8123
+make test-e2e-down   # tear down a stack left running
+```
+
+Notes:
+
+- `docker-compose.e2e.yml` runs the **real** PROMPT core shell and core server, pulled prebuilt
+  from `ghcr.io/prompt-edu/prompt/*` (see `CORE_IMAGE_TAG` in `e2e/.env.e2e`), plus Keycloak,
+  SeaweedFS, both databases, this repo's server and client, and the Playwright runner itself.
+- Non-default host ports so it can coexist with a dev stack: client `4000`, core API `18090`,
+  Keycloak `18081`.
+- The remote is served at `/intro-course-developer/` and the phase API at `/intro-course/api/`,
+  both proxied by `e2e/nginx/client-core.conf` — the published core client bakes those prefixes in
+  at build time, so they are not configurable.
+- Seeds: `e2e/seed/core/` for the core database, `server/database_dumps/e2e_seed.sql` for this
+  repo's. Every constant a spec asserts on lives in `e2e/src/data/constants.ts`.
+- The suite runs serially (`workers: 1`): all specs share the single seeded course phase. Mutating
+  specs snapshot and restore their slice of the fixture.
+- `e2e/keycloak/realm.json` is a copy of the platform repo's e2e realm plus this repo's host ports
+  and the `/Prompt/ios2425-iPraktikumFull` group tree; re-apply both when refreshing it.
+- **Adding a migration**: add a mount line to `db-intro-course` in `docker-compose.e2e.yml` and
+  bump the version in `e2e/seed/intro-course/90_schema_migrations.sql`.
+- **Adding a route**: add it to `e2e/src/data/permissionMatrix.ts` so the permission matrix covers
+  it for every role.
+- Read `e2e/README.md` before changing anything in `e2e/`.
+
 ## Reusable Libraries (Prefer Over Custom Implementations)
 
 Use shared PROMPT libraries whenever possible before introducing new primitives.
@@ -288,7 +335,9 @@ Use shared PROMPT libraries whenever possible before introducing new primitives.
 ### `prompt-sdk` (`github.com/prompt-edu/prompt-sdk`)
 
 - Authentication middleware
-- Shared endpoint registration (`promptTypes.RegisterCopyEndpoint`, `promptTypes.RegisterConfigEndpoint`)
+- Shared endpoint registration (`promptTypes.RegisterCopyEndpoint`, `promptTypes.RegisterConfigEndpoint`,
+  `promptTypes.RegisterInfoEndpoint` — the public `GET intro-course/api/info` used by core's system
+  status page and the E2E readiness gate)
 - Utility helpers used across services
 
 ## Important Notes

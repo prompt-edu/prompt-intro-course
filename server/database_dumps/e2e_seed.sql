@@ -633,4 +633,39 @@ INSERT INTO peer_assignment (course_phase_id, student_id, peer_id) VALUES
 ('4179d58a-d00d-4fa7-94a5-397bc69fab02', 'b0000000-0000-0000-0000-000000000056', 'b0000000-0000-0000-0000-000000000054'),
 ('4179d58a-d00d-4fa7-94a5-397bc69fab02', 'b0000000-0000-0000-0000-000000000056', 'b0000000-0000-0000-0000-000000000055');
 
+-- ============================================================
+-- BROWSER E2E: the two Keycloak student users
+-- ============================================================
+-- The 56 students above are background data for the lecturer views; nobody can
+-- log in as them. The browser suite drives the student flows as the seeded
+-- Keycloak users (e2e/keycloak/realm.json), whose core course participations on
+-- iPraktikumFull are:
+--
+--   student  ("Stan Stan",    no42tum) → a0000001-0000-0000-0000-000000000001
+--   student2 ("Selma Second", st70two) → ca000008-0000-4000-8000-000000000008
+--
+-- Stan is deliberately left with NO developer profile, seat, or peers: the student
+-- journey fills in the survey as him. Selma gets all three so the seat-assignment
+-- display has something to render.
+
+-- Selma's developer profile.
+INSERT INTO developer_profile (course_participation_id, course_phase_id, gitlab_username, apple_id, has_macbook, iphone_udid, ipad_udid, apple_watch_udid) VALUES
+('ca000008-0000-4000-8000-000000000008', '4179d58a-d00d-4fa7-94a5-397bc69fab02', 'ssecond', 'selma.second@icloud.com', true, NULL, NULL, NULL);
+
+-- Selma takes 1-1-11, the one free non-tutor seat in Alice's row (see ROW 1 above).
+UPDATE seat
+SET assigned_student = 'ca000008-0000-4000-8000-000000000008'
+WHERE course_phase_id = '4179d58a-d00d-4fa7-94a5-397bc69fab02'
+  AND seat_name = '1-1-11';
+
+-- Selma joins peer group A1 (s01, s02, s03), making it a group of four.
+-- Bidirectional, like every other pair in this file.
+INSERT INTO peer_assignment (course_phase_id, student_id, peer_id) VALUES
+('4179d58a-d00d-4fa7-94a5-397bc69fab02', 'ca000008-0000-4000-8000-000000000008', 'b0000000-0000-0000-0000-000000000001'),
+('4179d58a-d00d-4fa7-94a5-397bc69fab02', 'ca000008-0000-4000-8000-000000000008', 'b0000000-0000-0000-0000-000000000002'),
+('4179d58a-d00d-4fa7-94a5-397bc69fab02', 'ca000008-0000-4000-8000-000000000008', 'b0000000-0000-0000-0000-000000000003'),
+('4179d58a-d00d-4fa7-94a5-397bc69fab02', 'b0000000-0000-0000-0000-000000000001', 'ca000008-0000-4000-8000-000000000008'),
+('4179d58a-d00d-4fa7-94a5-397bc69fab02', 'b0000000-0000-0000-0000-000000000002', 'ca000008-0000-4000-8000-000000000008'),
+('4179d58a-d00d-4fa7-94a5-397bc69fab02', 'b0000000-0000-0000-0000-000000000003', 'ca000008-0000-4000-8000-000000000008');
+
 COMMIT;

@@ -52,6 +52,9 @@ export const SeatCell = ({
     <button
       onClick={onClick}
       className={classes}
+      // The visible text is only initials or a position number, so the seat name
+      // is not otherwise addressable. E2E specs locate seats by this testid.
+      data-testid={`seat-${seat.seatName}`}
       title={`${seat.seatName}${isTutor ? ' (Tutor seat)' : ''}${studentLabel ? ` - ${studentLabel}` : ''}${peerGroupLabel ? ` ${peerGroupLabel}` : ''}${seat.hasMac ? ' (Mac)' : ''}`}
     >
       {/* Peer group badge — top right */}

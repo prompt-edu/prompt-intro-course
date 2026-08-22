@@ -100,7 +100,7 @@ export const PeerAssignmentActions = ({
   return (
     <div className='space-y-4'>
       <div className='flex flex-wrap items-center gap-3'>
-        <Badge variant={statusVariant}>
+        <Badge variant={statusVariant} data-testid='peer-assignment-status'>
           {uniqueStudents} of {totalStudents} students grouped
         </Badge>
 
@@ -174,13 +174,13 @@ export const PeerAssignmentActions = ({
       </div>
 
       {error && (
-        <Alert variant='destructive'>
+        <Alert variant='destructive' data-testid='peer-assignment-error'>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       {syncResults && (
-        <Alert>
+        <Alert data-testid='peer-assignment-sync-results'>
           <AlertDescription>
             <p className='font-medium mb-1'>
               GitLab sync complete: {syncResults.filter((r) => r.success).length}/

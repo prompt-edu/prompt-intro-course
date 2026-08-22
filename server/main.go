@@ -23,6 +23,7 @@ import (
 	"github.com/prompt-edu/prompt-intro-course/server/tutor"
 	"github.com/prompt-edu/prompt-intro-course/server/utils"
 	promptSDK "github.com/prompt-edu/prompt-sdk"
+	"github.com/prompt-edu/prompt-sdk/promptTypes"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -154,8 +155,26 @@ func main() {
 	infrastructureSetup.InitInfrastructureModule(api, *query, conn, gitlabAccessToken, teachingMaterialProjectID)
 	peerAssignment.InitPeerAssignmentModule(api, *query, conn, gitlabAccessToken)
 
-	copyApi := router.Group("intro-course/api")
-	copy.InitCopyModule(copyApi, *query, conn)
+	baseApi := router.Group("intro-course/api")
+	copy.InitCopyModule(baseApi, *query, conn)
+
+	// Public GET intro-course/api/info. Core's system status page and the e2e
+	// readiness poll both read it; the health flag is a live DB ping.
+	promptTypes.RegisterInfoEndpoint(baseApi, promptTypes.ServiceInfo{
+		ServiceName: "intro-course",
+		Version:     utils.GetEnv("SERVER_IMAGE_TAG", ""),
+		Capabilities: map[string]bool{
+			promptTypes.CapabilityPhaseCopy:   true,
+			promptTypes.CapabilityPhaseConfig: true,
+		},
+	}, func() bool {
+		// Bounded: the endpoint is public, so an unreachable database or an
+		// exhausted pool must report unhealthy rather than park the request
+		// goroutine until a connection frees.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		return conn.Ping(ctx) == nil
+	})
 
 	config.InitConfigModule(api, *query, conn)
 
