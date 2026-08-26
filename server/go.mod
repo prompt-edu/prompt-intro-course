@@ -11,11 +11,11 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/prompt-edu/prompt-sdk v1.2.3-0.20260730140832-6e13a114fdf9
 	github.com/sirupsen/logrus v1.9.4
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.0
 	github.com/swaggo/swag v1.16.6
 	github.com/testcontainers/testcontainers-go v0.43.0
 	gitlab.com/gitlab-org/api/client-go v1.46.0
-	gitlab.com/gitlab-org/api/client-go/v2 v2.55.1
+	gitlab.com/gitlab-org/api/client-go/v2 v2.58.1
 )
 
 require (
@@ -113,7 +113,7 @@ require (
 	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.45.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
