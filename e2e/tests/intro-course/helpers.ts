@@ -59,24 +59,6 @@ export async function setPeerAssignments(
   await expectOk(res)
 }
 
-export interface DeveloperProfileDTO {
-  courseParticipationID: string
-  gitLabUsername: string
-  appleID: string
-  hasMacBook: boolean
-  iPhoneUDID?: string
-  iPadUDID?: string
-  appleWatchUDID?: string
-}
-
-export async function getDeveloperProfiles(
-  ctx: APIRequestContext,
-): Promise<DeveloperProfileDTO[]> {
-  const res = await ctx.get(phaseUrl('/developer_profile'))
-  await expectOk(res)
-  return ((await res.json()) as DeveloperProfileDTO[] | null) ?? []
-}
-
 // The lecturer-side upsert (PUT), used for restoring state in teardown.
 export async function putDeveloperProfile(
   ctx: APIRequestContext,
