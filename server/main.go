@@ -64,7 +64,7 @@ func initSentry() {
 		Debug:            false,
 		Transport:        transport,
 		AttachStacktrace: true,
-		SendDefaultPII:   true,
+		DataCollection:   &sentry.DataCollection{UserInfo: sentry.Set(true)},
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 	}); err != nil {
