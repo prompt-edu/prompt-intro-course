@@ -24,7 +24,7 @@
 services:
   # ── Keycloak ──────────────────────────────────────────────────────────────
   keycloak-db:
-    image: "postgres:15.18-alpine"
+    image: "postgres:15.19-alpine"
     container_name: prompt-intro-e2e-keycloak-db
     environment:
       - POSTGRES_USER=${KEYCLOAK_DB_USER}
@@ -90,7 +90,7 @@ services:
 
   # ── Core ──────────────────────────────────────────────────────────────────
   db:
-    image: "postgres:15.18-alpine"
+    image: "postgres:15.19-alpine"
     container_name: prompt-intro-e2e-db
     environment:
       - POSTGRES_USER=${DB_CORE_USER}
@@ -191,7 +191,7 @@ services:
 
   # ── Intro course (this repo) ───────────────────────────────────────────────
   db-intro-course:
-    image: "postgres:15.18-alpine"
+    image: "postgres:15.19-alpine"
     container_name: prompt-intro-e2e-db-intro-course
     environment:
       - POSTGRES_USER=${DB_INTRO_COURSE_USER}
@@ -282,7 +282,7 @@ services:
   # Not used by the intro course, but core log.Fatal()s at boot if it cannot reach
   # the prompt-files and prompt-privacy-exports buckets.
   seaweedfs-master:
-    image: chrislusf/seaweedfs:4.38
+    image: chrislusf/seaweedfs:4.42
     container_name: prompt-intro-e2e-seaweedfs-master
     command: "master -ip=seaweedfs-master -ip.bind=0.0.0.0"
     restart: unless-stopped
@@ -293,7 +293,7 @@ services:
       retries: 3
 
   seaweedfs-volume:
-    image: chrislusf/seaweedfs:4.38
+    image: chrislusf/seaweedfs:4.42
     container_name: prompt-intro-e2e-seaweedfs-volume
     command: "volume -mserver=seaweedfs-master:9333 -ip=seaweedfs-volume -ip.bind=0.0.0.0 -port=8080"
     depends_on:
@@ -307,7 +307,7 @@ services:
       retries: 3
 
   seaweedfs-filer:
-    image: chrislusf/seaweedfs:4.38
+    image: chrislusf/seaweedfs:4.42
     container_name: prompt-intro-e2e-seaweedfs-filer
     command: "filer -master=seaweedfs-master:9333 -ip=seaweedfs-filer -ip.bind=0.0.0.0"
     depends_on:
@@ -321,7 +321,7 @@ services:
       retries: 3
 
   seaweedfs-s3:
-    image: chrislusf/seaweedfs:4.38
+    image: chrislusf/seaweedfs:4.42
     container_name: prompt-intro-e2e-seaweedfs-s3
     entrypoint:
       - /bin/sh
