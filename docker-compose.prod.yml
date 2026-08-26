@@ -54,7 +54,7 @@ services:
       - "traefik.docker.network=prompt-network"
 
   db-intro-course:
-    image: postgres:15.18-alpine
+    image: postgres:15.19-alpine
     container_name: db-intro-course
     restart: unless-stopped
     networks:
