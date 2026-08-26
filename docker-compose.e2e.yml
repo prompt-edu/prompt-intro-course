@@ -70,13 +70,8 @@ services:
       - ./e2e/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
     healthcheck:
       # The image ships neither curl nor wget, so /health/ready is spoken by hand
-      # over bash's /dev/tcp. Accepting a connection on the management port is not
-      # enough: server-core and server-intro-course gate on service_healthy and
-      # would start OIDC discovery against a realm the import has not created yet.
-      # `bash` is named explicitly rather than relying on /bin/sh being a bash link.
-      # The 200 status line is the signal: /health/ready answers 503 until every
-      # check passes, and matching it avoids the nested per-check "status": "UP"
-      # entries, which stay UP even when the overall status is DOWN.
+      # over bash's /dev/tcp. The 200 status line is the signal: /health/ready
+      # answers 503 until every check passes.
       test:
         [
           "CMD",
@@ -86,8 +81,12 @@ services:
         ]
       interval: 10s
       timeout: 5s
-      retries: 12
-      start_period: 30s
+      # A cold boot including the realm import measured ~90s locally, and the
+      # management port stays closed until then. server-core and
+      # server-intro-course gate on service_healthy and never start if this
+      # window expires, so it is sized for a slower CI runner.
+      retries: 30
+      start_period: 120s
 
   # ── Core ──────────────────────────────────────────────────────────────────
   db:
