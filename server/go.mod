@@ -16,6 +16,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.44.0
 	gitlab.com/gitlab-org/api/client-go v1.46.0
 	gitlab.com/gitlab-org/api/client-go/v2 v2.60.0
+	gitlab.com/gitlab-org/api/client-go/v3 v3.0.0
 )
 
 require (
