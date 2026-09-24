@@ -116,11 +116,14 @@ export const SeatStudentAssigner = ({
         return
       }
       if (isCustomLayout) {
-        const roomByTutor = new Map<string, number>()
+        const roomByTutor = new Map<string, string>()
         for (const seat of workingSeats) {
           if (!seat.assignedTutor) continue
           const room = parseSeatName(seat.seatName)?.room
-          if (room === undefined) continue
+          if (room === undefined) {
+            setError(`Seat ${seat.seatName} needs a room and position, such as Aquarium-01.`)
+            return
+          }
           const previousRoom = roomByTutor.get(seat.assignedTutor)
           if (previousRoom !== undefined && previousRoom !== room) {
             setError(

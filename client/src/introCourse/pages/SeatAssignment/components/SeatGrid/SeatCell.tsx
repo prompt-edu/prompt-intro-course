@@ -28,7 +28,7 @@ export const SeatCell = ({
 }: SeatCellProps) => {
   const parsed = parseSeatName(seat.seatName)
   const seatLabel = parsed
-    ? seat.seatName.replace(/^1-/, '')
+    ? seat.seatName.slice(`${parsed.room}-`.length)
     : seat.seatName.split('-').slice(1).join('-') || seat.seatName
   const hasStudent = !!seat.assignedStudent
   const isTutor = seat.isTutorSeat

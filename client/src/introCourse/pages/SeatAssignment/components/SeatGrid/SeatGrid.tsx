@@ -24,6 +24,7 @@ import {
   buildPeerGroups,
   buildPhysicalSeatMap,
   getMaxPhysicalPosition,
+  parseSeatName,
   type SeatGridViewMode,
 } from '../../utils/seatGrid'
 import { SeatCell } from './SeatCell'
@@ -299,11 +300,19 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
   const roomGroups = useMemo(() => {
     const groups = new Map<string, Seat[]>()
     for (const seat of seats) {
-      const separator = seat.seatName.indexOf('-')
-      const room = separator > 0 ? seat.seatName.slice(0, separator) : 'Other seats'
+      const room = parseSeatName(seat.seatName)?.room ?? 'Other seats'
       const group = groups.get(room) ?? []
       group.push(seat)
       groups.set(room, group)
+    }
+    for (const group of groups.values()) {
+      group.sort((a, b) => {
+        const left = parseSeatName(a.seatName)
+        const right = parseSeatName(b.seatName)
+        if (!left || !right)
+          return a.seatName.localeCompare(b.seatName, undefined, { numeric: true })
+        return left.row - right.row || left.position - right.position
+      })
     }
     return [...groups.entries()]
   }, [seats])

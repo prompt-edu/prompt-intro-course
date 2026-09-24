@@ -33,7 +33,7 @@ export function autoAssignTutors(seats: Seat[], tutors: Tutor[]): Seat[] {
     const pa = parseSeatName(a.seatName)
     const pb = parseSeatName(b.seatName)
     if (!pa || !pb) return a.seatName.localeCompare(b.seatName)
-    if (pa.room !== pb.room) return pa.room - pb.room
+    if (pa.room !== pb.room) return pa.room.localeCompare(pb.room, undefined, { numeric: true })
     if (pa.row !== pb.row) return pa.row - pb.row
     return pa.position - pb.position
   })
