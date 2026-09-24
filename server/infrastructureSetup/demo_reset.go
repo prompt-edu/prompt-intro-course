@@ -24,10 +24,11 @@ type resetDemoRequest struct {
 }
 
 type resetDemoResult struct {
-	DemoURL    string `json:"demoUrl"`
-	DemoID     int64  `json:"demoId"`
-	ArchiveURL string `json:"archiveUrl"`
-	SourceSHA  string `json:"sourceSha"`
+	DemoURL             string `json:"demoUrl"`
+	DemoID              int64  `json:"demoId"`
+	ArchiveURL          string `json:"archiveUrl"`
+	ArchiveMoveRequired bool   `json:"archiveMoveRequired"`
+	SourceSHA           string `json:"sourceSha"`
 }
 
 func loadMaterialSnapshot(git *gitlab.Client, projectID, expectedSHA string) (*materialSnapshot, error) {
@@ -147,7 +148,12 @@ func ResetDemo(ctx context.Context, coursePhaseID uuid.UUID, request resetDemoRe
 	// Keep repeated experiments out of the active Introcourse project list.
 	_, _, err = git.Projects.TransferProject(oldProject.ID, &gitlab.TransferProjectOptions{Namespace: archiveGroup.ID})
 	if err != nil {
-		return result, fmt.Errorf("replacement demo exists, but move old demo to archives failed: %w", err)
+		// The replacement is already usable. A group access token can be a
+		// Maintainer of the archive subgroup yet lack the Owner permission GitLab
+		// requires for project transfer. Report the remaining cleanup explicitly
+		// instead of turning a successful reset into an opaque failed request.
+		result.ArchiveMoveRequired = true
+		return result, nil
 	}
 	// GitLab accepts transfers before its background worker moves the project.
 	// An immediate GET can still return the old namespace; the old URL remains
