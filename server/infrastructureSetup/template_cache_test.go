@@ -1571,6 +1571,11 @@ func TestConfigureProjectRestoresProtectionOnTemplateFailure(t *testing.T) {
 			protected = true
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprint(w, `{"name":"main"}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300/repository/tree":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `[]`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects/300/repository/commits":
+			w.WriteHeader(http.StatusInternalServerError)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1578,10 +1583,9 @@ func TestConfigureProjectRestoresProtectionOnTemplateFailure(t *testing.T) {
 	defer server.Close()
 	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
 	require.NoError(t, err)
-	original := InfrastructureServiceSingleton
-	InfrastructureServiceSingleton = &InfrastructureService{}
-	defer func() { InfrastructureServiceSingleton = original }()
-	require.ErrorContains(t, configureProject(client, 300, "demo", templateVars{}), "GITLAB_TEACHING_MATERIAL_PROJECT_ID")
+	require.ErrorContains(t, configureProjectWithMaterial(client, 300, "demo", templateVars{}, &materialSnapshot{
+		templates: []templateFile{{Path: "README.md", Content: "demo"}},
+	}), "initialize")
 	assert.True(t, unprotected)
 	assert.True(t, protected)
 }

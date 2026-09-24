@@ -235,6 +235,20 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 }
 
 func configureProjectWithMaterial(git *gitlab.Client, projectID int64, projectName string, vars templateVars, material *materialSnapshot) (resultErr error) {
+	var templates []templateFile
+	if material == nil {
+		svc := InfrastructureServiceSingleton
+		if svc.teachingMaterialProjectID == "" {
+			return fmt.Errorf("GITLAB_TEACHING_MATERIAL_PROJECT_ID not configured")
+		}
+		var err error
+		templates, err = svc.templates.get(git, svc.teachingMaterialProjectID)
+		if err != nil {
+			return fmt.Errorf("fetch templates for %q: %w", projectName, err)
+		}
+	} else {
+		templates = material.templates
+	}
 	// Branch protection — GitLab auto-protects 'main' with default settings
 	// when the first commit is pushed, so we must unprotect first to apply our
 	// desired access levels. We unprotect BEFORE creating files so the initial
@@ -263,12 +277,7 @@ func configureProjectWithMaterial(git *gitlab.Client, projectID int64, projectNa
 	}()
 
 	// Template files (idempotent: skip files that already exist)
-	var err error
-	if material == nil {
-		err = createProjectFiles(git, projectID, projectName, vars)
-	} else {
-		err = createProjectFilesFromTemplates(git, projectID, projectName, vars, material.templates)
-	}
+	err := createProjectFilesFromTemplates(git, projectID, projectName, vars, templates)
 	if err != nil {
 		return err
 	}
@@ -638,7 +647,10 @@ func ensureGroupMember(git *gitlab.Client, groupID, userID int64, access gitlab.
 			return nil
 		}
 		_, _, err = git.GroupMembers.EditGroupMember(groupID, userID, &gitlab.EditGroupMemberOptions{AccessLevel: gitlab.Ptr(access)})
-		return err
+		if err != nil {
+			return err
+		}
+		return verifyDirectGroupMember(git, groupID, userID, access)
 	}
 	if !isNotFoundError(err) {
 		return err
@@ -646,6 +658,17 @@ func ensureGroupMember(git *gitlab.Client, groupID, userID int64, access gitlab.
 	_, _, err = git.GroupMembers.AddGroupMember(groupID, &gitlab.AddGroupMemberOptions{UserID: gitlab.Ptr(userID), AccessLevel: gitlab.Ptr(access)})
 	if err != nil && !isAlreadyExistsError(err) {
 		return err
+	}
+	return verifyDirectGroupMember(git, groupID, userID, access)
+}
+
+func verifyDirectGroupMember(git *gitlab.Client, groupID, userID int64, access gitlab.AccessLevelValue) error {
+	member, _, err := git.GroupMembers.GetGroupMember(groupID, userID)
+	if err != nil {
+		return fmt.Errorf("GitLab did not confirm direct group membership: %w", err)
+	}
+	if member.AccessLevel < access {
+		return fmt.Errorf("GitLab group membership has access level %d; need at least %d", member.AccessLevel, access)
 	}
 	return nil
 }
