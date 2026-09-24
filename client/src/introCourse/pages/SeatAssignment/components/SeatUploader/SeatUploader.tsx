@@ -36,7 +36,7 @@ export const SeatUploader = ({ existingSeats }: SeatUploaderProps) => {
   const [isUploading, setIsUploading] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedFileName, setSelectedFileName] = useState('No file selected')
-  const [selectionMethod, setSelectionMethod] = useState<'upload' | 'rechnerhalle'>('rechnerhalle')
+  const [selectionMethod, setSelectionMethod] = useState<'upload' | 'rechnerhalle'>('upload')
 
   const hasSeatPlan = existingSeats.length > 0
 
@@ -126,7 +126,7 @@ export const SeatUploader = ({ existingSeats }: SeatUploaderProps) => {
             <CardDescription>
               {hasSeatPlan
                 ? `Current seat plan has ${existingSeats.length} seats`
-                : 'Set up a seat plan by selecting Rechnerhalle or uploading a custom CSV'}
+                : 'Upload the actual room seats as a CSV, then assign Macs, tutors, and students'}
             </CardDescription>
           </div>
         </div>
@@ -172,26 +172,27 @@ export const SeatUploader = ({ existingSeats }: SeatUploaderProps) => {
               className='space-y-4'
             >
               <div className='flex items-start space-x-2'>
-                <RadioGroupItem value='rechnerhalle' id='rechnerhalle' />
+                <RadioGroupItem value='upload' id='upload' />
                 <div className='grid gap-1.5'>
-                  <Label htmlFor='rechnerhalle' className='font-medium'>
-                    Use Rechnerhalle layout
+                  <Label htmlFor='upload' className='font-medium'>
+                    Upload this course's seat list
                   </Label>
                   <p className='text-sm text-muted-foreground'>
-                    Use the predefined Rechnerhalle layout with {RECHNERHALLE_SEATS.length} seats.
+                    Use one unique seat name per line, such as Aquarium-01, Aurarium-01, or
+                    iTüpferl-01. Include only usable seats; mark seats with Macs in the next step.
                   </p>
                 </div>
               </div>
 
               <div className='flex items-start space-x-2'>
-                <RadioGroupItem value='upload' id='upload' />
+                <RadioGroupItem value='rechnerhalle' id='rechnerhalle' />
                 <div className='grid gap-1.5'>
-                  <Label htmlFor='upload' className='font-medium'>
-                    Upload seat list
+                  <Label htmlFor='rechnerhalle' className='font-medium'>
+                    Legacy Rechnerhalle layout
                   </Label>
                   <p className='text-sm text-muted-foreground'>
-                    Upload a CSV file with seat names. Each seat should be on a new line or
-                    separated by commas.
+                    Only use the predefined {RECHNERHALLE_SEATS.length}-seat layout for a course
+                    held in Rechnerhalle.
                   </p>
                 </div>
               </div>

@@ -49,6 +49,8 @@ import { useAssignStudents } from '../../hooks/useAssignStudents'
 import { useDownloadAssignment } from '../../hooks/useDownloadAssignment'
 import { useUpdateSeats } from '../../hooks/useUpdateSeats'
 import type { DeveloperWithProfile } from '../../interfaces/DeveloperWithProfile'
+import { RECHNERHALLE_SEATS } from '../../utils/rechnerHalle'
+import { parseSeatName } from '../../utils/seatGrid'
 import { smartAssign } from '../../utils/smartAssignment'
 import { ResetSeatAssignmentDialog } from './ResetSeatAssignmentDialog'
 
@@ -70,6 +72,8 @@ export const SeatStudentAssigner = ({
   const [isCollapsed, setIsCollapsed] = useState(false)
   const totalStudents = developerWithProfiles.length
   const assignedStudents = seats.filter((seat) => seat.assignedStudent).length
+  const isCustomLayout = seats.some((seat) => !RECHNERHALLE_SEATS.includes(seat.seatName))
+  const pendingMacProfiles = developerWithProfiles.filter((dev) => dev.profile?.hasMacBook == null)
 
   const assignmentStatus = useMemo<'none' | 'partial' | 'complete'>(() => {
     if (assignedStudents === 0) return 'none'
@@ -93,15 +97,42 @@ export const SeatStudentAssigner = ({
   // Smart assign function — fills remaining unassigned students into empty seats
   const smartAssignStudents = useCallback(
     (resetStudentsFirst = false) => {
+      if (pendingMacProfiles.length > 0) {
+        setError(
+          `${pendingMacProfiles.length} student(s) have not reported whether they have a Mac. Complete their profiles before finalizing the seat plan.`,
+        )
+        return
+      }
       let workingSeats = seats
       if (resetStudentsFirst) {
         workingSeats = seats.map((s) => ({ ...s, assignedStudent: null }))
       }
 
-      // Auto-assign tutors if needed
       const hasTutors = workingSeats.some((s) => s.assignedTutor)
-      if (!hasTutors && tutors.length > 0) {
-        // Will be handled inside smartAssign
+      if (isCustomLayout && workingSeats.some((s) => !s.assignedTutor)) {
+        setError(
+          'Assign a tutor to every seat in the room plan before Smart Assign. This keeps tutor groups in their rooms.',
+        )
+        return
+      }
+      if (isCustomLayout) {
+        const roomByTutor = new Map<string, string>()
+        for (const seat of workingSeats) {
+          if (!seat.assignedTutor) continue
+          const room = parseSeatName(seat.seatName)?.room
+          if (room === undefined) {
+            setError(`Seat ${seat.seatName} needs a room and position, such as Aquarium-01.`)
+            return
+          }
+          const previousRoom = roomByTutor.get(seat.assignedTutor)
+          if (previousRoom !== undefined && previousRoom !== room) {
+            setError(
+              'A tutor group spans multiple rooms. Assign each tutor to seats in one room before Smart Assign.',
+            )
+            return
+          }
+          roomByTutor.set(seat.assignedTutor, room)
+        }
       }
 
       const currentAssigned = resetStudentsFirst ? 0 : assignedStudents
@@ -117,9 +148,47 @@ export const SeatStudentAssigner = ({
       }
       setError(null)
       const updatedSeats = smartAssign(workingSeats, developerWithProfiles, peerAssignments, tutors)
+      const assignedIDs = updatedSeats.flatMap((seat) =>
+        seat.assignedStudent ? [seat.assignedStudent] : [],
+      )
+      const expectedIDs = developerWithProfiles.map(
+        (dev) => dev.participation.courseParticipationID,
+      )
+      const missingIDs = expectedIDs.filter((id) => !assignedIDs.includes(id))
+      const duplicatedIDs = assignedIDs.filter((id, index) => assignedIDs.indexOf(id) !== index)
+      const unexpectedIDs = assignedIDs.filter((id) => !expectedIDs.includes(id))
+      if (missingIDs.length > 0 || duplicatedIDs.length > 0 || unexpectedIDs.length > 0) {
+        setError(
+          `Seat plan is incomplete: ${missingIDs.length} unassigned student(s), ${duplicatedIDs.length} duplicate assignment(s), ${unexpectedIDs.length} unknown student(s). Review tutor groups and seat counts.`,
+        )
+        return
+      }
+      const noMacIDs = new Set(
+        developerWithProfiles
+          .filter((dev) => dev.profile?.hasMacBook === false)
+          .map((dev) => dev.participation.courseParticipationID),
+      )
+      const studentsWithoutMacSeats = updatedSeats.filter(
+        (seat) => seat.assignedStudent && noMacIDs.has(seat.assignedStudent) && !seat.hasMac,
+      )
+      if (studentsWithoutMacSeats.length > 0) {
+        setError(
+          `${studentsWithoutMacSeats.length} student(s) without a Mac would be assigned to a seat without one. Add Mac seats or adjust tutor groups.`,
+        )
+        return
+      }
       mutation.mutate(updatedSeats)
     },
-    [seats, developerWithProfiles, assignedStudents, peerAssignments, tutors, mutation],
+    [
+      seats,
+      developerWithProfiles,
+      assignedStudents,
+      peerAssignments,
+      tutors,
+      mutation,
+      isCustomLayout,
+      pendingMacProfiles.length,
+    ],
   )
 
   // CSV import — parses CSV client-side, sends to server for name resolution and atomic save
@@ -222,9 +291,16 @@ export const SeatStudentAssigner = ({
     (seatName: string, studentId: string) => {
       const seat = seats.find((s) => s.seatName === seatName)
       if (!seat) return
+      const student = developerWithProfiles.find(
+        (dev) => dev.participation.courseParticipationID === studentId,
+      )
+      if (student?.profile?.hasMacBook === false && !seat.hasMac) {
+        setError('This student needs a seat with a Mac.')
+        return
+      }
       mutation.mutate([{ ...seat, assignedStudent: studentId }])
     },
-    [seats, mutation],
+    [seats, developerWithProfiles, mutation],
   )
 
   // Unassign a student from their seat
@@ -317,7 +393,7 @@ export const SeatStudentAssigner = ({
                 <Button
                   size='sm'
                   onClick={assignStudents}
-                  disabled={mutation.isPending || assignedStudents > 0}
+                  disabled={mutation.isPending || assignedStudents > 0 || isCustomLayout}
                 >
                   <UserCheck className='mr-2 h-4 w-4' />
                   Assign Random

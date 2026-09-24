@@ -75,9 +75,10 @@ func CreateCourseInfrastructure(semesterTag string) error {
 		return err
 	}
 
-	// 6.) Create CI/CD project (shared pipeline config referenced by all course projects)
+	// 6.) The shared CI config is required by every student project. Do not mark
+	// course setup complete if it is missing or could not be updated.
 	if err = createCICDProject(git, introCourseGroup.ID, introCourseGroup.FullPath); err != nil {
-		log.WithError(err).Error("Failed to create CI/CD project (non-fatal)")
+		return fmt.Errorf("set up shared CI/CD project: %w", err)
 	}
 
 	// 7.) Create demo project for instructors (non-fatal: course setup can succeed without it)

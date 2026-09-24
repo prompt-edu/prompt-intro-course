@@ -15,7 +15,7 @@ import {
   Input,
 } from '@tumaet/prompt-ui-components'
 import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type { GitlabRepoRequest } from '../../../interfaces/GitlabRepoRequest'
 import { createGitlabRepo } from '../../../network/mutations/createGitlabRepo'
@@ -33,6 +33,7 @@ export const CreateGitlabReposDialog = ({
   const [successCount, setSuccessCount] = useState(0)
   const [errorCount, setErrorCount] = useState(0)
   const [isCreatingRepos, setIsCreatingRepos] = useState(false)
+  const stopRequested = useRef(false)
   const [logs, setLogs] = useState<string[]>([])
 
   // State for storing the user-entered deadline
@@ -73,23 +74,52 @@ export const CreateGitlabReposDialog = ({
     onError: (error) => setLogs((prev) => [...prev, `❌ Infrastructure setup error: ${error}`]),
   })
 
+  const pendingProfiles = participantsWithDevProfiles.filter(
+    (participation) => !participation.devProfile && !participation.gitlabStatus?.gitlabSuccess,
+  )
+  const missingGitlabUsername = participantsWithDevProfiles.filter(
+    (participation) =>
+      participation.devProfile &&
+      !participation.devProfile.gitLabUsername &&
+      !participation.gitlabStatus?.gitlabSuccess,
+  )
+  const missingUniversityLogin = participantsWithDevProfiles.filter(
+    (participation) =>
+      participation.devProfile?.gitLabUsername &&
+      !participation.participation.student.universityLogin &&
+      !participation.gitlabStatus?.gitlabSuccess,
+  )
+  const missingStudentName = participantsWithDevProfiles.filter(
+    (participation) =>
+      participation.devProfile?.gitLabUsername &&
+      participation.participation.student.universityLogin &&
+      !`${participation.participation.student.firstName ?? ''} ${participation.participation.student.lastName ?? ''}`.trim() &&
+      !participation.gitlabStatus?.gitlabSuccess,
+  )
   const participationsReadyForGitlab = participantsWithDevProfiles.filter(
     (participation) =>
-      participation.devProfile?.gitLabUsername && !participation.gitlabStatus?.gitlabSuccess,
+      participation.devProfile?.gitLabUsername &&
+      participation.participation.student.universityLogin &&
+      `${participation.participation.student.firstName ?? ''} ${participation.participation.student.lastName ?? ''}`.trim() &&
+      !participation.gitlabStatus?.gitlabSuccess,
   )
 
   const triggerCreateRepos = async () => {
+    stopRequested.current = false
     setIsCreatingRepos(true)
     setLogs([])
     setSuccessCount(0)
     setErrorCount(0)
 
     for (const participation of participationsReadyForGitlab) {
+      if (stopRequested.current) break
       try {
         await createGitlabRepoMutation.mutateAsync({
           coursePhaseParticipationID: participation.participation.courseParticipationID,
           createGitlabRepoDTO: {
-            repoName: participation.participation.student.universityLogin ?? '', // use the TUM-ID as repository Name
+            // The server keeps the TUM ID as the stable URL path and uses
+            // "Student Name - TUM ID" as the visible GitLab project name.
+            repoName: participation.participation.student.universityLogin ?? '',
             studentName:
               `${participation.participation.student.firstName ?? ''} ${participation.participation.student.lastName ?? ''}`.trim(),
 
@@ -111,6 +141,7 @@ export const CreateGitlabReposDialog = ({
       }
     }
 
+    await queryClient.invalidateQueries({ queryKey: ['gitlab_statuses', phaseId] })
     setIsCreatingRepos(false)
   }
 
@@ -156,18 +187,19 @@ export const CreateGitlabReposDialog = ({
 
         <section className='flex items-center justify-between py-4 border-b'>
           <span>Create Gitlab Course Group</span>
-          {infraStructureExists ? (
-            <CheckCircle className='text-green-500' />
-          ) : (
+          <div className='flex items-center gap-2'>
+            {infraStructureExists && <CheckCircle className='text-green-500' />}
             <Button
-              disabled={createInfrastructureSetup.isPending}
+              disabled={createInfrastructureSetup.isPending || isCreatingRepos}
               onClick={() => createInfrastructureSetup.mutate()}
             >
               {createInfrastructureSetup.isPending
-                ? 'Creating Infrastructure...'
-                : 'Create Infrastructure'}
+                ? 'Checking Infrastructure...'
+                : infraStructureExists
+                  ? 'Check and repair infrastructure'
+                  : 'Create infrastructure'}
             </Button>
-          )}
+          </div>
         </section>
 
         <section className='mt-4'>
@@ -187,13 +219,45 @@ export const CreateGitlabReposDialog = ({
             className='w-full mb-4'
           />
 
-          <Button disabled={isCreatingRepos || !infraStructureExists} onClick={triggerCreateRepos}>
+          <p className='mb-3 text-sm text-muted-foreground'>
+            {participationsReadyForGitlab.length} ready to create; {pendingProfiles.length} waiting
+            for a developer profile; {missingGitlabUsername.length} missing a GitLab username;{' '}
+            {missingUniversityLogin.length} missing a TUM ID; {missingStudentName.length} missing a
+            name. Students still completing a profile are skipped for now and can be created in a
+            later run.
+          </p>
+          {pendingProfiles.length > 0 && (
+            <p className='mb-3 text-sm'>
+              Waiting for profile:{' '}
+              {pendingProfiles
+                .map(({ participation }) =>
+                  `${participation.student.firstName} ${participation.student.lastName}`.trim(),
+                )
+                .join(', ')}
+            </p>
+          )}
+
+          <Button
+            disabled={
+              isCreatingRepos ||
+              !infraStructureExists ||
+              !deadline.trim() ||
+              participationsReadyForGitlab.length === 0
+            }
+            onClick={triggerCreateRepos}
+          >
             Create Repositories ({participationsReadyForGitlab.length})
           </Button>
 
           {isCreatingRepos && (
-            <Button variant='outline' className='ml-2' onClick={() => setIsCreatingRepos(false)}>
-              Cancel
+            <Button
+              variant='outline'
+              className='ml-2'
+              onClick={() => {
+                stopRequested.current = true
+              }}
+            >
+              Stop after current student
             </Button>
           )}
 
