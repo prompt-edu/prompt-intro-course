@@ -28,7 +28,7 @@ func makeGitLabError(statusCode int, message string) *gitlab.ErrorResponse {
 }
 
 func TestStudentProjectDisplayName(t *testing.T) {
-	assert.Equal(t, "Example Long Student Name - go57abc", studentProjectDisplayName("Example Long Student Name", "go57abc"))
+	assert.Equal(t, "Example Long Student Name - ab57xyz", studentProjectDisplayName("Example Long Student Name", "ab57xyz"))
 	assert.Equal(t, "Anne-Marie O Connor - go36kex", studentProjectDisplayName("Anne-Marie O'Connor", "go36kex"))
 	assert.Equal(t, "Çelik Yücel - go57bak", studentProjectDisplayName("Çelik Yücel", "go57bak"))
 }
