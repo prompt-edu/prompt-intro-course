@@ -113,13 +113,14 @@ func ResetDemo(ctx context.Context, coursePhaseID uuid.UUID, request resetDemoRe
 		return nil, fmt.Errorf("prepare demo archive group: %w", err)
 	}
 	archivePath := fmt.Sprintf("demo-before-reset-%s-%s", time.Now().UTC().Format("20060102-150405"), uuid.NewString()[:6])
+	archiveName := "Demo before reset " + strings.TrimPrefix(archivePath, "demo-before-reset-")
 	archived, _, err := git.Projects.EditProject(oldProject.ID, &gitlab.EditProjectOptions{
-		Name: gitlab.Ptr("Demo before reset"), Path: gitlab.Ptr(archivePath),
+		Name: gitlab.Ptr(archiveName), Path: gitlab.Ptr(archivePath),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("archive current demo: %w", err)
 	}
-	if archived.ID != oldProject.ID || archived.Path != archivePath {
+	if archived.ID != oldProject.ID || archived.Path != archivePath || archived.Name != archiveName {
 		return nil, fmt.Errorf("GitLab did not confirm the demo archive path")
 	}
 	result := &resetDemoResult{ArchiveURL: archived.WebURL, SourceSHA: material.sha}
