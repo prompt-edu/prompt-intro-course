@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,6 +25,62 @@ type InfrastructureService struct {
 	templates                 templateCache
 	issues                    issueCache
 	cicd                      cicdCache
+	verifiedStudentSetup      verifiedStudentSetupCache
+}
+
+// A repository batch can contain dozens of students. Keep the expensive demo
+// comparison and teaching-material download for a short period, while checking
+// the source and demo main commits before every individual repository.
+type verifiedStudentSetupCache struct {
+	mu          sync.Mutex
+	coursePhase uuid.UUID
+	semesterTag string
+	sourceSHA   string
+	demoID      int64
+	demoSHA     string
+	material    *materialSnapshot
+	checkedAt   time.Time
+}
+
+const verifiedStudentSetupTTL = 5 * time.Minute
+
+func verifiedMaterialForStudent(ctx context.Context, coursePhaseID uuid.UUID, semesterTag string) (*materialSnapshot, error) {
+	svc := InfrastructureServiceSingleton
+	git, err := getClient()
+	if err != nil {
+		return nil, err
+	}
+	cache := &svc.verifiedStudentSetup
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	if cache.material != nil && cache.coursePhase == coursePhaseID && cache.semesterTag == semesterTag && time.Since(cache.checkedAt) < verifiedStudentSetupTTL {
+		source, _, sourceErr := git.Branches.GetBranch(svc.teachingMaterialProjectID, "main")
+		demo, _, demoErr := git.Branches.GetBranch(cache.demoID, "main")
+		if sourceErr == nil && demoErr == nil && source.Commit != nil && demo.Commit != nil && source.Commit.ID == cache.sourceSHA && demo.Commit.ID == cache.demoSHA && demo.Protected {
+			return cache.material, nil
+		}
+	}
+
+	status, err := CourseInfrastructureStatus(ctx, coursePhaseID, semesterTag)
+	if err != nil {
+		return nil, fmt.Errorf("check demo readiness: %w", err)
+	}
+	if !status.Checks.DemoReady || status.Source == nil || status.DemoProject == nil {
+		return nil, fmt.Errorf("demo repository is not ready for current teaching material; repair and test it before creating student repos")
+	}
+	material, err := loadMaterialSnapshot(git, svc.teachingMaterialProjectID, status.Source.SHA)
+	if err != nil {
+		return nil, fmt.Errorf("load verified teaching material: %w", err)
+	}
+	cache.coursePhase = coursePhaseID
+	cache.semesterTag = semesterTag
+	cache.sourceSHA = status.Source.SHA
+	cache.demoID = status.DemoProject.ID
+	cache.demoSHA = status.DemoProject.SHA
+	cache.material = material
+	cache.checkedAt = time.Now()
+	return material, nil
 }
 
 var InfrastructureServiceSingleton *InfrastructureService
@@ -131,20 +189,9 @@ func ensureImportedTutorGroupMembers(ctx context.Context, coursePhaseID uuid.UUI
 }
 
 func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParticipationID uuid.UUID, semesterTag, repoName, studentName, submissionDeadline string) error {
-	status, err := CourseInfrastructureStatus(ctx, coursePhaseID, semesterTag)
-	if err != nil {
-		return fmt.Errorf("check demo readiness: %w", err)
-	}
-	if !status.Checks.DemoReady {
-		return fmt.Errorf("demo repository is not ready for current teaching material; repair and test it before creating student repos")
-	}
-	git, err := getClient()
+	material, err := verifiedMaterialForStudent(ctx, coursePhaseID, semesterTag)
 	if err != nil {
 		return err
-	}
-	material, err := loadMaterialSnapshot(git, InfrastructureServiceSingleton.teachingMaterialProjectID, status.Source.SHA)
-	if err != nil {
-		return fmt.Errorf("load verified teaching material: %w", err)
 	}
 	// 1.) get the student developer profile
 	devProfile, err := InfrastructureServiceSingleton.queries.GetDeveloperProfileByCourseParticipationID(ctx, db.GetDeveloperProfileByCourseParticipationIDParams{
