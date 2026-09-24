@@ -504,7 +504,7 @@ func ensurePeerReviewRule(git *gitlab.Client, projectID int64, repoName string, 
 			return nil
 		}
 		if rule.RuleType == "any_approver" {
-			return fmt.Errorf("Peer Review rule for %q is an any-approver rule; remove it before repair", repoName)
+			return fmt.Errorf("peer review rule for %q is an any-approver rule; remove it before repair", repoName)
 		}
 		updated, _, updateErr := git.Projects.UpdateProjectApprovalRule(projectID, rule.ID, &gitlab.UpdateProjectLevelRuleOptions{
 			ApprovalsRequired:             gitlab.Ptr(int64(0)),
