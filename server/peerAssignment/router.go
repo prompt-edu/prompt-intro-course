@@ -4,12 +4,12 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	promptSDK "github.com/prompt-edu/prompt-sdk"
+	"github.com/prompt-edu/prompt-intro-course/server/gitlabutil"
 	"github.com/prompt-edu/prompt-intro-course/server/peerAssignment/peerAssignmentDTO"
+	promptSDK "github.com/prompt-edu/prompt-sdk"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -196,7 +196,7 @@ func syncPeerAssignmentsToGitlab(c *gin.Context) {
 		return
 	}
 
-	semesterTag := strings.ToUpper(req.SemesterTag)
+	semesterTag := gitlabutil.CourseGroupName(req.SemesterTag)
 	if !semesterTagPattern.MatchString(semesterTag) {
 		handleError(c, http.StatusBadRequest, errors.New("invalid semester tag format"))
 		return
@@ -239,7 +239,7 @@ func unsyncPeerAssignmentsFromGitlab(c *gin.Context) {
 		return
 	}
 
-	semesterTag := strings.ToUpper(req.SemesterTag)
+	semesterTag := gitlabutil.CourseGroupName(req.SemesterTag)
 	if !semesterTagPattern.MatchString(semesterTag) {
 		handleError(c, http.StatusBadRequest, errors.New("invalid semester tag format"))
 		return
