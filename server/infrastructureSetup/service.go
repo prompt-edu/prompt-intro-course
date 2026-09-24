@@ -157,7 +157,18 @@ func CreateCourseInfrastructure(ctx context.Context, coursePhaseID uuid.UUID, se
 	}
 
 	// 7.) The demo is the course's reference project and setup smoke test.
+	// A material update may add starter files to an existing demo. Keep its
+	// protected main intact: shared CI and tutor access have already been
+	// refreshed, and the operator can reset the demo to the new snapshot.
+	_, _, demoReadErr := git.Projects.GetProject(introCourseGroup.FullPath+"/demo", nil)
+	if demoReadErr != nil && !isNotFoundError(demoReadErr) {
+		return fmt.Errorf("check existing demo project: %w", demoReadErr)
+	}
+	demoExisted := demoReadErr == nil
 	if err = createDemoProjectWithMaterial(git, introCourseGroup.ID, introCourseGroup.FullPath, tutorsGroup.ID, material); err != nil {
+		if demoExisted && errors.Is(err, errExistingMainMissingFiles) {
+			return nil
+		}
 		return fmt.Errorf("set up demo project: %w", err)
 	}
 
