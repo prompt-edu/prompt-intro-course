@@ -117,15 +117,12 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
     if (!username) return true
     const result = await gitLabCheck.check(username)
     if (form.getValues('gitLabUsername').trim() !== username) return false
-    if (result?.status === 'found') {
+    if (result?.status === 'found' || result?.status === 'check_failed') {
       form.clearErrors('gitLabUsername')
       return true
     }
     form.setError('gitLabUsername', {
-      message:
-        result?.status === 'check_failed'
-          ? 'GitLab could not be checked. Please retry before saving.'
-          : 'Username not found on LRZ GitLab. Check the profile URL.',
+      message: 'Username not found on LRZ GitLab. Check the profile URL.',
     })
     return false
   }
@@ -138,7 +135,7 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className='sm:max-w-[600px]'>
+      <DialogContent className='sm:max-w-[600px] max-h-[90vh] overflow-y-auto'>
         <DialogHeader>
           <DialogTitle>
             {participantWithProfile.devProfile

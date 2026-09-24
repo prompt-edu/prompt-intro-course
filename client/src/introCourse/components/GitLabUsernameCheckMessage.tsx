@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { GitLabUsernameCheck } from '../network/queries/checkGitLabUsername'
 
 export const GitLabUsernameCheckMessage = ({
@@ -7,10 +8,17 @@ export const GitLabUsernameCheckMessage = ({
   result: GitLabUsernameCheck | null
   isChecking: boolean
 }) => {
-  if (isChecking) return <p className='text-muted-foreground text-sm'>Checking LRZ GitLab…</p>
-  if (!result) return null
-  if (result.status === 'found') {
+  if (isChecking) {
     return (
+      <div className='min-h-10 text-muted-foreground text-sm' aria-live='polite'>
+        Checking LRZ GitLab…
+      </div>
+    )
+  }
+  if (!result) return <div className='min-h-10' aria-live='polite' />
+  let content: ReactNode
+  if (result.status === 'found') {
+    content = (
       <p className='text-sm'>
         Found{' '}
         <a className='underline' href={result.gitLabURL} target='_blank' rel='noreferrer'>
@@ -19,17 +27,23 @@ export const GitLabUsernameCheckMessage = ({
         on LRZ GitLab. Confirm this is the correct account.
       </p>
     )
-  }
-  if (result.status === 'check_failed') {
-    return (
+  } else if (result.status === 'check_failed') {
+    content = (
       <p className='text-sm text-amber-700'>
-        GitLab could not be checked right now. Please try again later.
+        GitLab could not be checked right now. You can save, but verify this username before
+        repository setup.
+      </p>
+    )
+  } else {
+    content = (
+      <p className='text-sm text-red-700'>
+        This username was not found on LRZ GitLab. Sign in to GitLab and check your profile URL.
       </p>
     )
   }
   return (
-    <p className='text-sm text-red-700'>
-      This username was not found on LRZ GitLab. Sign in to GitLab and check your profile URL.
-    </p>
+    <div className='min-h-10' aria-live='polite'>
+      {content}
+    </div>
   )
 }
