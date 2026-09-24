@@ -113,7 +113,9 @@ export const RepositorySetupPage = () => {
       setTypedConfirmation('')
       await queryClient.invalidateQueries({ queryKey })
       setNotice(
-        'A new demo was created. Check its files, issues, access, and pipeline before use. GitLab may take a little longer to move the previous demo into the archive subgroup.',
+        result.archiveMoveRequired
+          ? 'A new demo was created. The previous demo is still in the Introcourse group: a GitLab Owner must move it to demo-archives. Check the new demo’s files, issues, access, and pipeline before use.'
+          : 'A new demo was created. Check its files, issues, access, and pipeline before use. GitLab may take a little longer to move the previous demo into the archive subgroup.',
       )
       setArchiveUrl(result.archiveUrl || null)
       setActionError(null)
@@ -342,8 +344,9 @@ export const RepositorySetupPage = () => {
               <DialogTitle>Reset the demo repository</DialogTitle>
               <DialogDescription>
                 The current demo, including its branches, issues, and merge requests, would be
-                preserved in the demo-archives subgroup. A new demo would be created from the
-                current teaching material. Student repositories would not be changed.
+                preserved under a unique name. PROMPT will try to move it to demo-archives; a GitLab
+                Owner may need to finish that move. A new demo would be created from the current
+                teaching material. Student repositories would not be changed.
               </DialogDescription>
             </DialogHeader>
             <div className='space-y-2'>
