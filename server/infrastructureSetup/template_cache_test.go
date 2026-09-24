@@ -756,7 +756,7 @@ func TestCreateDemoProject(t *testing.T) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/octet-stream")
-			_, _ = fmt.Fprint(w, "# {{.StudentName}}'s Demo")
+			_, _ = fmt.Fprint(w, "# {{.StudentName}}'s Demo\n\nSubmission deadline: {{.SubmissionDeadline}}")
 			return
 		}
 
@@ -870,7 +870,9 @@ func TestCreateDemoProject(t *testing.T) {
 	action := actions[0].(map[string]interface{})
 	assert.Equal(t, "README.md", action["file_path"])
 	assert.Contains(t, action["content"], "Demo")
+	assert.Contains(t, action["content"], "Submission deadline: See the course schedule in Outline")
 	assert.NotContains(t, action["content"], "{{.StudentName}}")
+	assert.NotContains(t, action["content"], "{{.SubmissionDeadline}}")
 
 	// Verify daily issues were created
 	assert.Equal(t, int32(1), dailyIssuesCreated.Load(), "should create 1 daily issue")
