@@ -14,8 +14,8 @@ import {
 import { ExternalLink, Monitor, User, Users } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { GITLAB_INTROCOURSE_BASE_URL } from '../../network/introCourseServerConfig'
-import { useIntroCourseStore } from '../../zustand/useIntroCourseStore'
 import { gitlabCourseGroup } from '../../utils/gitlabCourseGroup'
+import { useIntroCourseStore } from '../../zustand/useIntroCourseStore'
 
 export const StudentSeatAssignmentDisplay = () => {
   const { seatAssignment, peerAssignment } = useIntroCourseStore()
