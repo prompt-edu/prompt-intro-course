@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	promptSDK "github.com/prompt-edu/prompt-sdk"
 	"github.com/prompt-edu/prompt-intro-course/server/developerProfile/developerProfileDTO"
+	promptSDK "github.com/prompt-edu/prompt-sdk"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -16,8 +16,10 @@ func setupDeveloperProfileRouter(router *gin.RouterGroup, authMiddleware func(al
 	developerProfile := router.Group("/developer_profile")
 	developerProfile.POST("", authMiddleware(promptSDK.CourseStudent), createDeveloperProfile)
 	developerProfile.GET("/self", authMiddleware(promptSDK.CourseStudent), getOwnDeveloperProfile)
+	developerProfile.PUT("/self", authMiddleware(promptSDK.CourseStudent), updateOwnDeveloperProfile)
 	// Getting all developer profiles is only allowed for lecturers
 	developerProfile.GET("", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), getAllDeveloperProfiles)
+	developerProfile.GET("/gitlab-validation", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), validateGitLabProfiles)
 	developerProfile.PUT("/:courseParticipationID", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), updateDeveloperProfile)
 
 	// Export for the next phase
@@ -109,6 +111,40 @@ func getOwnDeveloperProfile(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, developerProfile)
+}
+
+// updateOwnDeveloperProfile lets a student correct only their own profile.
+// The participation ID comes from the authenticated request, never the payload.
+func updateOwnDeveloperProfile(c *gin.Context) {
+	coursePhaseID, err := uuid.Parse(c.Param("coursePhaseID"))
+	if err != nil {
+		handleError(c, http.StatusBadRequest, err)
+		return
+	}
+	participationID, ok := c.Get("courseParticipationID")
+	if !ok {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+	var request developerProfileDTO.PostDeveloperProfile
+	if err := c.BindJSON(&request); err != nil {
+		handleError(c, http.StatusBadRequest, err)
+		return
+	}
+	if err := validateDeveloperProfileUDIDs(request); err != nil {
+		handleError(c, http.StatusBadRequest, err)
+		return
+	}
+	profile := developerProfileDTO.DeveloperProfile{
+		AppleID: request.AppleID, GitLabUsername: request.GitLabUsername,
+		HasMacBook: request.HasMacBook, IPhoneUDID: request.IPhoneUDID,
+		IPadUDID: request.IPadUDID, AppleWatchUDID: request.AppleWatchUDID,
+	}
+	if err := CreateOrUpdateDeveloperProfile(c, coursePhaseID, participationID.(uuid.UUID), profile); err != nil {
+		handleError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.Status(http.StatusOK)
 }
 
 // getAllDeveloperProfiles godoc

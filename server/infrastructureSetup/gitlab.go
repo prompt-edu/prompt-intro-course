@@ -3,6 +3,8 @@ package infrastructureSetup
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"unicode"
 
 	"github.com/prompt-edu/prompt-intro-course/server/gitlabutil"
 	log "github.com/sirupsen/logrus"
@@ -284,6 +286,22 @@ type StudentProjectParams struct {
 	SubmissionDeadline   string
 }
 
+// GitLab project names must begin with a letter or digit and may only contain
+// letters, digits, spaces, hyphens, underscores, periods, and plus signs.
+func studentProjectDisplayName(studentName, login string) string {
+	clean := func(value string) string {
+		value = strings.Map(func(r rune) rune {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) || r == ' ' || r == '-' || r == '_' || r == '.' || r == '+' {
+				return r
+			}
+			return ' '
+		}, value)
+		value = strings.Join(strings.Fields(value), " ")
+		return strings.TrimLeftFunc(value, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	}
+	return fmt.Sprintf("%s - %s", clean(studentName), clean(login))
+}
+
 func CreateStudentProject(p StudentProjectParams) error {
 	if p.RepoName == "" || p.StudentName == "" {
 		return fmt.Errorf("student project needs a university login and student name")
@@ -298,7 +316,7 @@ func CreateStudentProject(p StudentProjectParams) error {
 	// 1. Create project (idempotent: handle conflict by fetching existing)
 	// Keep the university login as the stable URL path while showing both the
 	// student's name and login in GitLab's project lists.
-	displayName := fmt.Sprintf("%s (%s)", p.StudentName, p.RepoName)
+	displayName := studentProjectDisplayName(p.StudentName, p.RepoName)
 	project, err := createOrGetProject(git, newCourseProjectOptions(displayName, p.RepoName, p.TutorSubgroupID, ciCDRepoPath), p.TutorSubgroupPath)
 	if err != nil {
 		return err

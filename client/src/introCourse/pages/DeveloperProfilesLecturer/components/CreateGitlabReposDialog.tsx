@@ -118,7 +118,7 @@ export const CreateGitlabReposDialog = ({
           coursePhaseParticipationID: participation.participation.courseParticipationID,
           createGitlabRepoDTO: {
             // The server keeps the TUM ID as the stable URL path and uses
-            // "Student Name (TUM ID)" as the visible GitLab project name.
+            // "Student Name - TUM ID" as the visible GitLab project name.
             repoName: participation.participation.student.universityLogin ?? '',
             studentName:
               `${participation.participation.student.firstName ?? ''} ${participation.participation.student.lastName ?? ''}`.trim(),

@@ -102,8 +102,10 @@ export const DeveloperProfileForm = ({
               <FormItem>
                 <FormLabel>GitLab Username</FormLabel>
                 <FormDescription>
-                  Enter your LRZ (!!) GitLab username. Please follow the Info Text where to find
-                  your username.
+                  Enter the username shown on your LRZ GitLab profile, without the full URL. If you
+                  have not signed in to LRZ GitLab yet, sign in there first and then return here. If
+                  your course repository already exists, tell your tutor when correcting this field
+                  so access can be updated.
                 </FormDescription>
                 <FormControl>
                   <div className='flex items-center space-x-2'>

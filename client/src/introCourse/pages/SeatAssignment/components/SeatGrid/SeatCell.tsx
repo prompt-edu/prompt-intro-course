@@ -32,6 +32,7 @@ export const SeatCell = ({
     : seat.seatName.split('-').slice(1).join('-') || seat.seatName
   const hasStudent = !!seat.assignedStudent
   const isTutor = seat.isTutorSeat
+  const seatDescription = `${seat.seatName}${isTutor ? ' (Tutor seat)' : ''}${studentLabel ? ` - ${studentLabel}` : ''}${peerGroupLabel ? ` ${peerGroupLabel}` : ''}${seat.hasMac ? ' (Mac)' : ''}`
 
   // Pick color based on view mode
   const colorIndex = viewMode === 'peerGroup' && hasStudent ? peerGroupColorIndex : tutorColorIndex
@@ -59,7 +60,8 @@ export const SeatCell = ({
       // The visible text is only initials or a position number, so the seat name
       // is not otherwise addressable. E2E specs locate seats by this testid.
       data-testid={`seat-${seat.seatName}`}
-      title={`${seat.seatName}${isTutor ? ' (Tutor seat)' : ''}${studentLabel ? ` - ${studentLabel}` : ''}${peerGroupLabel ? ` ${peerGroupLabel}` : ''}${seat.hasMac ? ' (Mac)' : ''}`}
+      aria-label={seatDescription}
+      title={seatDescription}
     >
       {/* Peer group badge — top right */}
       {peerGroupLabel && !isTutor && (

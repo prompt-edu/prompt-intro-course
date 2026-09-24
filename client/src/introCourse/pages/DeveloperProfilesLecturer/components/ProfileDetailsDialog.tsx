@@ -11,6 +11,7 @@ import {
   DialogTitle,
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -144,6 +145,10 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Apple ID</FormLabel>
+                    <FormDescription>
+                      Leave empty if unconfirmed. The student can add or correct it in their own
+                      profile.
+                    </FormDescription>
                     <FormControl>
                       <Input placeholder='example@icloud.com' disabled={isPending} {...field} />
                     </FormControl>
@@ -158,6 +163,9 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>GitLab Username</FormLabel>
+                    <FormDescription>
+                      Enter the verified LRZ GitLab username, without the profile URL.
+                    </FormDescription>
                     <FormControl>
                       <Input placeholder='username' disabled={isPending} {...field} />
                     </FormControl>

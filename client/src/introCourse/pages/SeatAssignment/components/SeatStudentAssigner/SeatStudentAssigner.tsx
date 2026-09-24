@@ -50,6 +50,7 @@ import { useDownloadAssignment } from '../../hooks/useDownloadAssignment'
 import { useUpdateSeats } from '../../hooks/useUpdateSeats'
 import type { DeveloperWithProfile } from '../../interfaces/DeveloperWithProfile'
 import { RECHNERHALLE_SEATS } from '../../utils/rechnerHalle'
+import { parseSeatName } from '../../utils/seatGrid'
 import { smartAssign } from '../../utils/smartAssignment'
 import { ResetSeatAssignmentDialog } from './ResetSeatAssignmentDialog'
 
@@ -113,6 +114,22 @@ export const SeatStudentAssigner = ({
           'Assign a tutor to every seat in the room plan before Smart Assign. This keeps tutor groups in their rooms.',
         )
         return
+      }
+      if (isCustomLayout) {
+        const roomByTutor = new Map<string, number>()
+        for (const seat of workingSeats) {
+          if (!seat.assignedTutor) continue
+          const room = parseSeatName(seat.seatName)?.room
+          if (room === undefined) continue
+          const previousRoom = roomByTutor.get(seat.assignedTutor)
+          if (previousRoom !== undefined && previousRoom !== room) {
+            setError(
+              'A tutor group spans multiple rooms. Assign each tutor to seats in one room before Smart Assign.',
+            )
+            return
+          }
+          roomByTutor.set(seat.assignedTutor, room)
+        }
       }
 
       const currentAssigned = resetStudentsFirst ? 0 : assignedStudents

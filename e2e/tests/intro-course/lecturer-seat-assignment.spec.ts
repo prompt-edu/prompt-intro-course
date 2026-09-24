@@ -158,16 +158,21 @@ test.describe('seat assignment: assigning students', () => {
     await expect(page.getByRole('button', { name: 'Assign Random' })).toBeDisabled()
   })
 
-  test('Smart Assign seats the last unseated student', async ({ page }) => {
+  test('Smart Assign requires device information for every included student', async ({ page }) => {
     const seats = new SeatAssignmentPage(page)
     await seats.goto()
     await seats.expectSeatPlanLoaded()
 
-    // Stan is the only participant without a seat, so one Smart Assign completes
-    // the plan.
+    // Stan has no developer profile, so Smart Assign must not guess whether
+    // a Mac-equipped seat is needed.
     await page.getByRole('button', { name: 'Smart Assign' }).click()
+    await expect(page.getByText('student(s) have not reported whether they have a Mac', { exact: false })).toBeVisible()
+
+    // A lecturer may explicitly exclude a participant from this seating run.
+    await page.getByText('Seat roster:', { exact: false }).click()
+    await page.getByRole('checkbox', { name: /Stan/ }).uncheck()
     await expect(seats.assignmentStatus).toContainText(
-      `Fully Assigned (${INTRO_COURSE_PARTICIPANT_COUNT}/${INTRO_COURSE_PARTICIPANT_COUNT})`,
+      `Fully Assigned (${INTRO_COURSE_PARTICIPANT_COUNT - 1}/${INTRO_COURSE_PARTICIPANT_COUNT - 1})`,
       { timeout: 30_000 },
     )
   })
