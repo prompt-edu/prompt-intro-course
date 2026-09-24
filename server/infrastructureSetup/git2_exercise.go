@@ -30,7 +30,7 @@ func fetchGit2ExerciseAtRef(git *gitlab.Client, materialProjectID, ref string) (
 				return nil, fmt.Errorf("read Git 2 exercise file %q: %w", sourcePath, err)
 			}
 			if len(raw) == 0 || len(raw) > maxTemplateBytes {
-				return nil, fmt.Errorf("Git 2 exercise file %q has invalid size %d", sourcePath, len(raw))
+				return nil, fmt.Errorf("git 2 exercise file %q has invalid size %d", sourcePath, len(raw))
 			}
 			result[branch.name] = append(result[branch.name], templateFile{
 				Path:    "IntrocourseApp/" + name,
@@ -56,7 +56,7 @@ func ensureGit2ExerciseBranches(git *gitlab.Client, projectID int64, repoName st
 		}
 		files := exercise[branch.name]
 		if len(files) != len(branch.files) {
-			return fmt.Errorf("Git 2 branch %q has incomplete teaching material", branch.name)
+			return fmt.Errorf("git 2 branch %q has incomplete teaching material", branch.name)
 		}
 		actions := make([]*gitlab.CommitActionOptions, 0, len(files))
 		for _, file := range files {
