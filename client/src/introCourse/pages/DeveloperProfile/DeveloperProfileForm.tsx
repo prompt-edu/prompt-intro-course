@@ -63,15 +63,12 @@ export const DeveloperProfileForm = ({
   const verifyGitLabUsername = async (username: string) => {
     const result = await gitLabCheck.check(username)
     if (form.getValues('gitLabUsername').trim() !== username) return false
-    if (result?.status === 'found') {
+    if (result?.status === 'found' || result?.status === 'check_failed') {
       form.clearErrors('gitLabUsername')
       return true
     }
     form.setError('gitLabUsername', {
-      message:
-        result?.status === 'check_failed'
-          ? 'GitLab could not be checked. Please retry before submitting.'
-          : 'Username not found on LRZ GitLab. Check your profile URL.',
+      message: 'Username not found on LRZ GitLab. Check your profile URL.',
     })
     return false
   }

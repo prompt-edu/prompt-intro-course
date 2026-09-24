@@ -23,7 +23,8 @@ export const GitLabUsernameCheckMessage = ({
   if (result.status === 'check_failed') {
     return (
       <p className='text-sm text-amber-700'>
-        GitLab could not be checked right now. Please try again later.
+        GitLab could not be checked right now. You can save, but verify this username before
+        repository setup.
       </p>
     )
   }
