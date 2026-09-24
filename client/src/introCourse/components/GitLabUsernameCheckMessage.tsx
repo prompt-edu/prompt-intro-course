@@ -16,7 +16,7 @@ export const GitLabUsernameCheckMessage = ({
         <a className='underline' href={result.gitLabURL} target='_blank' rel='noreferrer'>
           {result.gitLabName || result.username}
         </a>{' '}
-        on LRZ GitLab. Confirm this is your account.
+        on LRZ GitLab. Confirm this is the correct account.
       </p>
     )
   }
