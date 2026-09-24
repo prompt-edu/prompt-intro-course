@@ -47,11 +47,11 @@ export class PeerAssignmentPage extends IntroCoursePhasePage {
   }
 
   get syncButton(): Locator {
-    return this.page.getByRole('button', { name: 'Sync to GitLab' })
+    return this.page.getByRole('button', { name: 'Check / Set Up Legacy GitLab Review Access' })
   }
 
   get unsyncButton(): Locator {
-    return this.page.getByRole('button', { name: 'Unsync from GitLab' })
+    return this.page.getByRole('button', { name: 'Remove Legacy GitLab Access' })
   }
 
   get editGroupsButton(): Locator {

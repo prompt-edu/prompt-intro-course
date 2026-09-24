@@ -72,7 +72,8 @@ export const PeerAssignmentActions = ({
       setSyncResults(results)
       setError(null)
     },
-    onError: () => setError('Failed to sync to GitLab. Is the GitLab token configured?'),
+    onError: () =>
+      setError('Could not check or set up GitLab review access. Check the course GitLab setup.'),
   })
 
   const unsyncMutation = useMutation({
@@ -81,7 +82,7 @@ export const PeerAssignmentActions = ({
       setSyncResults(results)
       setError(null)
     },
-    onError: () => setError('Failed to unsync from GitLab. Is the GitLab token configured?'),
+    onError: () => setError('Could not remove legacy GitLab review access.'),
   })
 
   const statusVariant =
@@ -132,8 +133,9 @@ export const PeerAssignmentActions = ({
             <AlertDialogHeader>
               <AlertDialogTitle>Clear all peer assignments?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will remove all peer groups. Use &quot;Unsync from GitLab&quot; first to revoke
-                Reporter access and approval rules.
+                This clears peer assignments in PROMPT. Review access for current repositories stays
+                with the tutor group. For older repositories with per-peer access, remove that
+                access first.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -156,7 +158,7 @@ export const PeerAssignmentActions = ({
           ) : (
             <GitBranch className='h-4 w-4 mr-1' />
           )}
-          Sync to GitLab
+          Check / Set Up Legacy GitLab Review Access
         </Button>
         <Button
           onClick={() => unsyncMutation.mutate()}
@@ -169,7 +171,7 @@ export const PeerAssignmentActions = ({
           ) : (
             <Unlink className='h-4 w-4 mr-1' />
           )}
-          Unsync from GitLab
+          Remove Legacy GitLab Access
         </Button>
       </div>
 
@@ -183,8 +185,8 @@ export const PeerAssignmentActions = ({
         <Alert data-testid='peer-assignment-sync-results'>
           <AlertDescription>
             <p className='font-medium mb-1'>
-              GitLab sync complete: {syncResults.filter((r) => r.success).length}/
-              {syncResults.length} successful
+              GitLab review access check / setup complete:{' '}
+              {syncResults.filter((r) => r.success).length}/{syncResults.length} successful
             </p>
             {syncResults
               .filter((r) => !r.success)

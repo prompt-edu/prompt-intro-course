@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,13 +25,74 @@ type InfrastructureService struct {
 	templates                 templateCache
 	issues                    issueCache
 	cicd                      cicdCache
+	verifiedStudentSetup      verifiedStudentSetupCache
+}
+
+// A repository batch can contain dozens of students. Recheck live readiness
+// for each one, but reuse the pinned teaching-material download briefly.
+type verifiedStudentSetupCache struct {
+	mu          sync.Mutex
+	coursePhase uuid.UUID
+	semesterTag string
+	sourceSHA   string
+	demoID      int64
+	demoSHA     string
+	material    *materialSnapshot
+	checkedAt   time.Time
+}
+
+const verifiedStudentSetupTTL = 5 * time.Minute
+
+func verifiedMaterialForStudent(ctx context.Context, coursePhaseID uuid.UUID, semesterTag string) (*materialSnapshot, error) {
+	svc := InfrastructureServiceSingleton
+	git, err := getClient()
+	if err != nil {
+		return nil, err
+	}
+	cache := &svc.verifiedStudentSetup
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	// Recheck all readiness conditions for each student. Source/demo SHAs alone
+	// cannot detect changed tutor access, shared CI, approval rules, or pipelines.
+	status, err := CourseInfrastructureStatus(ctx, coursePhaseID, semesterTag)
+	if err != nil {
+		return nil, fmt.Errorf("check demo readiness: %w", err)
+	}
+	if !status.Checks.DemoReady || status.Source == nil || status.DemoProject == nil {
+		return nil, fmt.Errorf("demo repository is not ready for current teaching material; repair and test it before creating student repos")
+	}
+	if cache.material != nil && cache.coursePhase == coursePhaseID && cache.semesterTag == semesterTag &&
+		cache.sourceSHA == status.Source.SHA && cache.demoSHA == status.DemoProject.SHA && time.Since(cache.checkedAt) < verifiedStudentSetupTTL {
+		return cache.material, nil
+	}
+	material, err := loadMaterialSnapshot(git, svc.teachingMaterialProjectID, status.Source.SHA)
+	if err != nil {
+		return nil, fmt.Errorf("load verified teaching material: %w", err)
+	}
+	cache.coursePhase = coursePhaseID
+	cache.semesterTag = semesterTag
+	cache.sourceSHA = status.Source.SHA
+	cache.demoID = status.DemoProject.ID
+	cache.demoSHA = status.DemoProject.SHA
+	cache.material = material
+	cache.checkedAt = time.Now()
+	return material, nil
 }
 
 var InfrastructureServiceSingleton *InfrastructureService
 
 var iPraktikumGroupName = gitlabutil.IPraktikumGroupName
 
-func CreateCourseInfrastructure(semesterTag string) error {
+func CreateCourseInfrastructure(ctx context.Context, coursePhaseID uuid.UUID, semesterTag string) error {
+	git, err := getClient()
+	if err != nil {
+		return err
+	}
+	material, err := loadMaterialSnapshot(git, InfrastructureServiceSingleton.teachingMaterialProjectID, "")
+	if err != nil {
+		return fmt.Errorf("load current teaching material: %w", err)
+	}
 	// 1.) Get Top Level Group
 	ipraktikumGroup, err := getiPraktikumGroup()
 	if err != nil {
@@ -45,8 +108,9 @@ func CreateCourseInfrastructure(semesterTag string) error {
 	var errs []error
 
 	// 2.) Create the developer group
-	if _, err = createDeveloperTopLevelGroup(courseGroup.ID); err != nil {
-		errs = append(errs, fmt.Errorf("create developer group: %w", err))
+	developerGroup, developerErr := createDeveloperTopLevelGroup(courseGroup.ID)
+	if developerErr != nil {
+		errs = append(errs, fmt.Errorf("create developer group: %w", developerErr))
 	}
 
 	// 3.) Create the tutor groups
@@ -70,31 +134,70 @@ func CreateCourseInfrastructure(semesterTag string) error {
 		return fmt.Errorf("create Introcourse group: %w", err)
 	}
 
-	git, err := getClient()
-	if err != nil {
-		return err
-	}
 	// Tutors need access to the demo and every future student subgroup, not only
 	// their own subgroup. Share the parent once so projects inherit that access.
 	if err = ensureTutorGroupAccess(git, introCourseGroup.ID, tutorsGroup.ID); err != nil {
 		return fmt.Errorf("share Introcourse group with tutors: %w", err)
 	}
+	if err = ensureImportedTutorGroupMembers(ctx, coursePhaseID, git, tutorsGroup.ID); err != nil {
+		return fmt.Errorf("sync imported tutors to GitLab: %w", err)
+	}
 
 	// 6.) The shared CI config is required by every student project. Do not mark
 	// course setup complete if it is missing or could not be updated.
-	if err = createCICDProject(git, introCourseGroup.ID, introCourseGroup.FullPath); err != nil {
+	if err = createCICDProjectWithMaterial(git, introCourseGroup.ID, introCourseGroup.FullPath, material); err != nil {
 		return fmt.Errorf("set up shared CI/CD project: %w", err)
+	}
+	ciProject, _, err := git.Projects.GetProject(introCourseGroup.FullPath+"/ci-cd", nil)
+	if err != nil {
+		return fmt.Errorf("find shared CI/CD project: %w", err)
+	}
+	if err = ensureProjectSharedWithGroupAtLeast(git, ciProject.ID, developerGroup.ID, gitlab.ReporterPermissions); err != nil {
+		return fmt.Errorf("grant students read access to shared CI/CD project: %w", err)
 	}
 
 	// 7.) The demo is the course's reference project and setup smoke test.
-	if err = createDemoProject(git, introCourseGroup.ID, introCourseGroup.FullPath, tutorsGroup.ID); err != nil {
+	if err = createDemoProjectWithMaterial(git, introCourseGroup.ID, introCourseGroup.FullPath, tutorsGroup.ID, material); err != nil {
 		return fmt.Errorf("set up demo project: %w", err)
 	}
 
 	return nil
 }
 
+func ensureImportedTutorGroupMembers(ctx context.Context, coursePhaseID uuid.UUID, git *gitlab.Client, groupID int64) error {
+	tutors, err := InfrastructureServiceSingleton.queries.GetAllTutors(ctx, coursePhaseID)
+	if err != nil {
+		return fmt.Errorf("get imported tutors: %w", err)
+	}
+	if len(tutors) == 0 {
+		return fmt.Errorf("import tutors before setting up course repositories")
+	}
+	var unresolved int
+	for _, tutor := range tutors {
+		if !tutor.GitlabUsername.Valid || tutor.GitlabUsername.String == "" {
+			unresolved++
+			continue
+		}
+		user, lookupErr := gitlabutil.GetUser(git, tutor.GitlabUsername.String)
+		if lookupErr != nil {
+			unresolved++
+			continue
+		}
+		if memberErr := ensureGroupMember(git, groupID, user.ID, gitlab.DeveloperPermissions); memberErr != nil {
+			return fmt.Errorf("add imported tutor to GitLab group: %w", memberErr)
+		}
+	}
+	if unresolved > 0 {
+		return fmt.Errorf("%d imported tutor GitLab username(s) are missing or unresolved", unresolved)
+	}
+	return nil
+}
+
 func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParticipationID uuid.UUID, semesterTag, repoName, studentName, submissionDeadline string) error {
+	material, err := verifiedMaterialForStudent(ctx, coursePhaseID, semesterTag)
+	if err != nil {
+		return err
+	}
 	// 1.) get the student developer profile
 	devProfile, err := InfrastructureServiceSingleton.queries.GetDeveloperProfileByCourseParticipationID(ctx, db.GetDeveloperProfileByCourseParticipationIDParams{
 		CourseParticipationID: courseParticipationID,
@@ -174,7 +277,7 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 	}
 
 	// 6.) Create the student project in tutor's subgroup (fully idempotent)
-	err = CreateStudentProject(StudentProjectParams{
+	err = createStudentProjectWithMaterial(StudentProjectParams{
 		RepoName:             repoName,
 		DevID:                studentGitlabUser.ID,
 		TutorSubgroupID:      tutorSubgroupID,
@@ -184,7 +287,7 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 		IntroCourseGroupPath: introCourseGroup.FullPath,
 		StudentName:          studentName,
 		SubmissionDeadline:   submissionDeadline,
-	})
+	}, material)
 	if err != nil {
 		log.WithField("student", repoName).Error("Failed to create student project: ", err)
 		// store error in the db
