@@ -62,6 +62,8 @@ jobs:
             mkdir -p /home/${{ vars.VM_USERNAME }}/prompt-intro-course
             cd /home/${{ vars.VM_USERNAME }}/prompt-intro-course
 
+            touch .env.prod
+            chmod 600 .env.prod
             cat > .env.prod <<EOT
             CORE_HOST=${{ vars.CORE_HOST }}
             SERVER_CORE_HOST=${{ vars.SERVER_CORE_HOST }}
