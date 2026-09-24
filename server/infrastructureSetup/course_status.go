@@ -273,6 +273,13 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 		return nil, fmt.Errorf("list demo issues: %w", err)
 	}
 	status.DemoProject.IssueCount = len(issues)
+	workItemsClean, err := demoWorkItemsClean(git, demo.PathWithNamespace, len(issues))
+	if err != nil {
+		return nil, err
+	}
+	if !workItemsClean {
+		issue("Demo work items have been changed; reset it to restore Open status before student initialization.")
+	}
 	current, compareErr := demoMatchesSource(git, svc.teachingMaterialProjectID, status.Source.SHA, demo.ID, issues, status.CIProject)
 	if compareErr != nil {
 		return nil, compareErr

@@ -220,3 +220,63 @@ func checkCourseStatusBoard(git *gitlab.Client, projectID int64, projectPath str
 	}
 	return fmt.Errorf("course status board is missing or not configured")
 }
+
+// A practiced demo may still have unchanged issue text but changed workflow
+// status. It is not a clean instructor copy until every work item is Open.
+func demoWorkItemsClean(git *gitlab.Client, projectPath string, expectedCount int) (bool, error) {
+	state, err := readStatusBoard(git, projectPath)
+	if err != nil {
+		return false, err
+	}
+	ids, err := requiredStatusIDs(state)
+	if err != nil {
+		return false, err
+	}
+	var result struct {
+		Data struct {
+			Project struct {
+				WorkItems struct {
+					Nodes []struct {
+						Widgets []struct {
+							Status *struct {
+								ID string `json:"id"`
+							} `json:"status"`
+						} `json:"widgets"`
+					} `json:"nodes"`
+					PageInfo struct {
+						HasNextPage bool `json:"hasNextPage"`
+					} `json:"pageInfo"`
+				} `json:"workItems"`
+			} `json:"project"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	_, err = git.GraphQL.Do(gitlab.GraphQLQuery{
+		Query:     `query($path: ID!) { project(fullPath: $path) { workItems(first: 100) { nodes { widgets { ... on WorkItemWidgetStatus { status { id } } } } pageInfo { hasNextPage } } } }`,
+		Variables: map[string]any{"path": projectPath},
+	}, &result)
+	if err != nil {
+		return false, err
+	}
+	if len(result.Errors) > 0 {
+		return false, fmt.Errorf("read demo work-item statuses: %v", result.Errors)
+	}
+	items := result.Data.Project.WorkItems
+	if items.PageInfo.HasNextPage || len(items.Nodes) != expectedCount {
+		return false, nil
+	}
+	for _, item := range items.Nodes {
+		open := false
+		for _, widget := range item.Widgets {
+			if widget.Status != nil && widget.Status.ID == ids["Open"] {
+				open = true
+			}
+		}
+		if !open {
+			return false, nil
+		}
+	}
+	return true, nil
+}

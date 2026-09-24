@@ -3,16 +3,19 @@ package infrastructureSetup
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 type fakeStatusBoard struct {
-	created bool
-	hidden  bool
-	lists   map[string]int
+	created          bool
+	hidden           bool
+	lists            map[string]int
+	workItemStatusID string
 }
 
 func (fake *fakeStatusBoard) handle(t *testing.T, w http.ResponseWriter, r *http.Request) bool {
@@ -57,6 +60,16 @@ func (fake *fakeStatusBoard) handle(t *testing.T, w http.ResponseWriter, r *http
 		_, _ = w.Write([]byte(`{"data":{"boardListCreate":{"errors":[]}}}`))
 		return true
 	}
+	if strings.Contains(body.Query, "workItems(first:") {
+		statusID := fake.workItemStatusID
+		if statusID == "" {
+			statusID = "gid://gitlab/WorkItems::Statuses::Custom::Status/80"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"project": map[string]any{
+			"workItems": map[string]any{"nodes": []map[string]any{{"widgets": []map[string]any{{"status": map[string]any{"id": statusID}}}}}, "pageInfo": map[string]any{"hasNextPage": false}},
+		}}})
+		return true
+	}
 	statuses := []map[string]string{}
 	for _, item := range []struct{ name, id string }{{"Open", "80"}, {"In Progress", "81"}, {"In Review", "85"}, {"Blocked", "87"}, {"Done", "82"}} {
 		statuses = append(statuses, map[string]string{"name": item.name, "id": "gid://gitlab/WorkItems::Statuses::Custom::Status/" + item.id})
@@ -74,4 +87,24 @@ func (fake *fakeStatusBoard) handle(t *testing.T, w http.ResponseWriter, r *http
 		"boards": map[string]any{"nodes": boards},
 	}}})
 	return true
+}
+
+func TestDemoWorkItemsRequireOpenStatus(t *testing.T) {
+	fake := &fakeStatusBoard{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if !fake.handle(t, w, r) {
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	clean, err := demoWorkItemsClean(client, "ase/ipraktikum/introcourse/demo", 1)
+	require.NoError(t, err)
+	require.True(t, clean)
+	fake.workItemStatusID = "gid://gitlab/WorkItems::Statuses::Custom::Status/85"
+	clean, err = demoWorkItemsClean(client, "ase/ipraktikum/introcourse/demo", 1)
+	require.NoError(t, err)
+	require.False(t, clean)
 }
