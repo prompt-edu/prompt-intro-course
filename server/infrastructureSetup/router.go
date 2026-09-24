@@ -2,10 +2,10 @@ package infrastructureSetup
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/prompt-edu/prompt-intro-course/server/gitlabutil"
 	"github.com/prompt-edu/prompt-intro-course/server/infrastructureSetup/infrastructureDTO"
 	promptSDK "github.com/prompt-edu/prompt-sdk"
 	log "github.com/sirupsen/logrus"
@@ -52,8 +52,7 @@ func createCourseSetup(c *gin.Context) {
 		return
 	}
 
-	// TODO: remove this later - but parts of the infrastructure for ios25 were already done
-	semesterTag := strings.ToUpper(infrastructureRequest.SemesterTag)
+	semesterTag := gitlabutil.CourseGroupName(infrastructureRequest.SemesterTag)
 
 	if err := CreateCourseInfrastructure(semesterTag); err != nil {
 		handleError(c, http.StatusInternalServerError, err)
@@ -99,8 +98,7 @@ func setupStudentInfrastructure(c *gin.Context) {
 		return
 	}
 
-	// TODO: remove this later - but parts of the infrastructure for ios25 were already done
-	semesterTag := strings.ToUpper(infrastructureRequest.SemesterTag)
+	semesterTag := gitlabutil.CourseGroupName(infrastructureRequest.SemesterTag)
 
 	err = CreateStudentInfrastructure(c, coursePhaseID, courseParticipationID, semesterTag, infrastructureRequest.RepoName, infrastructureRequest.StudentName, infrastructureRequest.SubmissionDeadline)
 	if err != nil {
