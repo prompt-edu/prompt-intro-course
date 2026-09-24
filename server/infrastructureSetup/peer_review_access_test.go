@@ -11,7 +11,7 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
-func TestPeerReviewAccessUsesReporterAndOptionalMainRule(t *testing.T) {
+func TestPeerReviewAccessUsesDeveloperAndOptionalMainRule(t *testing.T) {
 	const groupPath = "ase/ipraktikum/ios2627/Introcourse/tutor/peer-reviewers"
 	var shared bool
 	var shareBody map[string]any
@@ -33,14 +33,14 @@ func TestPeerReviewAccessUsesReporterAndOptionalMainRule(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300":
 			groups := []map[string]any{}
 			if shared {
-				groups = append(groups, map[string]any{"group_id": 20, "group_access_level": 20})
+				groups = append(groups, map[string]any{"group_id": 20, "group_access_level": 30})
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": 300, "shared_with_groups": groups})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects/300/share":
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&shareBody))
 			shared = true
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(map[string]any{"group_id": 20, "group_access": 20})
+			_ = json.NewEncoder(w).Encode(map[string]any{"group_id": 20, "group_access": 30})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300/protected_branches/main":
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": 40, "name": "main"})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300/approval_rules":
@@ -67,10 +67,43 @@ func TestPeerReviewAccessUsesReporterAndOptionalMainRule(t *testing.T) {
 	assert.Equal(t, int64(20), group.ID)
 	require.NoError(t, ensureProjectSharedWithPeerGroup(client, 300, group.ID))
 	require.NoError(t, ensurePeerReviewRule(client, 300, "student-repo", group.ID))
-	assert.Equal(t, float64(20), shareBody["group_access"])
+	assert.Equal(t, float64(30), shareBody["group_access"])
 	assert.Equal(t, float64(20), shareBody["group_id"])
 	assert.Equal(t, float64(0), ruleBody["approvals_required"])
 	assert.Equal(t, []any{float64(20)}, ruleBody["group_ids"])
 	assert.Equal(t, []any{float64(40)}, ruleBody["protected_branch_ids"])
 	assert.Equal(t, 1, ruleCreated)
+}
+
+func TestPeerReviewShareUpgradesReporterToDeveloper(t *testing.T) {
+	access := 20
+	deletes := 0
+	shares := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 300, "shared_with_groups": []any{map[string]any{"group_id": 20, "group_access_level": access}}})
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v4/projects/300/share/20":
+			deletes++
+			access = 0
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects/300/share":
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			access = int(body["group_access"].(float64))
+			shares++
+			w.WriteHeader(http.StatusCreated)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	require.NoError(t, ensureProjectSharedWithPeerGroup(client, 300, 20))
+	require.NoError(t, ensureProjectSharedWithPeerGroup(client, 300, 20))
+	assert.Equal(t, 30, access)
+	assert.Equal(t, 1, deletes)
+	assert.Equal(t, 1, shares)
 }

@@ -173,7 +173,8 @@ func syncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cours
 		project = found
 	}
 
-	// Current repositories share a peer-reviewer group at Reporter level.
+	// Current repositories share a peer-reviewer group at Developer level so
+	// reviewers can request changes in addition to commenting and approving.
 	// The assignment only identifies a preferred reviewer; it must not add
 	// project membership or change the group-based approval rule.
 	peerGroupID, err := sharedPeerReviewGroupID(git, project.ID, tutorSubgroupPath)
@@ -378,19 +379,19 @@ func verifyGroupPeerAccess(git *gitlab.Client, projectID, peerGroupID, reviewerI
 	if err != nil {
 		return fmt.Errorf("reviewer is not a direct member of the peer group: %w", err)
 	}
-	if member.AccessLevel < gitlab.ReporterPermissions {
-		return fmt.Errorf("reviewer needs at least Reporter access in the peer group")
+	if member.AccessLevel < gitlab.DeveloperPermissions {
+		return fmt.Errorf("reviewer needs at least Developer access in the peer group")
 	}
 	project, _, err := git.Projects.GetProject(projectID, nil)
 	if err != nil {
 		return fmt.Errorf("inspect peer group project share: %w", err)
 	}
 	for _, shared := range project.SharedWithGroups {
-		if shared.GroupID == peerGroupID && shared.GroupAccessLevel >= int64(gitlab.ReporterPermissions) {
+		if shared.GroupID == peerGroupID && shared.GroupAccessLevel >= int64(gitlab.DeveloperPermissions) {
 			return nil
 		}
 	}
-	return fmt.Errorf("peer group does not have Reporter access to the project")
+	return fmt.Errorf("peer group does not have Developer access to the project")
 }
 
 // removePeerFromReviewRule removes a user from the "Peer Review" approval rule.

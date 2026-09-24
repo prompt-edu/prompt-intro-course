@@ -89,3 +89,24 @@ func TestSharedPeerReviewGroupID(t *testing.T) {
 		})
 	}
 }
+
+func TestVerifyGroupPeerAccessRequiresDeveloper(t *testing.T) {
+	access := 20
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v4/groups/42/members/9":
+			require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"id": 9, "access_level": access}))
+		case "/api/v4/projects/7":
+			require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"id": 7, "shared_with_groups": []any{map[string]any{"group_id": 42, "group_access_level": access}}}))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	require.ErrorContains(t, verifyGroupPeerAccess(client, 7, 42, 9), "Developer")
+	access = 30
+	require.NoError(t, verifyGroupPeerAccess(client, 7, 42, 9))
+}

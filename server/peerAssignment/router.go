@@ -171,7 +171,7 @@ func deletePeerAssignments(c *gin.Context) {
 
 // syncPeerAssignmentsToGitlab godoc
 // @Summary Check GitLab peer review access
-// @Description Verifies group-based Reporter access for current repositories; creates per-peer access only for legacy repositories.
+// @Description Verifies group-based Developer review access for current repositories; creates per-peer access only for legacy repositories.
 // @Tags peer-assignment
 // @Accept json
 // @Produce json

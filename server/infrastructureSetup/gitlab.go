@@ -392,7 +392,7 @@ func createStudentProjectWithMaterial(p StudentProjectParams, material *material
 	if err != nil {
 		return err
 	}
-	if err = ensureGroupMember(git, peerGroup.ID, p.DevID, gitlab.ReporterPermissions); err != nil {
+	if err = ensureGroupMember(git, peerGroup.ID, p.DevID, gitlab.DeveloperPermissions); err != nil {
 		return fmt.Errorf("add student to peer review group for %q: %w", p.RepoName, err)
 	}
 	if err = ensureProjectSharedWithPeerGroup(git, project.ID, peerGroup.ID); err != nil {
@@ -412,8 +412,9 @@ func createStudentProjectWithMaterial(p StudentProjectParams, material *material
 }
 
 // Each tutor group has one direct-membership peer group. It is shared into
-// student projects as Reporter, while each repository owner gets Developer
-// access directly. This allows peer approval without letting classmates push.
+// student projects as Developer, while each repository owner gets Developer
+// access directly. Request changes requires Developer on this GitLab instance.
+// The protected main branch still prevents direct pushes without review.
 func getOrCreatePeerReviewGroup(git *gitlab.Client, tutorGroupID int64, tutorGroupPath string) (*gitlab.Group, error) {
 	const groupPath = "peer-reviewers"
 	fullPath := tutorGroupPath + "/" + groupPath
@@ -458,28 +459,46 @@ func ensureProjectSharedWithPeerGroup(git *gitlab.Client, projectID, peerGroupID
 	}
 	for _, shared := range project.SharedWithGroups {
 		if shared.GroupID == peerGroupID {
-			if shared.GroupAccessLevel != int64(gitlab.ReporterPermissions) {
-				return fmt.Errorf("peer group has access level %d; expected Reporter", shared.GroupAccessLevel)
+			if shared.GroupAccessLevel == int64(gitlab.DeveloperPermissions) {
+				return nil
 			}
-			return nil
+			if shared.GroupAccessLevel != int64(gitlab.ReporterPermissions) {
+				return fmt.Errorf("peer group has access level %d; expected Reporter or Developer", shared.GroupAccessLevel)
+			}
+			if _, err := git.Projects.DeleteSharedProjectFromGroup(projectID, peerGroupID); err != nil {
+				return fmt.Errorf("remove Reporter peer-group share before upgrade: %w", err)
+			}
+			if _, err := git.Projects.ShareProjectWithGroup(projectID, &gitlab.ShareWithGroupOptions{
+				GroupID: gitlab.Ptr(peerGroupID), GroupAccess: gitlab.Ptr(gitlab.DeveloperPermissions),
+			}); err != nil {
+				_, rollbackErr := git.Projects.ShareProjectWithGroup(projectID, &gitlab.ShareWithGroupOptions{
+					GroupID: gitlab.Ptr(peerGroupID), GroupAccess: gitlab.Ptr(gitlab.ReporterPermissions),
+				})
+				return fmt.Errorf("upgrade peer-group share to Developer: %w; restore Reporter share: %v", err, rollbackErr)
+			}
+			return verifyPeerGroupShare(git, projectID, peerGroupID)
 		}
 	}
 	_, err = git.Projects.ShareProjectWithGroup(projectID, &gitlab.ShareWithGroupOptions{
-		GroupID: gitlab.Ptr(peerGroupID), GroupAccess: gitlab.Ptr(gitlab.ReporterPermissions),
+		GroupID: gitlab.Ptr(peerGroupID), GroupAccess: gitlab.Ptr(gitlab.DeveloperPermissions),
 	})
 	if err != nil && !isAlreadyExistsError(err) {
 		return err
 	}
-	project, _, err = git.Projects.GetProject(projectID, nil)
+	return verifyPeerGroupShare(git, projectID, peerGroupID)
+}
+
+func verifyPeerGroupShare(git *gitlab.Client, projectID, peerGroupID int64) error {
+	project, _, err := git.Projects.GetProject(projectID, nil)
 	if err != nil {
 		return err
 	}
 	for _, shared := range project.SharedWithGroups {
-		if shared.GroupID == peerGroupID && shared.GroupAccessLevel == int64(gitlab.ReporterPermissions) {
+		if shared.GroupID == peerGroupID && shared.GroupAccessLevel == int64(gitlab.DeveloperPermissions) {
 			return nil
 		}
 	}
-	return fmt.Errorf("GitLab did not confirm Reporter sharing for peer group %d", peerGroupID)
+	return fmt.Errorf("GitLab did not confirm Developer sharing for peer group %d", peerGroupID)
 }
 
 func ensurePeerReviewRule(git *gitlab.Client, projectID int64, repoName string, peerGroupID int64) error {
