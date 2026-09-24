@@ -23,6 +23,7 @@ import (
 	"github.com/prompt-edu/prompt-intro-course/server/tutor"
 	"github.com/prompt-edu/prompt-intro-course/server/utils"
 	promptSDK "github.com/prompt-edu/prompt-sdk"
+	"github.com/prompt-edu/prompt-sdk/audit"
 	"github.com/prompt-edu/prompt-sdk/promptTypes"
 	log "github.com/sirupsen/logrus"
 )
@@ -142,6 +143,9 @@ func main() {
 	router := gin.Default()
 	router.Use(sentrygin.New(sentrygin.Options{}))
 	router.Use(utils.CORS())
+	// Gin snapshots the middleware chain when a route is registered, so the audit
+	// middleware has to be in place before any module below registers its routes.
+	router.Use(audit.Middleware(audit.NewCoreSink(utils.GetCoreUrl(), "intro-course")))
 
 	api := router.Group("intro-course/api/course_phase/:coursePhaseID")
 	initKeycloak()
@@ -156,7 +160,7 @@ func main() {
 	peerAssignment.InitPeerAssignmentModule(api, *query, conn, gitlabAccessToken)
 
 	baseApi := router.Group("intro-course/api")
-	copy.InitCopyModule(baseApi, *query, conn)
+	copy.InitCopyModule(baseApi.Group("", audit.Describe(copy.AuditCopyAction)), *query, conn)
 
 	// Public GET intro-course/api/info. Core's system status page and the e2e
 	// readiness poll both read it; the health flag is a live DB ping.
@@ -166,6 +170,7 @@ func main() {
 		Capabilities: map[string]bool{
 			promptTypes.CapabilityPhaseCopy:   true,
 			promptTypes.CapabilityPhaseConfig: true,
+			promptTypes.CapabilityAuditLog:    audit.Enabled(),
 		},
 	}, func() bool {
 		// Bounded: the endpoint is public, so an unreachable database or an

@@ -12,6 +12,8 @@ services:
       - SERVER_ADDRESS=0.0.0.0:8080
       - CORE_HOST=${CORE_HOST}
       - SERVER_CORE_HOST=${SERVER_CORE_HOST}
+      - AUDIT_ENABLED=${AUDIT_ENABLED:-false}
+      - AUDIT_INGEST_KEY=${AUDIT_INGEST_KEY:-}
       - DB_HOST=db-intro-course
       - DB_PORT=5432
       - DB_NAME=${DB_NAME}
