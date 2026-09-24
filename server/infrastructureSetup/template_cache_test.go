@@ -795,7 +795,11 @@ func TestCreateDemoProject(t *testing.T) {
 
 		// CreateCommit
 		if path == "/api/v4/projects/300/repository/commits" && r.Method == http.MethodPost {
-			_ = json.NewDecoder(r.Body).Decode(&commitBody)
+			var body map[string]interface{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["branch"] == "main" {
+				commitBody = body
+			}
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "commit123"})
 			return
@@ -812,9 +816,20 @@ func TestCreateDemoProject(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+		if strings.HasPrefix(path, "/api/v4/projects/300/protected_branches/exercise/git2-") && r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		if path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodPost {
-			branchProtected.Store(true)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{"name": "main", "push_access_levels": []any{map[string]any{"access_level": 0}}, "merge_access_levels": []any{map[string]any{"access_level": 40}}})
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			name, _ := body["name"].(string)
+			mergeLevel := 0
+			if name == "main" {
+				branchProtected.Store(true)
+				mergeLevel = 40
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"name": name, "push_access_levels": []any{map[string]any{"access_level": 0}}, "merge_access_levels": []any{map[string]any{"access_level": mergeLevel}}})
 			return
 		}
 
@@ -1022,6 +1037,10 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"name": "main"})
 			return
 		}
+		if strings.HasPrefix(path, "/api/v4/projects/300/repository/branches/exercise/git2-") && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": strings.TrimPrefix(path, "/api/v4/projects/300/repository/branches/")})
+			return
+		}
 
 		// Raw file content
 		if strings.HasPrefix(path, "/api/v4/projects/100/repository/files/") && strings.HasSuffix(path, "/raw") {
@@ -1054,6 +1073,10 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"name": "main", "push_access_levels": []map[string]interface{}{{"access_level": 0}}, "merge_access_levels": []map[string]interface{}{{"access_level": 40}},
 			})
+			return
+		}
+		if strings.HasPrefix(path, "/api/v4/projects/300/protected_branches/exercise/git2-") && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": strings.TrimPrefix(path, "/api/v4/projects/300/protected_branches/"), "push_access_levels": []map[string]any{{"access_level": 0}}, "merge_access_levels": []map[string]any{{"access_level": 0}}})
 			return
 		}
 

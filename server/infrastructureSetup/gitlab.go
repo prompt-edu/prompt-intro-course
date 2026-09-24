@@ -552,6 +552,21 @@ func createStudentProjectWithMaterial(p StudentProjectParams, material *material
 		return err
 	}
 
+	// Seed the two Git 2 practice branches before students receive access.
+	// Their app on main remains the untouched course template.
+	var exercise map[string][]templateFile
+	if material != nil {
+		exercise = material.git2Exercise
+	} else {
+		exercise, err = fetchGit2ExerciseAtRef(git, InfrastructureServiceSingleton.teachingMaterialProjectID, "main")
+		if err != nil {
+			return err
+		}
+	}
+	if err = ensureGit2ExerciseBranches(git, project.ID, p.RepoName, exercise); err != nil {
+		return err
+	}
+
 	// 3. Members (idempotent: skip if already a member)
 	err = addProjectMembers(git, project.ID, p.RepoName, p.DevID, p.DevGroupID)
 	if err != nil {
@@ -1295,6 +1310,19 @@ func createDemoProjectWithMaterial(git *gitlab.Client, introCourseGroupID int64,
 		SubmissionDeadline: "See the course schedule in Outline",
 	}, material, 0)
 	if err != nil {
+		return err
+	}
+
+	var exercise map[string][]templateFile
+	if material != nil {
+		exercise = material.git2Exercise
+	} else {
+		exercise, err = fetchGit2ExerciseAtRef(git, InfrastructureServiceSingleton.teachingMaterialProjectID, "main")
+		if err != nil {
+			return err
+		}
+	}
+	if err = ensureGit2ExerciseBranches(git, project.ID, demoProjectName, exercise); err != nil {
 		return err
 	}
 
