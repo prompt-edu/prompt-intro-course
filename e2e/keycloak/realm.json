@@ -841,6 +841,60 @@
           "PROMPT_Student"
         ]
       }
+    },
+    {
+      "username": "ga01abc",
+      "firstName": "Alice",
+      "lastName": "Mueller",
+      "email": "alice.mueller@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "attributes": { "university_login": ["ga01abc"] }
+    },
+    {
+      "username": "ga02bcd",
+      "firstName": "Bob",
+      "lastName": "Schmidt",
+      "email": "bob.schmidt@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "attributes": { "university_login": ["ga02bcd"] }
+    },
+    {
+      "username": "ga03cde",
+      "firstName": "Clara",
+      "lastName": "Weber",
+      "email": "clara.weber@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "attributes": { "university_login": ["ga03cde"] }
+    },
+    {
+      "username": "ga04def",
+      "firstName": "David",
+      "lastName": "Fischer",
+      "email": "david.fischer@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "attributes": { "university_login": ["ga04def"] }
+    },
+    {
+      "username": "ga05efg",
+      "firstName": "Eva",
+      "lastName": "Braun",
+      "email": "eva.braun@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "attributes": { "university_login": ["ga05efg"] }
+    },
+    {
+      "username": "ga06fgh",
+      "firstName": "Felix",
+      "lastName": "Wagner",
+      "email": "felix.wagner@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "attributes": { "university_login": ["ga06fgh"] }
     }
   ],
   "scopeMappings": [
