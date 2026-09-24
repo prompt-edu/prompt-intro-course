@@ -27,6 +27,9 @@ export const SeatCell = ({
   onClick,
 }: SeatCellProps) => {
   const parsed = parseSeatName(seat.seatName)
+  const seatLabel = parsed
+    ? seat.seatName.replace(/^1-/, '')
+    : seat.seatName.split('-').slice(1).join('-') || seat.seatName
   const hasStudent = !!seat.assignedStudent
   const isTutor = seat.isTutorSeat
 
@@ -50,6 +53,7 @@ export const SeatCell = ({
 
   return (
     <button
+      type='button'
       onClick={onClick}
       className={classes}
       // The visible text is only initials or a position number, so the seat name
@@ -84,11 +88,9 @@ export const SeatCell = ({
       {isTutor ? (
         <GraduationCap className='h-3 w-3 text-muted-foreground' />
       ) : viewMode === 'seat' ? (
-        <span className='text-[9px] font-medium text-muted-foreground'>
-          {seat.seatName.replace(/^1-/, '')}
-        </span>
+        <span className='text-[9px] font-medium text-muted-foreground'>{seatLabel}</span>
       ) : (
-        <span className='text-[10px] text-muted-foreground'>{parsed?.position}</span>
+        <span className='text-[10px] text-muted-foreground'>{parsed?.position ?? seatLabel}</span>
       )}
 
       {/* Student/tutor initials or empty */}

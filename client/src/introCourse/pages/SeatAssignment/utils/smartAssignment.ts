@@ -251,24 +251,27 @@ export function smartAssign(
 }
 
 /**
- * Redistribute Mac-needy students: swap Mac-needy students stuck under
- * tutors without Mac seats with non-Mac-needy students under tutors that
- * have Mac seats. Distributes across Mac tutors proportionally to their
- * remaining Mac capacity so no single tutor is overloaded.
+ * Redistribute students without Macs when a tutor group has more of them
+ * than available Mac seats. Swap with students who have or can bring a Mac
+ * in groups with spare Mac-seat capacity.
  */
 function redistributeMacNeedy(
   tutorIds: string[],
   tutorGroups: Map<string, DeveloperWithProfile[]>,
   tutorMacCount: Map<string, number>,
 ): void {
-  // Collect Mac-needy students in groups without Mac seats
+  // Collect only the students who exceed their tutor's Mac-seat capacity.
   const misplacedMacNeedy: { tutorId: string; index: number; student: DeveloperWithProfile }[] = []
   for (const tid of tutorIds) {
-    if ((tutorMacCount.get(tid) ?? 0) > 0) continue
     const group = tutorGroups.get(tid) ?? []
+    let remainingMacSeats = tutorMacCount.get(tid) ?? 0
     for (let i = 0; i < group.length; i++) {
       if (group[i].profile?.hasMacBook === false) {
-        misplacedMacNeedy.push({ tutorId: tid, index: i, student: group[i] })
+        if (remainingMacSeats > 0) {
+          remainingMacSeats--
+        } else {
+          misplacedMacNeedy.push({ tutorId: tid, index: i, student: group[i] })
+        }
       }
     }
   }
@@ -288,18 +291,21 @@ function redistributeMacNeedy(
     const currentMacNeedy = group.filter((s) => s.profile?.hasMacBook === false).length
     const swappable: { index: number; student: DeveloperWithProfile }[] = []
     for (let i = 0; i < group.length; i++) {
-      if (group[i].profile?.hasMacBook !== false) {
+      if (group[i].profile?.hasMacBook === true) {
         swappable.push({ index: i, student: group[i] })
       }
     }
-    macTutors.push({ tutorId: tid, remainingCap: macSeats - currentMacNeedy, swappable })
+    const remainingCap = macSeats - currentMacNeedy
+    if (remainingCap > 0) {
+      macTutors.push({ tutorId: tid, remainingCap, swappable })
+    }
   }
 
   // Distribute misplaced students to the Mac tutor with the most remaining capacity
   for (const misplaced of misplacedMacNeedy) {
     let best: (typeof macTutors)[number] | null = null
     for (const mt of macTutors) {
-      if (mt.swappable.length === 0) continue
+      if (mt.remainingCap <= 0 || mt.swappable.length === 0) continue
       if (!best || mt.remainingCap > best.remainingCap) {
         best = mt
       }

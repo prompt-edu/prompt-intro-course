@@ -19,7 +19,7 @@ import type { Seat } from '../../../../interfaces/Seat'
 import type { Tutor } from '../../../../interfaces/Tutor'
 import { updatePeerAssignments } from '../../../../network/mutations/updatePeerAssignments'
 import { updateSeatPlan } from '../../../../network/mutations/updateSeatPlan'
-import { RECHNERHALLE_LAYOUT } from '../../utils/rechnerHalle'
+import { RECHNERHALLE_LAYOUT, RECHNERHALLE_SEATS } from '../../utils/rechnerHalle'
 import {
   buildPeerGroups,
   buildPhysicalSeatMap,
@@ -35,6 +35,8 @@ interface SeatGridProps {
   participations: CoursePhaseParticipationWithStudent[]
   peerAssignments?: PeerAssignment[]
 }
+
+const rechnerhalleSeatNames = new Set(RECHNERHALLE_SEATS)
 
 export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: SeatGridProps) => {
   const { phaseId } = useParams<{ phaseId: string }>()
@@ -293,6 +295,45 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
 
   const hasPeerGroups = peerGroupCount > 0
 
+  const usesRechnerhalleLayout = seats.every((seat) => rechnerhalleSeatNames.has(seat.seatName))
+  const roomGroups = useMemo(() => {
+    const groups = new Map<string, Seat[]>()
+    for (const seat of seats) {
+      const separator = seat.seatName.indexOf('-')
+      const room = separator > 0 ? seat.seatName.slice(0, separator) : 'Other seats'
+      const group = groups.get(room) ?? []
+      group.push(seat)
+      groups.set(room, group)
+    }
+    return [...groups.entries()]
+  }, [seats])
+
+  const renderSeatCell = (seat: Seat, key: string) => {
+    const isPeerOfSelected = seat.assignedStudent != null && selectedPeers.has(seat.assignedStudent)
+    const peerGroup = seat.assignedStudent ? peerGroupMap.get(seat.assignedStudent) : undefined
+
+    return (
+      <SeatCell
+        key={key}
+        seat={seat}
+        tutorColorIndex={seat.assignedTutor ? (tutorColorMap.get(seat.assignedTutor) ?? -1) : -1}
+        peerGroupColorIndex={peerGroup != null ? peerGroup - 1 : -1}
+        studentLabel={
+          seat.isTutorSeat
+            ? seat.assignedTutor
+              ? (tutorNameMap.get(seat.assignedTutor) ?? null)
+              : null
+            : getStudentInitials(seat.assignedStudent)
+        }
+        peerGroupLabel={peerGroup != null ? `P${peerGroup}` : null}
+        isSelected={selectedSeat === seat.seatName}
+        isPeerOfSelected={isPeerOfSelected}
+        viewMode={viewMode}
+        onClick={() => handleCellClick(seat.seatName)}
+      />
+    )
+  }
+
   return (
     <div>
       {/* View mode toggle */}
@@ -374,80 +415,75 @@ export const SeatGrid = ({ seats, tutors, participations, peerAssignments }: Sea
         </Alert>
       )}
 
-      {/* Transposed grid: columns = physical rows (R1-R9), rows = physical positions (1-12) */}
-      <div
-        className='grid gap-1'
-        style={{
-          gridTemplateColumns: `2.5rem repeat(${layout.length}, minmax(0, 1fr))`,
-        }}
-      >
-        {/* Header row: row numbers as column headers */}
-        <div /> {/* empty corner */}
-        {layout.map((r) => (
-          <div key={r.row} className='text-center text-xs text-muted-foreground font-mono'>
-            R{r.row}
-          </div>
-        ))}
-        {/* Position rows */}
-        {Array.from({ length: maxPhysicalPos }, (_, i) => i + 1).map((physPos) => (
-          <Fragment key={physPos}>
-            {/* Position label */}
-            <div className='flex items-center justify-center text-xs font-medium text-muted-foreground'>
-              {physPos}
+      {usesRechnerhalleLayout ? (
+        /* Transposed grid for the historic Rechnerhalle physical layout. */
+        <div
+          className='grid gap-1'
+          style={{
+            gridTemplateColumns: `2.5rem repeat(${layout.length}, minmax(0, 1fr))`,
+          }}
+        >
+          {/* Header row: row numbers as column headers */}
+          <div /> {/* empty corner */}
+          {layout.map((r) => (
+            <div key={r.row} className='text-center text-xs text-muted-foreground font-mono'>
+              R{r.row}
             </div>
-            {/* Cells: one per physical row */}
-            {layout.map((rowLayout) => {
-              const key = `${rowLayout.row}-${physPos}`
+          ))}
+          {/* Position rows */}
+          {Array.from({ length: maxPhysicalPos }, (_, i) => i + 1).map((physPos) => (
+            <Fragment key={physPos}>
+              {/* Position label */}
+              <div className='flex items-center justify-center text-xs font-medium text-muted-foreground'>
+                {physPos}
+              </div>
+              {/* Cells: one per physical row */}
+              {layout.map((rowLayout) => {
+                const key = `${rowLayout.row}-${physPos}`
 
-              // Outside this row's range
-              if (physPos < rowLayout.physicalStart || physPos > rowLayout.physicalEnd) {
-                return <div key={key} className='aspect-square' />
-              }
+                // Outside this row's range
+                if (physPos < rowLayout.physicalStart || physPos > rowLayout.physicalEnd) {
+                  return <div key={key} className='aspect-square' />
+                }
 
-              // Gap position (door, etc.)
-              if (gapSet.has(key)) {
-                return <div key={key} className='aspect-square' />
-              }
+                // Gap position (door, etc.)
+                if (gapSet.has(key)) {
+                  return <div key={key} className='aspect-square' />
+                }
 
-              // Look up the seat at this physical position
-              const seat = physicalSeatMap.get(key)
-              if (!seat) {
-                return <div key={key} className='aspect-square' />
-              }
+                // Look up the seat at this physical position
+                const seat = physicalSeatMap.get(key)
+                if (!seat) {
+                  return <div key={key} className='aspect-square' />
+                }
 
-              const isPeerOfSelected =
-                seat.assignedStudent != null && selectedPeers.has(seat.assignedStudent)
-
-              const peerGroup = seat.assignedStudent
-                ? peerGroupMap.get(seat.assignedStudent)
-                : undefined
-
-              return (
-                <SeatCell
-                  key={key}
-                  seat={seat}
-                  tutorColorIndex={
-                    seat.assignedTutor ? (tutorColorMap.get(seat.assignedTutor) ?? -1) : -1
-                  }
-                  peerGroupColorIndex={peerGroup != null ? peerGroup - 1 : -1}
-                  studentLabel={
-                    seat.isTutorSeat
-                      ? seat.assignedTutor
-                        ? (tutorNameMap.get(seat.assignedTutor) ?? null)
-                        : null
-                      : getStudentInitials(seat.assignedStudent)
-                  }
-                  peerGroupLabel={peerGroup != null ? `P${peerGroup}` : null}
-                  isSelected={selectedSeat === seat.seatName}
-                  isPeerOfSelected={isPeerOfSelected}
-                  viewMode={viewMode}
-                  onClick={() => handleCellClick(seat.seatName)}
-                />
-              )
-            })}
-          </Fragment>
-        ))}
-      </div>
+                return renderSeatCell(seat, key)
+              })}
+            </Fragment>
+          ))}
+        </div>
+      ) : (
+        <div className='space-y-6'>
+          {roomGroups.map(([room, roomSeats]) => (
+            <section key={room}>
+              <h3 className='mb-2 font-medium'>{room}</h3>
+              <div className='grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8'>
+                {roomSeats.map((seat) => (
+                  <div key={seat.seatName} className='min-w-0'>
+                    {renderSeatCell(seat, seat.seatName)}
+                    <div
+                      className='truncate text-center text-xs text-muted-foreground'
+                      title={seat.seatName}
+                    >
+                      {seat.seatName}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
 
       <SeatGridLegend
         tutors={tutors}

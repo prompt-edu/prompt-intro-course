@@ -1,13 +1,13 @@
 package infrastructureSetup
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/prompt-edu/prompt-intro-course/server/gitlabutil"
 	log "github.com/sirupsen/logrus"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
-
 
 // Shared constants and helpers — delegate to gitlabutil to avoid duplication.
 var (
@@ -159,18 +159,19 @@ func getUser(username string) (*gitlab.User, error) {
 // the intro course workflow are disabled to keep the UI clean for students.
 // ciCDRepoPath is the full GitLab path to the shared CI/CD repo (e.g.
 // "ase/ipraktikum/IOS25/introcourse/ci-cd"), used to set CIConfigPath.
-func newCourseProjectOptions(name string, namespaceID int64, ciCDRepoPath string) *gitlab.CreateProjectOptions {
+func newCourseProjectOptions(name, path string, namespaceID int64, ciCDRepoPath string) *gitlab.CreateProjectOptions {
 	return &gitlab.CreateProjectOptions{
 		Name:        gitlab.Ptr(name),
+		Path:        gitlab.Ptr(path),
 		NamespaceID: gitlab.Ptr(namespaceID),
 
 		// Git & merge settings
-		Visibility:                                    gitlab.Ptr(gitlab.PrivateVisibility),
-		MergeMethod:                                   gitlab.Ptr(gitlab.NoFastForwardMerge),
-		SquashOption:                                  gitlab.Ptr(gitlab.SquashOptionDefaultOn),
-		RemoveSourceBranchAfterMerge:                  gitlab.Ptr(true),
-		OnlyAllowMergeIfPipelineSucceeds:              gitlab.Ptr(true),
-		OnlyAllowMergeIfAllDiscussionsAreResolved:     gitlab.Ptr(true),
+		Visibility:                       gitlab.Ptr(gitlab.PrivateVisibility),
+		MergeMethod:                      gitlab.Ptr(gitlab.NoFastForwardMerge),
+		SquashOption:                     gitlab.Ptr(gitlab.SquashOptionDefaultOn),
+		RemoveSourceBranchAfterMerge:     gitlab.Ptr(true),
+		OnlyAllowMergeIfPipelineSucceeds: gitlab.Ptr(true),
+		OnlyAllowMergeIfAllDiscussionsAreResolved: gitlab.Ptr(true),
 
 		// CI/CD — pipeline config lives in a shared repo
 		CIConfigPath:         gitlab.Ptr(".gitlab-ci.yml@" + ciCDRepoPath),
@@ -205,7 +206,11 @@ func createOrGetProject(git *gitlab.Client, opts *gitlab.CreateProjectOptions, g
 		if !isAlreadyExistsError(err) {
 			return nil, fmt.Errorf("create project %q: %w", *opts.Name, err)
 		}
-		projectPath := groupPath + "/" + *opts.Name
+		path := *opts.Name
+		if opts.Path != nil {
+			path = *opts.Path
+		}
+		projectPath := groupPath + "/" + path
 		project, _, err = git.Projects.GetProject(projectPath, nil)
 		if err != nil {
 			return nil, fmt.Errorf("fetch existing project %q: %w", projectPath, err)
@@ -256,9 +261,10 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 		return err
 	}
 
-	// Daily issues (non-fatal: log and continue)
+	// A repository without its course issues is incomplete. A retry will skip
+	// issues that were created successfully and fill in any missing ones.
 	if err = createDailyIssues(git, projectID, projectName); err != nil {
-		log.WithError(err).WithField("project", projectName).Warn("Failed to create daily issues (non-fatal)")
+		return fmt.Errorf("create daily issues for %q: %w", projectName, err)
 	}
 
 	return nil
@@ -279,6 +285,9 @@ type StudentProjectParams struct {
 }
 
 func CreateStudentProject(p StudentProjectParams) error {
+	if p.RepoName == "" || p.StudentName == "" {
+		return fmt.Errorf("student project needs a university login and student name")
+	}
 	git, err := getClient()
 	if err != nil {
 		return fmt.Errorf("get client for project %q: %w", p.RepoName, err)
@@ -287,9 +296,18 @@ func CreateStudentProject(p StudentProjectParams) error {
 	ciCDRepoPath := p.IntroCourseGroupPath + "/ci-cd"
 
 	// 1. Create project (idempotent: handle conflict by fetching existing)
-	project, err := createOrGetProject(git, newCourseProjectOptions(p.RepoName, p.TutorSubgroupID, ciCDRepoPath), p.TutorSubgroupPath)
+	// Keep the university login as the stable URL path while showing both the
+	// student's name and login in GitLab's project lists.
+	displayName := fmt.Sprintf("%s (%s)", p.StudentName, p.RepoName)
+	project, err := createOrGetProject(git, newCourseProjectOptions(displayName, p.RepoName, p.TutorSubgroupID, ciCDRepoPath), p.TutorSubgroupPath)
 	if err != nil {
 		return err
+	}
+	if project.Name != displayName {
+		_, _, err = git.Projects.EditProject(project.ID, &gitlab.EditProjectOptions{Name: gitlab.Ptr(displayName)})
+		if err != nil {
+			return fmt.Errorf("update student project display name %q: %w", displayName, err)
+		}
 	}
 
 	// 2. Shared project setup (files, branch protection, board, approvals, issues)
@@ -340,10 +358,9 @@ func addProjectMembers(git *gitlab.Client, projectID int64, repoName string, dev
 	return nil
 }
 
-// createProjectFiles fetches template files from the teaching material repo,
-// applies variable substitution, and pushes all files in a single atomic commit.
-// If the project already has commits on its default branch, file creation is
-// skipped entirely to maintain idempotency.
+// createProjectFiles adds missing template files without overwriting files a
+// student may already have edited. Retrying a partly initialized project fills
+// gaps instead of treating an existing file as a successful full setup.
 func createProjectFiles(git *gitlab.Client, projectID int64, repoName string, vars templateVars) error {
 	svc := InfrastructureServiceSingleton
 	if svc.teachingMaterialProjectID == "" {
@@ -354,9 +371,27 @@ func createProjectFiles(git *gitlab.Client, projectID int64, repoName string, va
 	if err != nil {
 		return fmt.Errorf("fetch templates for %q: %w", repoName, err)
 	}
+	existingFiles := make(map[string]bool)
+	nodes, treeErr := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.TreeNode, *gitlab.Response, error) {
+		return git.Repositories.ListTree(projectID, &gitlab.ListTreeOptions{
+			Ref: gitlab.Ptr("main"), Recursive: gitlab.Ptr(true),
+			ListOptions: gitlab.ListOptions{PerPage: 100},
+		}, p)
+	})
+	if treeErr != nil && !isNotFoundError(treeErr) {
+		return fmt.Errorf("list existing files in %q: %w", repoName, treeErr)
+	}
+	for _, node := range nodes {
+		if node.Type == "blob" {
+			existingFiles[node.Path] = true
+		}
+	}
 
 	actions := make([]*gitlab.CommitActionOptions, 0, len(templates))
 	for _, tmpl := range templates {
+		if existingFiles[tmpl.Path] {
+			continue
+		}
 		content := applyTemplateVars(tmpl.Content, vars)
 		action := &gitlab.CommitActionOptions{
 			Action:   gitlab.Ptr(gitlab.FileCreate),
@@ -368,13 +403,16 @@ func createProjectFiles(git *gitlab.Client, projectID int64, repoName string, va
 		}
 		actions = append(actions, action)
 	}
+	if len(actions) == 0 {
+		return nil
+	}
 
 	_, _, err = git.Commits.CreateCommit(projectID, &gitlab.CreateCommitOptions{
 		Branch:        gitlab.Ptr("main"),
 		CommitMessage: gitlab.Ptr("Initialize repository from course template"),
 		Actions:       actions,
 	})
-	if err != nil && !isAlreadyExistsError(err) {
+	if err != nil {
 		return fmt.Errorf("initialize %q from template: %w", repoName, err)
 	}
 
@@ -418,10 +456,10 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 // Idempotent: safe to call multiple times.
 func ensureApprovalConfiguration(git *gitlab.Client, projectID int64, repoName string) error {
 	_, _, err := git.Projects.ChangeApprovalConfiguration(projectID, &gitlab.ChangeApprovalConfigurationOptions{
-		ResetApprovalsOnPush:                         gitlab.Ptr(true),
-		MergeRequestsAuthorApproval:                  gitlab.Ptr(false),
-		MergeRequestsDisableCommittersApproval:       gitlab.Ptr(true),
-		DisableOverridingApproversPerMergeRequest:     gitlab.Ptr(true),
+		ResetApprovalsOnPush:                      gitlab.Ptr(true),
+		MergeRequestsAuthorApproval:               gitlab.Ptr(false),
+		MergeRequestsDisableCommittersApproval:    gitlab.Ptr(true),
+		DisableOverridingApproversPerMergeRequest: gitlab.Ptr(true),
 	})
 	if err != nil {
 		return fmt.Errorf("configure approval settings for %q: %w", repoName, err)
@@ -489,7 +527,7 @@ func getOrCreateTutorSubgroup(tutorGitlabUsername, tutorFirstName, tutorLastName
 func createDailyIssues(git *gitlab.Client, projectID int64, repoName string) error {
 	svc := InfrastructureServiceSingleton
 	if svc.teachingMaterialProjectID == "" {
-		return nil // no teaching material configured, skip silently
+		return fmt.Errorf("GITLAB_TEACHING_MATERIAL_PROJECT_ID not configured")
 	}
 
 	templates, err := svc.issues.get(git, svc.teachingMaterialProjectID)
@@ -498,7 +536,7 @@ func createDailyIssues(git *gitlab.Client, projectID int64, repoName string) err
 	}
 
 	if len(templates) == 0 {
-		return nil
+		return fmt.Errorf("no daily issue templates found in teaching material repo daily_issues/ directory")
 	}
 
 	// Fetch existing issue titles for idempotency check
@@ -513,6 +551,7 @@ func createDailyIssues(git *gitlab.Client, projectID int64, repoName string) err
 		existingTitles[issue.Title] = true
 	}
 
+	var issueErrors []error
 	for _, tmpl := range templates {
 		if existingTitles[tmpl.Title] {
 			continue
@@ -522,16 +561,12 @@ func createDailyIssues(git *gitlab.Client, projectID int64, repoName string) err
 			Description: gitlab.Ptr(tmpl.Description),
 		})
 		if err != nil {
-			// Log and continue — one failed issue should not block the others
-			log.WithFields(log.Fields{
-				"issue":   tmpl.Title,
-				"project": repoName,
-			}).WithError(err).Warn("Failed to create daily issue")
+			issueErrors = append(issueErrors, fmt.Errorf("%q: %w", tmpl.Title, err))
 			continue
 		}
 	}
 
-	return nil
+	return errors.Join(issueErrors...)
 }
 
 // createCICDProject creates the shared CI/CD project in the Introcourse group
@@ -557,7 +592,7 @@ func createCICDProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 	// Push pipeline config files from teaching material repo
 	svc := InfrastructureServiceSingleton
 	if svc.teachingMaterialProjectID == "" {
-		return nil // no teaching material configured, skip
+		return fmt.Errorf("GITLAB_TEACHING_MATERIAL_PROJECT_ID not configured")
 	}
 
 	cicdFiles, err := svc.cicd.get(git, svc.teachingMaterialProjectID)
@@ -565,14 +600,25 @@ func createCICDProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 		return fmt.Errorf("fetch CI/CD files: %w", err)
 	}
 	if len(cicdFiles) == 0 {
-		log.Warn("No CI/CD files found in teaching material repo ci_cd/ directory; CI/CD project will be empty")
-		return nil
+		return fmt.Errorf("no CI/CD files found in teaching material repo ci_cd/ directory")
 	}
 
 	var actions []*gitlab.CommitActionOptions
 	for _, f := range cicdFiles {
+		existing, _, readErr := git.RepositoryFiles.GetRawFile(project.ID, f.Path, &gitlab.GetRawFileOptions{
+			Ref: gitlab.Ptr("main"),
+		})
+		actionType := gitlab.FileCreate
+		if readErr == nil {
+			if string(existing) == f.Content {
+				continue
+			}
+			actionType = gitlab.FileUpdate
+		} else if !isNotFoundError(readErr) {
+			return fmt.Errorf("read existing CI/CD file %q: %w", f.Path, readErr)
+		}
 		action := &gitlab.CommitActionOptions{
-			Action:   gitlab.Ptr(gitlab.FileCreate),
+			Action:   gitlab.Ptr(actionType),
 			FilePath: gitlab.Ptr(f.Path),
 			Content:  gitlab.Ptr(f.Content),
 		}
@@ -581,13 +627,16 @@ func createCICDProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 		}
 		actions = append(actions, action)
 	}
+	if len(actions) == 0 {
+		return nil
+	}
 
 	_, _, err = git.Commits.CreateCommit(project.ID, &gitlab.CreateCommitOptions{
 		Branch:        gitlab.Ptr("main"),
-		CommitMessage: gitlab.Ptr("Initialize CI/CD pipeline from course template"),
+		CommitMessage: gitlab.Ptr("Synchronize CI/CD pipeline with course template"),
 		Actions:       actions,
 	})
-	if err != nil && !isAlreadyExistsError(err) {
+	if err != nil {
 		return fmt.Errorf("push CI/CD files to project: %w", err)
 	}
 
@@ -603,7 +652,7 @@ func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 	const demoProjectName = "demo"
 	ciCDRepoPath := introCourseGroupPath + "/ci-cd"
 
-	project, err := createOrGetProject(git, newCourseProjectOptions(demoProjectName, introCourseGroupID, ciCDRepoPath), introCourseGroupPath)
+	project, err := createOrGetProject(git, newCourseProjectOptions(demoProjectName, demoProjectName, introCourseGroupID, ciCDRepoPath), introCourseGroupPath)
 	if err != nil {
 		return err
 	}
