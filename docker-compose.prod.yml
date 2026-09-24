@@ -10,6 +10,7 @@ services:
         condition: service_healthy
     environment:
       - SERVER_ADDRESS=0.0.0.0:8080
+      - SERVER_IMAGE_TAG=${SERVER_IMAGE_TAG}
       - CORE_HOST=${CORE_HOST}
       - SERVER_CORE_HOST=${SERVER_CORE_HOST}
       - DB_HOST=db-intro-course
