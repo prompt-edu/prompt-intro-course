@@ -227,13 +227,8 @@ func createOrGetProject(git *gitlab.Client, opts *gitlab.CreateProjectOptions, g
 	return project, nil
 }
 
-// configureProject applies the shared setup steps to any course project:
-// template files, branch protection, issue board, approval config, daily issues.
-// All steps are idempotent — safe to call on both new and existing projects.
-func configureProject(git *gitlab.Client, projectID int64, projectName string, vars templateVars) (resultErr error) {
-	return configureProjectWithMaterial(git, projectID, projectName, vars, nil)
-}
-
+// configureProjectWithMaterial applies the shared template, branch protection,
+// issue board, approval, and daily issue setup to a course project.
 func configureProjectWithMaterial(git *gitlab.Client, projectID int64, projectName string, vars templateVars, material *materialSnapshot) (resultErr error) {
 	var templates []templateFile
 	if material == nil {
