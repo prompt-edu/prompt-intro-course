@@ -946,6 +946,11 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			return
 		}
 
+		if path == "/api/v4/projects/300/repository/tree" {
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"name": "README.md", "type": "blob", "path": "README.md", "mode": "100644"}})
+			return
+		}
+
 		// Raw file content
 		if strings.HasPrefix(path, "/api/v4/projects/100/repository/files/") && strings.HasSuffix(path, "/raw") {
 			filePath := strings.TrimPrefix(path, "/api/v4/projects/100/repository/files/")
@@ -959,7 +964,7 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			return
 		}
 
-		// CreateCommit returns "already exists" (files already pushed)
+		// A correct retry does not commit files that are already present.
 		if path == "/api/v4/projects/300/repository/commits" && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = fmt.Fprint(w, `{"message":"A file with this name already exists"}`)
