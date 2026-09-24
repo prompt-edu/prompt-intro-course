@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import type { CoursePhaseParticipationsWithResolution } from '@tumaet/prompt-shared-state'
-import { getCoursePhaseParticipations } from '@tumaet/prompt-shared-state'
+import {
+  type CoursePhaseParticipationsWithResolution,
+  getCoursePhaseParticipations,
+  PassStatus,
+} from '@tumaet/prompt-shared-state'
 import {
   Button,
   ErrorPage,
@@ -126,7 +129,9 @@ export const DeveloperProfilesLecturerPage = () => {
 
   // Match participants with their developer profiles
   const participantsWithProfiles = useGetParticipationsWithProfiles(
-    coursePhaseParticipations?.participations || [],
+    coursePhaseParticipations?.participations.filter(
+      (participation) => participation.passStatus !== PassStatus.FAILED,
+    ) || [],
     developerProfiles || [],
     gitlabStatuses || [],
   )

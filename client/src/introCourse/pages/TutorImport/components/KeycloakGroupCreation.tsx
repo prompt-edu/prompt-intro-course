@@ -73,7 +73,7 @@ export function KeycloakGroupCreation({ coursePhase }: KeycloakGroupCreationProp
     groupExists === undefined
       ? 'Checking Keycloak group status...'
       : groupExists
-        ? 'Keycloak group has been created'
+        ? 'Tutor group configured in PROMPT'
         : 'Keycloak group does not exist'
 
   return (

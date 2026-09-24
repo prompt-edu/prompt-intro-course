@@ -662,9 +662,8 @@ func createCICDProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 }
 
 // createDemoProject creates a "demo" project in the Introcourse group,
-// initialized from the same template as student repos. This gives
-// instructors a reference repository for live demonstrations and testing.
-// The project is shared with the tutors group so all tutors have access.
+// initialized from the same template as student repos. Tutors inherit access
+// from the shared parent group.
 // Fully idempotent: safe to re-run on an existing course.
 func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourseGroupPath string, tutorsGroupID int64) error {
 	const demoProjectName = "demo"
@@ -683,13 +682,8 @@ func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 		return err
 	}
 
-	// Share with tutors group so all tutors can access the demo
-	_, err = git.Projects.ShareProjectWithGroup(project.ID, &gitlab.ShareWithGroupOptions{
-		GroupID:     gitlab.Ptr(tutorsGroupID),
-		GroupAccess: gitlab.Ptr(gitlab.DeveloperPermissions),
-	})
-	if err != nil && !isAlreadyExistsError(err) {
-		return fmt.Errorf("share %q with tutors group: %w", demoProjectName, err)
+	if err = ensureApprovalRule(git, project.ID, demoProjectName, tutorsGroupID); err != nil {
+		return err
 	}
 
 	return nil
