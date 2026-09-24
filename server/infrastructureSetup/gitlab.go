@@ -16,6 +16,7 @@ import (
 var (
 	aseGroupID                    = gitlabutil.ASEGroupID
 	errGitLabClientNotInitialized = gitlabutil.ErrClientNotInitialized
+	errExistingMainMissingFiles   = errors.New("missing template files on an existing main branch")
 )
 
 func getClient() (*gitlab.Client, error) {
@@ -917,7 +918,7 @@ func createProjectFilesFromTemplates(git *gitlab.Client, projectID int64, repoNa
 	// project has no main branch yet and can be initialized safely here.
 	_, _, branchErr := git.Branches.GetBranch(projectID, "main")
 	if branchErr == nil {
-		return fmt.Errorf("%q has missing template files on an existing main branch; repair them through a reviewed MR or reset the demo", repoName)
+		return fmt.Errorf("%q has %w; repair them through a reviewed MR or reset the demo", repoName, errExistingMainMissingFiles)
 	}
 	if !isNotFoundError(branchErr) {
 		return fmt.Errorf("check main branch for %q: %w", repoName, branchErr)
