@@ -263,6 +263,40 @@ func TestEnsureMainBranchProtectionRejectsWildcard(t *testing.T) {
 	require.ErrorContains(t, ensureMainBranchProtection(client, 300, 0), `"m*" also matches main`)
 }
 
+func TestEnsureMainBranchProtectionRechecksRuleCreatedDuringUpdate(t *testing.T) {
+	patches, deletes := 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodGet:
+			switch {
+			case patches == 0:
+				_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"access_level":30}],"merge_access_levels":[{"access_level":40}]}]`))
+			case deletes == 0:
+				_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"access_level":30}],"merge_access_levels":[{"access_level":40}]},{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}]`))
+			default:
+				_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}]`))
+			}
+		case r.URL.Path == "/api/v4/projects/300/protected_branches/main" && r.Method == http.MethodDelete:
+			deletes++
+			w.WriteHeader(http.StatusNoContent)
+		case r.URL.Path == "/api/v4/projects/300/protected_branches/main" && r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(`{"name":"main","push_access_levels":[{"id":1,"access_level":30}],"merge_access_levels":[{"id":2,"access_level":40}]}`))
+		case r.URL.Path == "/api/v4/projects/300/protected_branches/main" && r.Method == http.MethodPatch:
+			patches++
+			_, _ = w.Write([]byte(`{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	require.NoError(t, ensureMainBranchProtection(client, 300, 0))
+	assert.Equal(t, 2, patches)
+	assert.Equal(t, 1, deletes)
+}
+
 func TestStudentProjectMemberUpgrade(t *testing.T) {
 	access := 20
 	edits := 0

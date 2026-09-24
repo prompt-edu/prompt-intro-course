@@ -332,6 +332,10 @@ func configureProjectWithMaterial(git *gitlab.Client, projectID int64, projectNa
 }
 
 func ensureMainBranchProtection(git *gitlab.Client, projectID, mergeOwnerID int64) error {
+	return ensureMainBranchProtectionAttempt(git, projectID, mergeOwnerID, 0)
+}
+
+func ensureMainBranchProtectionAttempt(git *gitlab.Client, projectID, mergeOwnerID int64, attempt int) error {
 	// GitLab applies the most permissive of *all* matching rules. A single GET
 	// can return a strict rule while another exact or wildcard rule still lets
 	// Developers push. Remove duplicate exact rules before configuring one.
@@ -414,6 +418,13 @@ func ensureMainBranchProtection(git *gitlab.Client, projectID, mergeOwnerID int6
 		return err
 	}
 	if len(rules) != 1 || rules[0].Name != "main" || !mainBranchProtectionMatches(rules[0], mergeOwnerID) {
+		// GitLab may create its default Developer-push rule while the first
+		// template commit is being written. The update above can race with
+		// that rule and leave two exact `main` entries. Read and collapse them
+		// again before any student or peer gets project access.
+		if attempt < 3 {
+			return ensureMainBranchProtectionAttempt(git, projectID, mergeOwnerID, attempt+1)
+		}
 		return fmt.Errorf("GitLab did not confirm exactly one strict main branch rule")
 	}
 	return nil
