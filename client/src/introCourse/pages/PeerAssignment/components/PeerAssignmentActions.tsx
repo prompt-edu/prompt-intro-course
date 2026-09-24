@@ -132,9 +132,9 @@ export const PeerAssignmentActions = ({
             <AlertDialogHeader>
               <AlertDialogTitle>Clear all peer assignments?</AlertDialogTitle>
               <AlertDialogDescription>
-                This clears peer assignments in PROMPT. Review access for current repositories
-                stays with the tutor group. For older repositories with per-peer access, remove
-                that access first.
+                This clears peer assignments in PROMPT. Review access for current repositories stays
+                with the tutor group. For older repositories with per-peer access, remove that
+                access first.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
