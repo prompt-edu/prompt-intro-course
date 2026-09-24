@@ -170,8 +170,8 @@ func deletePeerAssignments(c *gin.Context) {
 }
 
 // syncPeerAssignmentsToGitlab godoc
-// @Summary Sync peer assignments to GitLab
-// @Description Adds peers as Reporter members and creates approval rules on GitLab.
+// @Summary Check GitLab peer review access
+// @Description Verifies group-based Reporter access for current repositories; creates per-peer access only for legacy repositories.
 // @Tags peer-assignment
 // @Accept json
 // @Produce json
@@ -213,8 +213,8 @@ func syncPeerAssignmentsToGitlab(c *gin.Context) {
 }
 
 // unsyncPeerAssignmentsFromGitlab godoc
-// @Summary Unsync peer assignments from GitLab
-// @Description Revokes Reporter access and removes approval rules for all current peer assignments.
+// @Summary Remove legacy GitLab peer access
+// @Description Removes per-peer access from legacy repositories. Group-based access on current repositories is independent of assignments.
 // @Tags peer-assignment
 // @Accept json
 // @Produce json

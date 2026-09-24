@@ -16,8 +16,9 @@ import (
 
 const peerReviewRuleName = "Peer Review"
 
-// SyncPeerAssignmentsToGitlab adds peers as Reporter members and creates
-// "Peer Review" approval rules on each student's GitLab project.
+// SyncPeerAssignmentsToGitlab verifies group-based review access for new
+// repositories. Older repositories still receive per-assignment Reporter
+// membership and an optional approval rule.
 func SyncPeerAssignmentsToGitlab(ctx context.Context, coursePhaseID uuid.UUID, semesterTag string) ([]peerAssignmentDTO.SyncResult, error) {
 	svc := PeerAssignmentServiceSingleton
 	if svc.gitlabClient == nil {
@@ -171,7 +172,18 @@ func syncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cours
 		project = found
 	}
 
-	// 6. Add reviewer as Reporter (idempotent)
+	// Current repositories share a peer-reviewer group at Reporter level.
+	// The assignment only identifies a preferred reviewer; it must not add
+	// project membership or change the group-based approval rule.
+	peerGroupID, err := groupPeerReviewGroupID(git, project.ID)
+	if err != nil {
+		return err
+	}
+	if peerGroupID != 0 {
+		return verifyGroupPeerAccess(git, project.ID, peerGroupID, reviewerGitlabUser.ID)
+	}
+
+	// 6. Add reviewer as Reporter for legacy repositories (idempotent)
 	_, _, err = git.ProjectMembers.AddProjectMember(project.ID, &gitlab.AddProjectMemberOptions{
 		UserID:      gitlab.Ptr(reviewerGitlabUser.ID),
 		AccessLevel: gitlab.Ptr(gitlab.ReporterPermissions),
@@ -203,9 +215,8 @@ func getCachedUser(git *gitlab.Client, username string, cache map[string]*gitlab
 	return u, nil
 }
 
-// UnsyncPeerAssignmentsFromGitlab revokes Reporter access and removes "Peer Review"
-// approval rules for all current peer assignments. This is the inverse of
-// SyncPeerAssignmentsToGitlab — call it before clearing/regenerating assignments.
+// UnsyncPeerAssignmentsFromGitlab removes per-assignment access from legacy
+// repositories. Group-based peer review access is independent of assignments.
 func UnsyncPeerAssignmentsFromGitlab(ctx context.Context, coursePhaseID uuid.UUID, semesterTag string) ([]peerAssignmentDTO.SyncResult, error) {
 	svc := PeerAssignmentServiceSingleton
 	if svc.gitlabClient == nil {
@@ -308,6 +319,14 @@ func unsyncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cou
 		}
 		return fmt.Errorf("find project %q: %w", projectPath, err)
 	}
+	peerGroupID, err := groupPeerReviewGroupID(git, project.ID)
+	if err != nil {
+		return err
+	}
+	if peerGroupID != 0 {
+		// Group-wide access is independent of the generated peer assignments.
+		return nil
+	}
 
 	// 6. Remove reviewer from "Peer Review" approval rule (do this BEFORE revoking membership)
 	if err := removePeerFromReviewRule(git, project.ID, reviewerGitlabUser.ID); err != nil {
@@ -321,6 +340,39 @@ func unsyncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cou
 	}
 
 	return nil
+}
+
+func groupPeerReviewGroupID(git *gitlab.Client, projectID int64) (int64, error) {
+	rules, _, err := git.Projects.GetProjectApprovalRules(projectID, nil)
+	if err != nil {
+		return 0, fmt.Errorf("list peer review rules: %w", err)
+	}
+	for _, rule := range rules {
+		if rule.Name == peerReviewRuleName && rule.RuleType == "regular" && rule.ApprovalsRequired == 0 && len(rule.Groups) == 1 {
+			return rule.Groups[0].ID, nil
+		}
+	}
+	return 0, nil
+}
+
+func verifyGroupPeerAccess(git *gitlab.Client, projectID, peerGroupID, reviewerID int64) error {
+	member, _, err := git.GroupMembers.GetGroupMember(peerGroupID, reviewerID)
+	if err != nil {
+		return fmt.Errorf("reviewer is not a direct member of the peer group: %w", err)
+	}
+	if member.AccessLevel < gitlab.ReporterPermissions {
+		return fmt.Errorf("reviewer needs at least Reporter access in the peer group")
+	}
+	project, _, err := git.Projects.GetProject(projectID, nil)
+	if err != nil {
+		return fmt.Errorf("inspect peer group project share: %w", err)
+	}
+	for _, shared := range project.SharedWithGroups {
+		if shared.GroupID == peerGroupID && shared.GroupAccessLevel >= int64(gitlab.ReporterPermissions) {
+			return nil
+		}
+	}
+	return fmt.Errorf("peer group does not have Reporter access to the project")
 }
 
 // removePeerFromReviewRule removes a user from the "Peer Review" approval rule.

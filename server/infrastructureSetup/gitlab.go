@@ -356,6 +356,10 @@ func createStudentProjectWithMaterial(p StudentProjectParams, material *material
 	if err != nil {
 		return fmt.Errorf("get client for project %q: %w", p.RepoName, err)
 	}
+	peerGroup, err := getOrCreatePeerReviewGroup(git, p.TutorSubgroupID, p.TutorSubgroupPath)
+	if err != nil {
+		return fmt.Errorf("prepare peer review group for %q: %w", p.RepoName, err)
+	}
 
 	ciCDRepoPath := p.IntroCourseGroupPath + "/ci-cd"
 
@@ -388,13 +392,148 @@ func createStudentProjectWithMaterial(p StudentProjectParams, material *material
 	if err != nil {
 		return err
 	}
+	if err = ensureGroupMember(git, peerGroup.ID, p.DevID, gitlab.ReporterPermissions); err != nil {
+		return fmt.Errorf("add student to peer review group for %q: %w", p.RepoName, err)
+	}
+	if err = ensureProjectSharedWithPeerGroup(git, project.ID, peerGroup.ID); err != nil {
+		return fmt.Errorf("share %q with peer reviewers: %w", p.RepoName, err)
+	}
 
 	// 4. Approval rule (idempotent: skip if "Tutor Approval" rule exists)
 	err = ensureApprovalRule(git, project.ID, p.RepoName, p.TutorsGroupID)
 	if err != nil {
 		return err
 	}
+	if err = ensurePeerReviewRule(git, project.ID, p.RepoName, peerGroup.ID); err != nil {
+		return err
+	}
 
+	return nil
+}
+
+// Each tutor group has one direct-membership peer group. It is shared into
+// student projects as Reporter, while each repository owner gets Developer
+// access directly. This allows peer approval without letting classmates push.
+func getOrCreatePeerReviewGroup(git *gitlab.Client, tutorGroupID int64, tutorGroupPath string) (*gitlab.Group, error) {
+	const groupPath = "peer-reviewers"
+	fullPath := tutorGroupPath + "/" + groupPath
+	group, _, err := git.Groups.GetGroup(fullPath, nil)
+	if err == nil {
+		if group.ParentID != tutorGroupID || !strings.EqualFold(group.FullPath, fullPath) {
+			return nil, fmt.Errorf("peer review group path %q resolves to a different group", fullPath)
+		}
+		return group, nil
+	}
+	if !isNotFoundError(err) {
+		return nil, err
+	}
+	group, _, err = git.Groups.CreateGroup(&gitlab.CreateGroupOptions{
+		Name:                  gitlab.Ptr("Peer Reviewers"),
+		Path:                  gitlab.Ptr(groupPath),
+		ParentID:              gitlab.Ptr(tutorGroupID),
+		Visibility:            gitlab.Ptr(gitlab.PrivateVisibility),
+		ProjectCreationLevel:  gitlab.Ptr(gitlab.NoOneProjectCreation),
+		SubGroupCreationLevel: gitlab.Ptr(gitlab.OwnerSubGroupCreationLevelValue),
+	})
+	if err == nil {
+		return group, nil
+	}
+	if !isAlreadyExistsError(err) {
+		return nil, err
+	}
+	group, _, err = git.Groups.GetGroup(fullPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("find peer review group after create conflict: %w", err)
+	}
+	if group.ParentID != tutorGroupID || !strings.EqualFold(group.FullPath, fullPath) {
+		return nil, fmt.Errorf("peer review group path %q resolves to a different group", fullPath)
+	}
+	return group, nil
+}
+
+func ensureProjectSharedWithPeerGroup(git *gitlab.Client, projectID, peerGroupID int64) error {
+	project, _, err := git.Projects.GetProject(projectID, nil)
+	if err != nil {
+		return err
+	}
+	for _, shared := range project.SharedWithGroups {
+		if shared.GroupID == peerGroupID {
+			if shared.GroupAccessLevel != int64(gitlab.ReporterPermissions) {
+				return fmt.Errorf("peer group has access level %d; expected Reporter", shared.GroupAccessLevel)
+			}
+			return nil
+		}
+	}
+	_, err = git.Projects.ShareProjectWithGroup(projectID, &gitlab.ShareWithGroupOptions{
+		GroupID: gitlab.Ptr(peerGroupID), GroupAccess: gitlab.Ptr(gitlab.ReporterPermissions),
+	})
+	if err != nil && !isAlreadyExistsError(err) {
+		return err
+	}
+	project, _, err = git.Projects.GetProject(projectID, nil)
+	if err != nil {
+		return err
+	}
+	for _, shared := range project.SharedWithGroups {
+		if shared.GroupID == peerGroupID && shared.GroupAccessLevel == int64(gitlab.ReporterPermissions) {
+			return nil
+		}
+	}
+	return fmt.Errorf("GitLab did not confirm Reporter sharing for peer group %d", peerGroupID)
+}
+
+func ensurePeerReviewRule(git *gitlab.Client, projectID int64, repoName string, peerGroupID int64) error {
+	branch, _, err := git.ProtectedBranches.GetProtectedBranch(projectID, "main")
+	if err != nil {
+		return fmt.Errorf("get protected main for peer review in %q: %w", repoName, err)
+	}
+	rules, _, err := git.Projects.GetProjectApprovalRules(projectID, nil)
+	if err != nil {
+		return fmt.Errorf("list peer review rules for %q: %w", repoName, err)
+	}
+	branchIDs := []int64{branch.ID}
+	groupIDs := []int64{peerGroupID}
+	for _, rule := range rules {
+		if rule.Name != "Peer Review" {
+			continue
+		}
+		if rule.RuleType == "regular" && rule.ApprovalsRequired == 0 &&
+			len(rule.Groups) == 1 && approvalRuleIncludesGroup(rule, peerGroupID) &&
+			len(rule.Users) == 0 && !rule.AppliesToAllProtectedBranches &&
+			len(rule.ProtectedBranches) == 1 && rule.ProtectedBranches[0].ID == branch.ID {
+			return nil
+		}
+		if rule.RuleType == "any_approver" {
+			return fmt.Errorf("Peer Review rule for %q is an any-approver rule; remove it before repair", repoName)
+		}
+		updated, _, updateErr := git.Projects.UpdateProjectApprovalRule(projectID, rule.ID, &gitlab.UpdateProjectLevelRuleOptions{
+			ApprovalsRequired:             gitlab.Ptr(int64(0)),
+			GroupIDs:                      gitlab.Ptr(groupIDs),
+			UserIDs:                       gitlab.Ptr([]int64{}),
+			ProtectedBranchIDs:            gitlab.Ptr(branchIDs),
+			AppliesToAllProtectedBranches: gitlab.Ptr(false),
+		})
+		if updateErr != nil {
+			return fmt.Errorf("update peer review rule for %q: %w", repoName, updateErr)
+		}
+		if updated.RuleType != "regular" || updated.ApprovalsRequired != 0 || !approvalRuleIncludesGroup(updated, peerGroupID) {
+			return fmt.Errorf("peer review rule for %q was not configured as an optional group rule", repoName)
+		}
+		return nil
+	}
+	created, _, err := git.Projects.CreateProjectApprovalRule(projectID, &gitlab.CreateProjectLevelRuleOptions{
+		Name:                          gitlab.Ptr("Peer Review"),
+		ApprovalsRequired:             gitlab.Ptr(int64(0)),
+		GroupIDs:                      gitlab.Ptr(groupIDs),
+		ProtectedBranchIDs:            gitlab.Ptr(branchIDs),
+		AppliesToAllProtectedBranches: gitlab.Ptr(false),
+	})
+	if err != nil {
+		return fmt.Errorf("create peer review rule for %q: %w", repoName, err)
+	}
+	if created.RuleType != "regular" || created.ApprovalsRequired != 0 || !approvalRuleIncludesGroup(created, peerGroupID) {
+		return fmt.Errorf("peer review rule for %q was not configured as an optional group rule", repoName)
+	}
 	return nil
 }
 
