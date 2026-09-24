@@ -12,7 +12,9 @@ import {
   useScreenSize,
 } from '@tumaet/prompt-ui-components'
 import { useForm } from 'react-hook-form'
+import { GitLabUsernameCheckMessage } from '../../components/GitLabUsernameCheckMessage'
 import { YesNoButtons } from '../../components/YesNoButtons'
+import { useGitLabUsernameCheck } from '../../hooks/useGitLabUsernameCheck'
 import type { DeveloperProfile } from '../../interfaces/DeveloperProfile'
 import type { PostDeveloperProfile } from '../../interfaces/PostDeveloperProfile'
 import { type DeveloperFormValues, developerFormSchema } from '../../validations/developerProfile'
@@ -21,17 +23,20 @@ import { GitLabHelperDialog } from './components/GitLabHelperDialog'
 import IOSUDIDDialog from './components/IOSUDIDDialog'
 
 interface DeveloperProfileFormProps {
+  phaseId: string
   developerProfile?: DeveloperProfile
   status?: string
   onSubmit: (developerProfile: PostDeveloperProfile) => void
 }
 
 export const DeveloperProfileForm = ({
+  phaseId,
   developerProfile,
   status,
   onSubmit,
 }: DeveloperProfileFormProps) => {
   const { width } = useScreenSize()
+  const gitLabCheck = useGitLabUsernameCheck(phaseId)
 
   const form = useForm<DeveloperFormValues>({
     resolver: zodResolver(developerFormSchema),
@@ -55,7 +60,25 @@ export const DeveloperProfileForm = ({
     },
   })
 
-  const handleSubmit = (values: DeveloperFormValues) => {
+  const verifyGitLabUsername = async (username: string) => {
+    const result = await gitLabCheck.check(username)
+    if (form.getValues('gitLabUsername').trim() !== username) return false
+    if (result?.status === 'found') {
+      form.clearErrors('gitLabUsername')
+      return true
+    }
+    form.setError('gitLabUsername', {
+      message:
+        result?.status === 'check_failed'
+          ? 'GitLab could not be checked. Please retry before submitting.'
+          : 'Username not found on LRZ GitLab. Check your profile URL.',
+    })
+    return false
+  }
+
+  const handleSubmit = async (values: DeveloperFormValues) => {
+    if (!(await verifyGitLabUsername(values.gitLabUsername))) return
+    if (form.getValues('gitLabUsername').trim() !== values.gitLabUsername) return
     const submittedProfile: PostDeveloperProfile = {
       appleID: values.appleID,
       gitLabUsername: values.gitLabUsername,
@@ -109,11 +132,28 @@ export const DeveloperProfileForm = ({
                 </FormDescription>
                 <FormControl>
                   <div className='flex items-center space-x-2'>
-                    <Input placeholder='i.e. ab12cde' {...field} className='grow' />
+                    <Input
+                      placeholder='i.e. ab12cde'
+                      {...field}
+                      onChange={(event) => {
+                        field.onChange(event)
+                        gitLabCheck.schedule(event.target.value)
+                        form.clearErrors('gitLabUsername')
+                      }}
+                      onBlur={() => {
+                        field.onBlur()
+                        if (field.value) void verifyGitLabUsername(field.value.trim())
+                      }}
+                      className='grow'
+                    />
                     <GitLabHelperDialog />
                   </div>
                 </FormControl>
                 <FormMessage />
+                <GitLabUsernameCheckMessage
+                  result={gitLabCheck.result}
+                  isChecking={gitLabCheck.isChecking}
+                />
               </FormItem>
             )}
           />
@@ -273,7 +313,11 @@ export const DeveloperProfileForm = ({
           </div>
 
           <div className='flex justify-end mt-3'>
-            <Button type='submit' size='lg'>
+            <Button
+              type='submit'
+              size='lg'
+              disabled={gitLabCheck.isChecking || form.formState.isSubmitting}
+            >
               Submit
             </Button>
           </div>

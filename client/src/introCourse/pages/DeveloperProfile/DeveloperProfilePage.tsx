@@ -36,6 +36,7 @@ export const DeveloperProfilePage = ({ onContinue }: DeveloperProfilePageProps) 
     <div>
       {currState === 'input' && (
         <DeveloperProfileForm
+          phaseId={phaseId ?? ''}
           developerProfile={developerProfile}
           onSubmit={(profile) => {
             mutation.mutate(profile)

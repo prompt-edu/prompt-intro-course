@@ -45,6 +45,27 @@ func validateGitLabProfiles(c *gin.Context) {
 	c.JSON(http.StatusOK, results)
 }
 
+// validateGitLabUser checks one username while a student or lecturer edits a profile.
+// It returns public profile details only; a match does not establish account ownership.
+func validateGitLabUser(c *gin.Context) {
+	if _, err := uuid.Parse(c.Param("coursePhaseID")); err != nil {
+		handleError(c, http.StatusBadRequest, err)
+		return
+	}
+	git := DeveloperProfileServiceSingleton.gitlabClient
+	if git == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "GitLab validation is not configured"})
+		return
+	}
+	result := checkGitLabUsername(git, c.Param("username"))
+	c.JSON(http.StatusOK, gin.H{
+		"username":   result.Username,
+		"status":     result.Status,
+		"gitLabName": result.GitLabName,
+		"gitLabURL":  result.GitLabURL,
+	})
+}
+
 func checkGitLabUsername(git *gitlab.Client, username string) gitLabValidationResult {
 	result := gitLabValidationResult{Username: username}
 	if username == "" {
