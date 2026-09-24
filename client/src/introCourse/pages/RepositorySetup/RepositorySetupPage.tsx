@@ -112,7 +112,9 @@ export const RepositorySetupPage = () => {
       setResetOpen(false)
       setTypedConfirmation('')
       await queryClient.invalidateQueries({ queryKey })
-      setNotice('A new demo was created. Check its files, issues, access, and pipeline before use.')
+      setNotice(
+        'A new demo was created. Check its files, issues, access, and pipeline before use. GitLab may take a little longer to move the previous demo into the archive subgroup.',
+      )
       setArchiveUrl(result.archiveUrl || null)
       setActionError(null)
     },

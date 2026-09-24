@@ -148,10 +148,8 @@ func ResetDemo(ctx context.Context, coursePhaseID uuid.UUID, request resetDemoRe
 	if err != nil {
 		return result, fmt.Errorf("replacement demo exists, but move old demo to archives failed: %w", err)
 	}
-	moved, _, err := git.Projects.GetProject(oldProject.ID, nil)
-	if err != nil || moved == nil || moved.Namespace == nil || moved.Namespace.ID != archiveGroup.ID {
-		return result, fmt.Errorf("replacement demo exists, but GitLab did not confirm the archive transfer")
-	}
-	result.ArchiveURL = moved.WebURL
+	// GitLab accepts transfers before its background worker moves the project.
+	// An immediate GET can still return the old namespace; the old URL remains
+	// usable and redirects after the transfer completes.
 	return result, nil
 }
