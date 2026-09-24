@@ -313,11 +313,7 @@ export const DeveloperProfileForm = ({
           </div>
 
           <div className='flex justify-end mt-3'>
-            <Button
-              type='submit'
-              size='lg'
-              disabled={gitLabCheck.isChecking || form.formState.isSubmitting}
-            >
+            <Button type='submit' size='lg' disabled={form.formState.isSubmitting}>
               Submit
             </Button>
           </div>

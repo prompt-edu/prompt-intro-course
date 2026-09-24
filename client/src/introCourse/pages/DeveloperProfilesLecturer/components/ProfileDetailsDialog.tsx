@@ -324,10 +324,7 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
               <Button type='button' variant='outline' onClick={onClose} disabled={isPending}>
                 Cancel
               </Button>
-              <Button
-                type='submit'
-                disabled={isPending || gitLabCheck.isChecking || form.formState.isSubmitting}
-              >
+              <Button type='submit' disabled={isPending || form.formState.isSubmitting}>
                 {isPending ? 'Saving...' : 'Save Profile'}
               </Button>
             </DialogFooter>
