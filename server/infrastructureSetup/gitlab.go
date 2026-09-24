@@ -676,7 +676,8 @@ func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 
 	// Shared project setup (files, branch protection, board, approvals, issues)
 	err = configureProject(git, project.ID, demoProjectName, templateVars{
-		StudentName: "Demo",
+		StudentName:        "Demo",
+		SubmissionDeadline: "See the course schedule in Outline",
 	})
 	if err != nil {
 		return err
