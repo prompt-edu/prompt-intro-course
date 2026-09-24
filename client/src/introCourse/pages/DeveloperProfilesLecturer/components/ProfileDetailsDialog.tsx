@@ -23,6 +23,8 @@ import { AlertTriangle, CheckCircle, Laptop, Smartphone, Tablet, Watch } from 'l
 import type React from 'react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { GitLabUsernameCheckMessage } from '../../../components/GitLabUsernameCheckMessage'
+import { useGitLabUsernameCheck } from '../../../hooks/useGitLabUsernameCheck'
 import type { PostDeveloperProfile } from '../../../interfaces/PostDeveloperProfile'
 import { updateDeveloperProfile } from '../../../network/mutations/updateDeveloperProfile'
 import { updateGitLabStatusCreated } from '../../../network/mutations/updateGitlabStatus'
@@ -46,6 +48,7 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
   onSaved,
 }) => {
   const queryClient = useQueryClient()
+  const gitLabCheck = useGitLabUsernameCheck(phaseId)
   const form = useForm<InstructorDeveloperFormValues>({
     resolver: zodResolver(instructorDevProfile),
     defaultValues: {
@@ -110,7 +113,26 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
     },
   })
 
-  const onSubmit = (data: InstructorDeveloperFormValues) => {
+  const verifyGitLabUsername = async (username: string) => {
+    if (!username) return true
+    const result = await gitLabCheck.check(username)
+    if (form.getValues('gitLabUsername').trim() !== username) return false
+    if (result?.status === 'found') {
+      form.clearErrors('gitLabUsername')
+      return true
+    }
+    form.setError('gitLabUsername', {
+      message:
+        result?.status === 'check_failed'
+          ? 'GitLab could not be checked. Please retry before saving.'
+          : 'Username not found on LRZ GitLab. Check the profile URL.',
+    })
+    return false
+  }
+
+  const onSubmit = async (data: InstructorDeveloperFormValues) => {
+    if (!(await verifyGitLabUsername(data.gitLabUsername))) return
+    if (form.getValues('gitLabUsername').trim() !== data.gitLabUsername) return
     mutate(data)
   }
 
@@ -167,9 +189,26 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
                       Enter the verified LRZ GitLab username, without the profile URL.
                     </FormDescription>
                     <FormControl>
-                      <Input placeholder='username' disabled={isPending} {...field} />
+                      <Input
+                        placeholder='username'
+                        disabled={isPending}
+                        {...field}
+                        onChange={(event) => {
+                          field.onChange(event)
+                          gitLabCheck.schedule(event.target.value)
+                          form.clearErrors('gitLabUsername')
+                        }}
+                        onBlur={() => {
+                          field.onBlur()
+                          if (field.value) void verifyGitLabUsername(field.value.trim())
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
+                    <GitLabUsernameCheckMessage
+                      result={gitLabCheck.result}
+                      isChecking={gitLabCheck.isChecking}
+                    />
                   </FormItem>
                 )}
               />
@@ -285,7 +324,7 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
               <Button type='button' variant='outline' onClick={onClose} disabled={isPending}>
                 Cancel
               </Button>
-              <Button type='submit' disabled={isPending}>
+              <Button type='submit' disabled={isPending || form.formState.isSubmitting}>
                 {isPending ? 'Saving...' : 'Save Profile'}
               </Button>
             </DialogFooter>

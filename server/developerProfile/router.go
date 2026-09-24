@@ -20,6 +20,7 @@ func setupDeveloperProfileRouter(router *gin.RouterGroup, authMiddleware func(al
 	// Getting all developer profiles is only allowed for lecturers
 	developerProfile.GET("", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), getAllDeveloperProfiles)
 	developerProfile.GET("/gitlab-validation", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), validateGitLabProfiles)
+	developerProfile.GET("/gitlab-user/:username", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer, promptSDK.CourseStudent), validateGitLabUser)
 	developerProfile.PUT("/:courseParticipationID", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), updateDeveloperProfile)
 
 	// Export for the next phase
