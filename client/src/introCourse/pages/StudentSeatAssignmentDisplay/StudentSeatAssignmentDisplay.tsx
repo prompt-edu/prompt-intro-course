@@ -15,6 +15,7 @@ import { ExternalLink, Monitor, User, Users } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { GITLAB_INTROCOURSE_BASE_URL } from '../../network/introCourseServerConfig'
 import { useIntroCourseStore } from '../../zustand/useIntroCourseStore'
+import { gitlabCourseGroup } from '../../utils/gitlabCourseGroup'
 
 export const StudentSeatAssignmentDisplay = () => {
   const { seatAssignment, peerAssignment } = useIntroCourseStore()
@@ -119,7 +120,7 @@ export const StudentSeatAssignmentDisplay = () => {
                         className='w-fit'
                         onClick={() =>
                           window.open(
-                            `${GITLAB_INTROCOURSE_BASE_URL}/ase/iPraktikum/${semesterTag}/Introcourse/${peer.tutorGitlabUsername}/${peer.gitlabUsername}`,
+                            `${GITLAB_INTROCOURSE_BASE_URL}/ase/iPraktikum/${gitlabCourseGroup(semesterTag)}/Introcourse/${peer.tutorGitlabUsername}/${peer.gitlabUsername}`,
                             '_blank',
                           )
                         }
