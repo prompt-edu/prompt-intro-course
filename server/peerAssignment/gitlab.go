@@ -3,6 +3,7 @@ package peerAssignment
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -120,6 +121,8 @@ func syncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cours
 
 	// 5. Find reviewee's project by convention path
 	// semesterTag is passed as-is (case must match what infrastructure setup used)
+	tutorSubgroupPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s",
+		gitlabutil.IPraktikumGroupName, semesterTag, tutor.GitlabUsername.String)
 	projectPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s/%s",
 		gitlabutil.IPraktikumGroupName, semesterTag, tutor.GitlabUsername.String, revieweeProfile.GitlabUsername)
 
@@ -134,8 +137,6 @@ func syncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cours
 		// project where the reviewee is a Developer member.
 		log.WithField("conventionPath", projectPath).Debug("Convention path not found, falling back to subgroup search")
 
-		tutorSubgroupPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s",
-			gitlabutil.IPraktikumGroupName, semesterTag, tutor.GitlabUsername.String)
 		tutorSubgroup, _, grpErr := git.Groups.GetGroup(tutorSubgroupPath, nil)
 		if grpErr != nil {
 			return fmt.Errorf("project %q not found and tutor subgroup %q also not found: %w", projectPath, tutorSubgroupPath, grpErr)
@@ -175,7 +176,7 @@ func syncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cours
 	// Current repositories share a peer-reviewer group at Reporter level.
 	// The assignment only identifies a preferred reviewer; it must not add
 	// project membership or change the group-based approval rule.
-	peerGroupID, err := groupPeerReviewGroupID(git, project.ID)
+	peerGroupID, err := sharedPeerReviewGroupID(git, project.ID, tutorSubgroupPath)
 	if err != nil {
 		return err
 	}
@@ -309,6 +310,8 @@ func unsyncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cou
 	}
 
 	// 5. Find reviewee's project
+	tutorSubgroupPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s",
+		gitlabutil.IPraktikumGroupName, semesterTag, tutor.GitlabUsername.String)
 	projectPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s/%s",
 		gitlabutil.IPraktikumGroupName, semesterTag, tutor.GitlabUsername.String, revieweeProfile.GitlabUsername)
 
@@ -319,7 +322,7 @@ func unsyncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cou
 		}
 		return fmt.Errorf("find project %q: %w", projectPath, err)
 	}
-	peerGroupID, err := groupPeerReviewGroupID(git, project.ID)
+	peerGroupID, err := sharedPeerReviewGroupID(git, project.ID, tutorSubgroupPath)
 	if err != nil {
 		return err
 	}
@@ -342,14 +345,29 @@ func unsyncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cou
 	return nil
 }
 
-func groupPeerReviewGroupID(git *gitlab.Client, projectID int64) (int64, error) {
-	rules, _, err := git.Projects.GetProjectApprovalRules(projectID, nil)
-	if err != nil {
-		return 0, fmt.Errorf("list peer review rules: %w", err)
+// The optional Peer Review approval rule can be absent on a partly configured
+// repository. The intended peer group shared into the project is the access
+// model; only repositories without that share use per-assignment membership.
+func sharedPeerReviewGroupID(git *gitlab.Client, projectID int64, tutorSubgroupPath string) (int64, error) {
+	groupPath := tutorSubgroupPath + "/peer-reviewers"
+	group, _, err := git.Groups.GetGroup(groupPath, nil)
+	if gitlabutil.IsNotFoundError(err) {
+		return 0, nil
 	}
-	for _, rule := range rules {
-		if rule.Name == peerReviewRuleName && rule.RuleType == "regular" && rule.ApprovalsRequired == 0 && len(rule.Groups) == 1 {
-			return rule.Groups[0].ID, nil
+	if err != nil {
+		return 0, fmt.Errorf("find peer review group %q: %w", groupPath, err)
+	}
+	if !strings.EqualFold(group.FullPath, groupPath) {
+		return 0, fmt.Errorf("peer review group %q resolves to %q", groupPath, group.FullPath)
+	}
+
+	project, _, err := git.Projects.GetProject(projectID, nil)
+	if err != nil {
+		return 0, fmt.Errorf("inspect peer review project share: %w", err)
+	}
+	for _, shared := range project.SharedWithGroups {
+		if shared.GroupID == group.ID {
+			return group.ID, nil
 		}
 	}
 	return 0, nil
