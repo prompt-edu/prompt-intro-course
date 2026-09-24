@@ -611,26 +611,42 @@ func ensurePeerReviewRule(git *gitlab.Client, projectID int64, repoName string, 
 }
 
 func addProjectMembers(git *gitlab.Client, projectID int64, repoName string, devID, devGroupID int64) error {
-	// Add student to the project
-	_, _, err := git.ProjectMembers.AddProjectMember(projectID, &gitlab.AddProjectMemberOptions{
-		UserID:      gitlab.Ptr(devID),
-		AccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
-	})
-	if err != nil && !isAlreadyExistsError(err) {
-		return fmt.Errorf("add student %d to project %q: %w", devID, repoName, err)
+	if err := ensureStudentProjectMember(git, projectID, devID); err != nil {
+		return fmt.Errorf("ensure student %d has Developer access to project %q: %w", devID, repoName, err)
 	}
-
-	// Add student to the developer group
-	_, _, err = git.GroupMembers.AddGroupMember(devGroupID, &gitlab.AddGroupMemberOptions{
-		UserID:      gitlab.Ptr(devID),
-		AccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
-	})
-	if err != nil && !isAlreadyExistsError(err) {
-		return fmt.Errorf("add student %d to developer group for %q: %w", devID, repoName, err)
+	if err := ensureGroupMember(git, devGroupID, devID, gitlab.DeveloperPermissions); err != nil {
+		return fmt.Errorf("ensure student %d has Developer access to developer group for %q: %w", devID, repoName, err)
 	}
 
 	// Tutor access is inherited from the tutor subgroup (Maintainer permission)
 
+	return nil
+}
+
+func ensureStudentProjectMember(git *gitlab.Client, projectID, userID int64) error {
+	member, _, err := git.ProjectMembers.GetProjectMember(projectID, userID)
+	if err == nil {
+		if member.AccessLevel >= gitlab.DeveloperPermissions {
+			return nil
+		}
+		_, _, err = git.ProjectMembers.EditProjectMember(projectID, userID, &gitlab.EditProjectMemberOptions{AccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions)})
+	} else if isNotFoundError(err) {
+		_, _, err = git.ProjectMembers.AddProjectMember(projectID, &gitlab.AddProjectMemberOptions{
+			UserID: gitlab.Ptr(userID), AccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
+		})
+	} else {
+		return err
+	}
+	if err != nil && !isAlreadyExistsError(err) {
+		return err
+	}
+	member, _, err = git.ProjectMembers.GetProjectMember(projectID, userID)
+	if err != nil {
+		return fmt.Errorf("GitLab did not confirm direct Developer access: %w", err)
+	}
+	if member.AccessLevel < gitlab.DeveloperPermissions {
+		return fmt.Errorf("GitLab project membership has access level %d; need Developer", member.AccessLevel)
+	}
 	return nil
 }
 
