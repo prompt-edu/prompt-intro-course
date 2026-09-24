@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle } from 'lucide-react'
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type { PostDeveloperProfile } from '../../interfaces/PostDeveloperProfile'
-import { postDeveloperProfile } from '../../network/mutations/postDeveloperProfile'
+import { updateOwnDeveloperProfile } from '../../network/mutations/updateOwnDeveloperProfile'
 import { useIntroCourseStore } from '../../zustand/useIntroCourseStore'
 import { DeveloperProfileForm } from './DeveloperProfileForm'
 
@@ -17,13 +17,12 @@ export const DeveloperProfilePage = ({ onContinue }: DeveloperProfilePageProps) 
   const queryClient = useQueryClient()
   const { developerProfile } = useIntroCourseStore()
   const [currState, setCurrState] = useState<'input' | 'success' | 'error'>(
-    developerProfile === undefined ? 'input' : 'success',
+    developerProfile?.appleID && developerProfile.gitLabUsername ? 'success' : 'input',
   )
 
   const mutation = useMutation({
-    mutationFn: (devProfile: PostDeveloperProfile) => {
-      return postDeveloperProfile(phaseId ?? '', devProfile)
-    },
+    mutationFn: (devProfile: PostDeveloperProfile) =>
+      updateOwnDeveloperProfile(phaseId ?? '', devProfile),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['developer_profile'] })
       setCurrState('success')
@@ -55,7 +54,12 @@ export const DeveloperProfilePage = ({ onContinue }: DeveloperProfilePageProps) 
                 You have successfully submitted your developer profile.
               </p>
               <div className='pt-4'>
-                <Button onClick={onContinue}>Continue to the next step</Button>
+                <div className='flex justify-center gap-3'>
+                  <Button variant='outline' onClick={() => setCurrState('input')}>
+                    Edit profile
+                  </Button>
+                  <Button onClick={onContinue}>Continue to the next step</Button>
+                </div>
               </div>
             </div>
           )}

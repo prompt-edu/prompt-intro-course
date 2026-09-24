@@ -27,6 +27,12 @@ func makeGitLabError(statusCode int, message string) *gitlab.ErrorResponse {
 	}
 }
 
+func TestStudentProjectDisplayName(t *testing.T) {
+	assert.Equal(t, "Example Long Student Name - go57abc", studentProjectDisplayName("Example Long Student Name", "go57abc"))
+	assert.Equal(t, "Anne-Marie O Connor - go36kex", studentProjectDisplayName("Anne-Marie O'Connor", "go36kex"))
+	assert.Equal(t, "Çelik Yücel - go57bak", studentProjectDisplayName("Çelik Yücel", "go57bak"))
+}
+
 func TestApplyTemplateVars(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -152,9 +158,9 @@ func TestFetchTemplateFiles(t *testing.T) {
 
 	// Keys are the decoded file paths (matching r.URL.Path after ServeMux decoding)
 	fileContents := map[string]string{
-		"student_repo_template/README.md":                "# {{.StudentName}}'s App\nDeadline: {{.SubmissionDeadline}}",
-		"student_repo_template/.githooks/post-checkout":  "#!/bin/bash\nxcodegen generate\n",
-		"student_repo_template/.gitignore":               "*.xcodeproj\n",
+		"student_repo_template/README.md":               "# {{.StudentName}}'s App\nDeadline: {{.SubmissionDeadline}}",
+		"student_repo_template/.githooks/post-checkout": "#!/bin/bash\nxcodegen generate\n",
+		"student_repo_template/.gitignore":              "*.xcodeproj\n",
 	}
 
 	server := fakeGitLabServer(t, treeEntries, fileContents)
@@ -319,6 +325,10 @@ func TestCreateProjectFiles(t *testing.T) {
 			})
 			return
 		}
+		if path == "/api/v4/projects/200/repository/tree" {
+			w.WriteHeader(http.StatusNotFound) // new project has no main branch yet
+			return
+		}
 
 		// Raw file content endpoints (teaching material repo)
 		filePrefix := "/api/v4/projects/100/repository/files/"
@@ -404,7 +414,7 @@ func TestCreateProjectFiles(t *testing.T) {
 }
 
 func TestCreateProjectFilesIdempotent(t *testing.T) {
-	// Verify that createProjectFiles handles "already exists" errors gracefully
+	// Verify that a retry skips files already present in the student project.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
@@ -415,13 +425,18 @@ func TestCreateProjectFilesIdempotent(t *testing.T) {
 			})
 			return
 		}
+		if path == "/api/v4/projects/200/repository/tree" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"name": "file.txt", "type": "blob", "path": "file.txt", "mode": "100644"}})
+			return
+		}
 
 		if strings.Contains(path, "/repository/files/") && strings.HasSuffix(path, "/raw") {
 			_, _ = fmt.Fprint(w, "content")
 			return
 		}
 
-		// CreateCommit returns "already exists" error (repo already initialized)
+		// A correct retry does not attempt a commit for an existing file.
 		if path == "/api/v4/projects/200/repository/commits" && r.Method == http.MethodPost {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
@@ -445,9 +460,49 @@ func TestCreateProjectFilesIdempotent(t *testing.T) {
 		teachingMaterialProjectID: "100",
 	}
 
-	// Should succeed (silently skip since files already exist)
+	// Should succeed without a commit because all template files already exist.
 	err = createProjectFiles(client, 200, "test-repo", templateVars{StudentName: "Alice"})
 	assert.NoError(t, err)
+}
+
+func TestCreateProjectFilesFillsMissingFiles(t *testing.T) {
+	var commitBody map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case path == "/api/v4/projects/100/repository/tree":
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"name": "README.md", "type": "blob", "path": "student_repo_template/README.md", "mode": "100644"},
+				{"name": "setup-git2-conflict.sh", "type": "blob", "path": "student_repo_template/exercises/setup-git2-conflict.sh", "mode": "100755"},
+			})
+		case path == "/api/v4/projects/200/repository/tree":
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"name": "README.md", "type": "blob", "path": "README.md", "mode": "100644"}})
+		case strings.HasPrefix(path, "/api/v4/projects/100/repository/files/"):
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = fmt.Fprint(w, "file content")
+		case path == "/api/v4/projects/200/repository/commits" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&commitBody)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "filled"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	origSvc := InfrastructureServiceSingleton
+	InfrastructureServiceSingleton = &InfrastructureService{teachingMaterialProjectID: "100"}
+	defer func() { InfrastructureServiceSingleton = origSvc }()
+
+	require.NoError(t, createProjectFiles(client, 200, "test-repo", templateVars{}))
+	require.NotNil(t, commitBody)
+	actions := commitBody["actions"].([]interface{})
+	require.Len(t, actions, 1)
+	action := actions[0].(map[string]interface{})
+	assert.Equal(t, "exercises/setup-git2-conflict.sh", action["file_path"])
+	assert.Equal(t, true, action["execute_filemode"])
 }
 
 func TestCreateProjectFilesNotConfigured(t *testing.T) {
@@ -897,6 +952,11 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			return
 		}
 
+		if path == "/api/v4/projects/300/repository/tree" {
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"name": "README.md", "type": "blob", "path": "README.md", "mode": "100644"}})
+			return
+		}
+
 		// Raw file content
 		if strings.HasPrefix(path, "/api/v4/projects/100/repository/files/") && strings.HasSuffix(path, "/raw") {
 			filePath := strings.TrimPrefix(path, "/api/v4/projects/100/repository/files/")
@@ -910,7 +970,7 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			return
 		}
 
-		// CreateCommit returns "already exists" (files already pushed)
+		// A correct retry does not commit files that are already present.
 		if path == "/api/v4/projects/300/repository/commits" && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = fmt.Fprint(w, `{"message":"A file with this name already exists"}`)
@@ -988,10 +1048,10 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 
 func TestParseIssueContent(t *testing.T) {
 	tests := []struct {
-		name        string
-		content     string
-		wantTitle   string
-		wantDesc    string
+		name      string
+		content   string
+		wantTitle string
+		wantDesc  string
 	}{
 		{
 			name:      "standard heading and description",
@@ -1244,6 +1304,11 @@ func TestCreateCICDProject(t *testing.T) {
 			}
 			// GetRawFile
 			if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/repository/files/") {
+				if strings.Contains(r.URL.Path, "/projects/500/") {
+					w.WriteHeader(http.StatusNotFound)
+					_, _ = fmt.Fprint(w, `{"message":"404 File Not Found"}`)
+					return
+				}
 				w.Header().Set("Content-Type", "application/octet-stream")
 				_, _ = fmt.Fprint(w, "stages:\n  - lint\n")
 				return
@@ -1277,7 +1342,7 @@ func TestCreateCICDProject(t *testing.T) {
 
 		// Verify CI/CD files were pushed
 		require.NotNil(t, commitBody, "should push CI/CD files via commit")
-		assert.Equal(t, "Initialize CI/CD pipeline from course template", commitBody["commit_message"])
+		assert.Equal(t, "Synchronize CI/CD pipeline with course template", commitBody["commit_message"])
 		actions, ok := commitBody["actions"].([]interface{})
 		require.True(t, ok, "commit should have actions")
 		require.Len(t, actions, 1)
@@ -1337,7 +1402,50 @@ func TestCreateCICDProject(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("succeeds with no CI/CD files in teaching material", func(t *testing.T) {
+	t.Run("updates stale CI/CD files in an existing project", func(t *testing.T) {
+		var commitBody map[string]interface{}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch {
+			case r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects":
+				w.WriteHeader(http.StatusConflict)
+				_, _ = fmt.Fprint(w, `{"message":"conflict"}`)
+			case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/repository/tree"):
+				_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"name": ".gitlab-ci.yml", "path": "ci_cd/.gitlab-ci.yml", "type": "blob", "mode": "100644"}})
+			case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/repository/files/"):
+				w.Header().Set("Content-Type", "application/octet-stream")
+				if strings.Contains(r.URL.Path, "/projects/500/") {
+					_, _ = fmt.Fprint(w, "old pipeline")
+				} else {
+					_, _ = fmt.Fprint(w, "new pipeline")
+				}
+			case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v4/projects/"):
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 500, "name": "ci-cd"})
+			case r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects/500/repository/commits":
+				_ = json.NewDecoder(r.Body).Decode(&commitBody)
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "updated"})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer server.Close()
+
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+		origSvc := InfrastructureServiceSingleton
+		InfrastructureServiceSingleton = &InfrastructureService{teachingMaterialProjectID: "test-teaching-project"}
+		defer func() { InfrastructureServiceSingleton = origSvc }()
+
+		require.NoError(t, createCICDProject(client, 1, "ase/ipraktikum/introcourse"))
+		require.NotNil(t, commitBody)
+		actions := commitBody["actions"].([]interface{})
+		require.Len(t, actions, 1)
+		assert.Equal(t, "update", actions[0].(map[string]interface{})["action"])
+		assert.Equal(t, "new pipeline", actions[0].(map[string]interface{})["content"])
+	})
+
+	t.Run("fails with no CI/CD files in teaching material", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 
@@ -1368,7 +1476,7 @@ func TestCreateCICDProject(t *testing.T) {
 		defer func() { InfrastructureServiceSingleton = origSvc }()
 
 		err = createCICDProject(client, 1, "ase/ipraktikum/introcourse")
-		assert.NoError(t, err)
+		assert.ErrorContains(t, err, "no CI/CD files")
 	})
 }
 

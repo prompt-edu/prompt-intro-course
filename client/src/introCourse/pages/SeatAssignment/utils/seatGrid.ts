@@ -3,7 +3,7 @@ import type { Seat } from '../../../interfaces/Seat'
 import { getPhysicalPositions, RECHNERHALLE_LAYOUT, type RowLayout } from './rechnerHalle'
 
 export interface ParsedSeat {
-  room: number
+  room: string
   row: number
   position: number
   original: string
@@ -11,11 +11,13 @@ export interface ParsedSeat {
 
 export function parseSeatName(seatName: string): ParsedSeat | null {
   const parts = seatName.split('-')
-  if (parts.length !== 3) return null
-  const room = parseInt(parts[0], 10)
-  const row = parseInt(parts[1], 10)
-  const position = parseInt(parts[2], 10)
-  if (isNaN(room) || isNaN(row) || isNaN(position)) return null
+  if (parts.length < 2) return null
+  const hasRow = parts.length >= 3 && /^\d+$/.test(parts[parts.length - 2])
+  const room = parts.slice(0, hasRow ? -2 : -1).join('-')
+  const row = hasRow ? Number(parts[parts.length - 2]) : 1
+  const position = Number(parts[parts.length - 1])
+  if (!room || !Number.isInteger(row) || row < 1 || !Number.isInteger(position) || position < 1)
+    return null
   return { room, row, position, original: seatName }
 }
 

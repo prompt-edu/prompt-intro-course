@@ -8,8 +8,9 @@ import { useIntroCourseStore } from './zustand/useIntroCourseStore'
 export const IntroCoursePage = () => {
   // TODO: replace with actual state management
   const { developerProfile, seatAssignment } = useIntroCourseStore()
+  const profileComplete = Boolean(developerProfile?.appleID && developerProfile.gitLabUsername)
   const [stepsOpen, setStepsOpen] = useState(() => {
-    if (developerProfile === undefined) return [true, false]
+    if (!profileComplete) return [true, false]
     if (developerProfile !== undefined && seatAssignment !== undefined) return [false, true]
     return [false, false]
   })
@@ -26,7 +27,7 @@ export const IntroCoursePage = () => {
           number={1}
           title='Developer Profile Survey'
           description='Make sure to fill out the survey before the deadline.'
-          isCompleted={developerProfile !== undefined}
+          isCompleted={profileComplete}
           isOpen={stepsOpen[0]}
           onToggle={() => setStepsOpen((prev) => [!prev[0], prev[1], prev[2]])}
         >

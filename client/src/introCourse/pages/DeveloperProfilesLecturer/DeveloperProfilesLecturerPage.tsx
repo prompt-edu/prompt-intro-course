@@ -39,6 +39,7 @@ import { getAllDeveloperProfiles } from '../../network/queries/getAllDeveloperPr
 import { getGitlabStatuses } from '../../network/queries/getGitlabStatuses'
 import { CreateGitlabReposDialog } from './components/CreateGitlabReposDialog'
 import { FilterMenu } from './components/FilterMenu'
+import { GitLabValidationDialog } from './components/GitLabValidationDialog'
 import { ProfileDetailsDialog } from './components/ProfileDetailsDialog'
 import { useDownloadDeveloperProfiles } from './hooks/useDownloadDeveloperProfiles'
 import { useGetFilteredParticipations } from './hooks/useGetFilteredParticipations'
@@ -169,6 +170,7 @@ export const DeveloperProfilesLecturerPage = () => {
           Showing {filteredParticipants.length} of {sortedParticipants.length} participants
         </div>
         <div className='flex gap-2'>
+          <GitLabValidationDialog participants={participantsWithProfiles} />
           <Button onClick={() => downloadProfiles(participantsWithProfiles)}>
             <Download className='h-4 w-4 mr-2' />
             Download Profiles

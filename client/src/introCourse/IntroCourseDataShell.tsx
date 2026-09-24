@@ -107,7 +107,7 @@ export const IntroCourseDataShell = ({ children }: IntroCourseDataShellProps) =>
 
   useEffect(() => {
     if (fetchedProfile) {
-      if (fetchedProfile.appleID === '' && fetchedProfile.gitLabUsername === '') {
+      if (fetchedProfile.courseParticipationID === '00000000-0000-0000-0000-000000000000') {
         setDeveloperProfile(undefined)
       } else {
         setDeveloperProfile(fetchedProfile)
