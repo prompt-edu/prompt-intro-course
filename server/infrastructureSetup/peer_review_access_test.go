@@ -107,3 +107,44 @@ func TestPeerReviewShareUpgradesReporterToDeveloper(t *testing.T) {
 	assert.Equal(t, 1, deletes)
 	assert.Equal(t, 1, shares)
 }
+
+func TestStudentMainMergeAccessExcludesPeerDevelopers(t *testing.T) {
+	mergedByDeveloperRole := true
+	updates := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/api/v4/projects/300/protected_branches/main" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method == http.MethodPatch {
+			var body struct {
+				AllowedToMerge []map[string]any `json:"allowed_to_merge"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			require.Len(t, body.AllowedToMerge, 3)
+			assert.Equal(t, float64(2), body.AllowedToMerge[0]["id"])
+			assert.Equal(t, true, body.AllowedToMerge[0]["_destroy"])
+			assert.Equal(t, float64(9), body.AllowedToMerge[1]["user_id"])
+			assert.Equal(t, float64(40), body.AllowedToMerge[2]["access_level"])
+			mergedByDeveloperRole = false
+			updates++
+		} else {
+			require.Equal(t, http.MethodGet, r.Method)
+		}
+		mergeLevels := []any{map[string]any{"id": 2, "access_level": 30}}
+		if !mergedByDeveloperRole {
+			mergeLevels = []any{map[string]any{"id": 3, "user_id": 9, "access_level": 40}, map[string]any{"id": 4, "access_level": 40}}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"name": "main", "push_access_levels": []any{map[string]any{"id": 1, "access_level": 0}},
+			"merge_access_levels": mergeLevels,
+		})
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	require.NoError(t, restrictStudentMainMergeAccess(client, 300, 9))
+	require.NoError(t, restrictStudentMainMergeAccess(client, 300, 9))
+	assert.Equal(t, 1, updates)
+}

@@ -392,6 +392,11 @@ func createStudentProjectWithMaterial(p StudentProjectParams, material *material
 	if err != nil {
 		return err
 	}
+	// Peers need Developer to request changes, so only this repository's
+	// student and Maintainers may merge into its protected main branch.
+	if err = restrictStudentMainMergeAccess(git, project.ID, p.DevID); err != nil {
+		return fmt.Errorf("restrict main merge access for %q: %w", p.RepoName, err)
+	}
 	if err = ensureGroupMember(git, peerGroup.ID, p.DevID, gitlab.DeveloperPermissions); err != nil {
 		return fmt.Errorf("add student to peer review group for %q: %w", p.RepoName, err)
 	}
@@ -408,6 +413,55 @@ func createStudentProjectWithMaterial(p StudentProjectParams, material *material
 		return err
 	}
 
+	return nil
+}
+
+func restrictStudentMainMergeAccess(git *gitlab.Client, projectID, ownerID int64) error {
+	branch, _, err := git.ProtectedBranches.GetProtectedBranch(projectID, "main")
+	if err != nil {
+		return err
+	}
+	var updates []*gitlab.BranchPermissionOptions
+	ownerPresent, maintainerPresent := false, false
+	for _, access := range branch.MergeAccessLevels {
+		switch {
+		case access.UserID == ownerID:
+			ownerPresent = true
+		case access.UserID == 0 && access.GroupID == 0 && access.AccessLevel == gitlab.MaintainerPermissions:
+			maintainerPresent = true
+		default:
+			updates = append(updates, &gitlab.BranchPermissionOptions{ID: gitlab.Ptr(access.ID), Destroy: gitlab.Ptr(true)})
+		}
+	}
+	if !ownerPresent {
+		updates = append(updates, &gitlab.BranchPermissionOptions{UserID: gitlab.Ptr(ownerID)})
+	}
+	if !maintainerPresent {
+		updates = append(updates, &gitlab.BranchPermissionOptions{AccessLevel: gitlab.Ptr(gitlab.MaintainerPermissions)})
+	}
+	if len(updates) > 0 {
+		branch, _, err = git.ProtectedBranches.UpdateProtectedBranch(projectID, "main", &gitlab.UpdateProtectedBranchOptions{AllowedToMerge: gitlab.Ptr(updates)})
+		if err != nil {
+			return err
+		}
+	}
+	if len(branch.PushAccessLevels) != 1 || branch.PushAccessLevels[0].AccessLevel != gitlab.NoPermissions {
+		return fmt.Errorf("main must reject direct pushes")
+	}
+	if len(branch.MergeAccessLevels) != 2 {
+		return fmt.Errorf("main must allow only the student owner and Maintainers to merge")
+	}
+	ownerPresent, maintainerPresent = false, false
+	for _, access := range branch.MergeAccessLevels {
+		if access.UserID == ownerID {
+			ownerPresent = true
+		} else if access.UserID == 0 && access.GroupID == 0 && access.AccessLevel == gitlab.MaintainerPermissions {
+			maintainerPresent = true
+		}
+	}
+	if !ownerPresent || !maintainerPresent {
+		return fmt.Errorf("GitLab did not confirm student-only merge access on main")
+	}
 	return nil
 }
 
