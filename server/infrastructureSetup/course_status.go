@@ -234,11 +234,12 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 	if err != nil {
 		return nil, fmt.Errorf("list demo branches: %w", err)
 	}
-	for _, candidate := range branches {
-		if candidate.Name != "main" {
-			issue("Demo has exercise branches; reset it before student initialization.")
-			break
-		}
+	cleanExercise, exerciseErr := demoGit2ExerciseIsClean(git, svc.teachingMaterialProjectID, status.Source.SHA, demo.ID, status.DemoProject.SHA, branches)
+	if exerciseErr != nil {
+		return nil, exerciseErr
+	}
+	if !cleanExercise {
+		issue("Demo Git 2 practice branches are missing, changed, or joined by extra branches; reset the demo before student initialization.")
 	}
 	openMRs, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.BasicMergeRequest, *gitlab.Response, error) {
 		return git.MergeRequests.ListProjectMergeRequests(demo.ID, &gitlab.ListProjectMergeRequestsOptions{

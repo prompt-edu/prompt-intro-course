@@ -106,10 +106,69 @@ func protectGit2ExerciseBranch(git *gitlab.Client, projectID int64, name string)
 	if err != nil {
 		return err
 	}
-	if protected == nil || protected.Name != name || protected.AllowForcePush ||
-		len(protected.PushAccessLevels) != 1 || protected.PushAccessLevels[0].AccessLevel != gitlab.NoPermissions ||
-		len(protected.MergeAccessLevels) != 1 || protected.MergeAccessLevels[0].AccessLevel != gitlab.NoPermissions {
+	if !git2ExerciseProtectionMatches(protected, name) {
 		return fmt.Errorf("GitLab did not confirm no-push, no-merge protection")
 	}
 	return nil
+}
+
+func git2ExerciseProtectionMatches(protected *gitlab.ProtectedBranch, name string) bool {
+	return protected != nil && protected.Name == name && !protected.AllowForcePush &&
+		len(protected.PushAccessLevels) == 1 && protected.PushAccessLevels[0].AccessLevel == gitlab.NoPermissions &&
+		len(protected.MergeAccessLevels) == 1 && protected.MergeAccessLevels[0].AccessLevel == gitlab.NoPermissions
+}
+
+func demoGit2ExerciseIsClean(git *gitlab.Client, materialProjectID, sourceSHA string, demoID int64, mainSHA string, branches []*gitlab.Branch) (bool, error) {
+	byName := make(map[string]*gitlab.Branch, len(branches))
+	for _, branch := range branches {
+		byName[branch.Name] = branch
+	}
+	if len(byName) != len(git2ExerciseBranches)+1 || byName["main"] == nil {
+		return false, nil
+	}
+	fixture, err := fetchGit2ExerciseAtRef(git, materialProjectID, sourceSHA)
+	if err != nil {
+		return false, err
+	}
+	for _, spec := range git2ExerciseBranches {
+		branch := byName[spec.name]
+		if branch == nil || !branch.Protected || branch.Commit == nil ||
+			len(branch.Commit.ParentIDs) != 1 || branch.Commit.ParentIDs[0] != mainSHA {
+			return false, nil
+		}
+		protected, _, err := git.ProtectedBranches.GetProtectedBranch(demoID, spec.name)
+		if err != nil {
+			return false, fmt.Errorf("get demo Git 2 branch protection: %w", err)
+		}
+		if !git2ExerciseProtectionMatches(protected, spec.name) {
+			return false, nil
+		}
+		diffs, _, err := git.Commits.GetCommitDiff(demoID, branch.Commit.ID, nil)
+		if err != nil {
+			return false, fmt.Errorf("get demo Git 2 branch diff: %w", err)
+		}
+		if len(diffs) != len(fixture[spec.name]) {
+			return false, nil
+		}
+		changed := make(map[string]bool, len(diffs))
+		for _, diff := range diffs {
+			if diff.DeletedFile || diff.RenamedFile {
+				return false, nil
+			}
+			changed[diff.NewPath] = true
+		}
+		for _, file := range fixture[spec.name] {
+			if !changed[file.Path] {
+				return false, nil
+			}
+			actual, _, err := git.RepositoryFiles.GetRawFile(demoID, file.Path, &gitlab.GetRawFileOptions{Ref: gitlab.Ptr(spec.name)})
+			if err != nil {
+				return false, fmt.Errorf("read demo Git 2 branch file %q: %w", file.Path, err)
+			}
+			if string(actual) != file.Content {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
 }
