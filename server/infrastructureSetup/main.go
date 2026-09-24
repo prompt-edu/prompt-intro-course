@@ -38,19 +38,9 @@ func InitInfrastructureModule(routerGroup *gin.RouterGroup, queries db.Queries, 
 	}
 	InfrastructureServiceSingleton = service
 
-	// Best-effort cache warm — log error but don't crash the server.
-	// Other modules (developer profiles, seat plan, etc.) work fine without templates.
-	if gitlabClient != nil && teachingMaterialProjectID != "" {
-		if _, err := service.templates.get(gitlabClient, teachingMaterialProjectID); err != nil {
-			log.WithError(err).Error("Failed to warm template cache; student setup will retry on first request")
-		}
-		if _, err := service.issues.get(gitlabClient, teachingMaterialProjectID); err != nil {
-			log.WithError(err).Warn("Failed to warm issue template cache; daily issues will retry on first request")
-		}
-		if _, err := service.cicd.get(gitlabClient, teachingMaterialProjectID); err != nil {
-			log.WithError(err).Warn("Failed to warm CI/CD cache; CI/CD files will retry on first request")
-		}
-	} else if teachingMaterialProjectID == "" {
+	// Each setup request now reads one immutable teaching-material commit.
+	// Startup must not pin an old revision in a process-lifetime cache.
+	if teachingMaterialProjectID == "" {
 		log.Warn("GITLAB_TEACHING_MATERIAL_PROJECT_ID not set — student repo setup will fail")
 	}
 }

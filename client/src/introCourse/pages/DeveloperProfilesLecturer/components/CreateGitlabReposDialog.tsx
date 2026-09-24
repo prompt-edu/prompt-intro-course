@@ -1,9 +1,5 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  useCourseStore,
-  useGetCoursePhase,
-  useModifyCoursePhase,
-} from '@tumaet/prompt-shared-state'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCourseStore } from '@tumaet/prompt-shared-state'
 import {
   Button,
   Dialog,
@@ -14,12 +10,12 @@ import {
   DialogTrigger,
   Input,
 } from '@tumaet/prompt-ui-components'
-import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import type { GitlabRepoRequest } from '../../../interfaces/GitlabRepoRequest'
 import { createGitlabRepo } from '../../../network/mutations/createGitlabRepo'
-import { createIntroCourseGitlabInfrastructure } from '../../../network/mutations/createIntroCourseGitlabInfrastructure'
+import { getGitlabCourseSetup } from '../../../network/queries/getGitlabCourseSetup'
+import { gitlabCourseGroup } from '../../../utils/gitlabCourseGroup'
 import type { ParticipationWithDevProfiles } from '../interfaces/pariticipationWithDevProfiles'
 
 interface CreateGitlabReposDialogProps {
@@ -38,21 +34,20 @@ export const CreateGitlabReposDialog = ({
 
   // State for storing the user-entered deadline
   const [deadline, setDeadline] = useState('')
+  const [demoTested, setDemoTested] = useState(false)
 
   const { phaseId, courseId } = useParams<{ phaseId: string; courseId: string }>()
   const queryClient = useQueryClient()
 
   const { courses } = useCourseStore()
-  const semesterTag = courses.find((course) => course.id === courseId)?.semesterTag ?? ''
-
-  const { data: coursePhase, isPending, isError } = useGetCoursePhase()
-  const { mutate: mutateCoursePhase } = useModifyCoursePhase(
-    () => queryClient.invalidateQueries({ queryKey: ['course_phase', phaseId] }),
-    () => setLogs((prev) => [...prev, `❌ Failed to update course phase`]),
+  const semesterTag = gitlabCourseGroup(
+    courses.find((course) => course.id === courseId)?.semesterTag ?? '',
   )
-
-  const infraStructureExists: boolean =
-    coursePhase?.restrictedData?.gitLabInfrastructureSetup ?? false
+  const { data: courseSetup, isError: courseSetupError } = useQuery({
+    queryKey: ['gitlab-course-setup', phaseId, semesterTag],
+    queryFn: () => getGitlabCourseSetup(phaseId ?? '', semesterTag),
+    enabled: Boolean(isDialogOpen && phaseId && semesterTag),
+  })
 
   const createGitlabRepoMutation = useMutation({
     mutationFn: ({
@@ -62,16 +57,6 @@ export const CreateGitlabReposDialog = ({
       coursePhaseParticipationID: string
       createGitlabRepoDTO: GitlabRepoRequest
     }) => createGitlabRepo(phaseId ?? '', coursePhaseParticipationID, createGitlabRepoDTO),
-  })
-
-  const createInfrastructureSetup = useMutation({
-    mutationFn: () => createIntroCourseGitlabInfrastructure(phaseId ?? '', { semesterTag }),
-    onSuccess: () =>
-      mutateCoursePhase({
-        id: phaseId ?? '',
-        restrictedData: { gitLabInfrastructureSetup: true },
-      }),
-    onError: (error) => setLogs((prev) => [...prev, `❌ Infrastructure setup error: ${error}`]),
   })
 
   const pendingProfiles = participantsWithDevProfiles.filter(
@@ -151,55 +136,52 @@ export const CreateGitlabReposDialog = ({
       setErrorCount(0)
       setLogs([])
       setDeadline('') // Reset the deadline field whenever the dialog opens
+      setDemoTested(false)
     }
   }, [isDialogOpen])
-
-  if (isPending) {
-    return (
-      <div className='flex justify-center items-center h-64'>
-        <Loader2 className='h-12 w-12 animate-spin text-primary' />
-      </div>
-    )
-  }
-
-  if (isError) {
-    return (
-      <div className='flex justify-center items-center h-64 text-red-600'>
-        <AlertCircle className='h-12 w-12 mr-2' /> Failed to load course phase data.
-      </div>
-    )
-  }
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DialogTrigger asChild>
-        <Button>Create Gitlab Repositories</Button>
+        <Button>Create Student Repositories</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create Gitlab Repositories</DialogTitle>
+          <DialogTitle>Create Student Repositories</DialogTitle>
           <DialogDescription>
-            Infrastructure setup and repo creation for students.
+            Each ready student receives a repository from the verified teaching material.
             <br />
             <strong>Important: </strong>Make sure that every student has a tutor assigned!
           </DialogDescription>
         </DialogHeader>
 
-        <section className='flex items-center justify-between py-4 border-b'>
-          <span>Create Gitlab Course Group</span>
-          <div className='flex items-center gap-2'>
-            {infraStructureExists && <CheckCircle className='text-green-500' />}
-            <Button
-              disabled={createInfrastructureSetup.isPending || isCreatingRepos}
-              onClick={() => createInfrastructureSetup.mutate()}
-            >
-              {createInfrastructureSetup.isPending
-                ? 'Checking Infrastructure...'
-                : infraStructureExists
-                  ? 'Check and repair infrastructure'
-                  : 'Create infrastructure'}
-            </Button>
-          </div>
+        <section className='space-y-2 py-4 border-b'>
+          <p className='text-sm'>
+            Set up and test the demo in{' '}
+            <Link className='underline' to='../repository-setup'>
+              Repository Setup
+            </Link>{' '}
+            first.
+          </p>
+          {courseSetupError ? (
+            <p className='text-sm text-destructive'>Could not verify GitLab setup.</p>
+          ) : courseSetup?.checks.demoReady ? (
+            <p className='text-sm text-green-700'>
+              Demo configuration matches current teaching material.
+            </p>
+          ) : (
+            <p className='text-sm text-amber-700'>
+              Demo configuration is not ready for student repositories.
+            </p>
+          )}
+          <label className='flex items-start gap-2 text-sm'>
+            <input
+              type='checkbox'
+              checked={demoTested}
+              onChange={(event) => setDemoTested(event.target.checked)}
+            />
+            <span>I tested the demo app, daily issues, merge request, review, and CI.</span>
+          </label>
         </section>
 
         <section className='mt-4'>
@@ -240,7 +222,8 @@ export const CreateGitlabReposDialog = ({
           <Button
             disabled={
               isCreatingRepos ||
-              !infraStructureExists ||
+              !courseSetup?.checks.demoReady ||
+              !demoTested ||
               !deadline.trim() ||
               participationsReadyForGitlab.length === 0
             }

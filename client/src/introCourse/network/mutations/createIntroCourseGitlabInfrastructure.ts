@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios'
 import type { GitlabCourseInfrastructureRequest } from '../../interfaces/GitlabCourseInfrastructureRequest'
 import { introCourseAxiosInstance } from '../introCourseServerConfig'
 
@@ -6,18 +7,12 @@ export const createIntroCourseGitlabInfrastructure = async (
   request: GitlabCourseInfrastructureRequest,
 ): Promise<void> => {
   try {
-    return await introCourseAxiosInstance.post(
+    await introCourseAxiosInstance.post(
       `intro-course/api/course_phase/${coursePhaseID}/infrastructure/gitlab/course-setup`,
       request,
-      {
-        headers: {
-          'Content-Type': 'application/json-path+json',
-        },
-      },
     )
-  } catch (err: any) {
-    console.error(err)
-    if (err.response && err.response.data && err.response.data.error) {
+  } catch (err: unknown) {
+    if (isAxiosError(err) && typeof err.response?.data?.error === 'string') {
       throw err.response.data.error
     }
     throw err

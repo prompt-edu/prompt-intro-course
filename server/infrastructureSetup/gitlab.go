@@ -217,6 +217,11 @@ func createOrGetProject(git *gitlab.Client, opts *gitlab.CreateProjectOptions, g
 		if err != nil {
 			return nil, fmt.Errorf("fetch existing project %q: %w", projectPath, err)
 		}
+		// GitLab can redirect an old path after a project is renamed. A reset
+		// must never treat that archived project as the new demo.
+		if !strings.EqualFold(project.PathWithNamespace, projectPath) {
+			return nil, fmt.Errorf("project path %q resolves to %q; release the old path before retrying", projectPath, project.PathWithNamespace)
+		}
 		log.WithField("project", *opts.Name).Info("project already exists, continuing with setup")
 	}
 	return project, nil
@@ -225,7 +230,11 @@ func createOrGetProject(git *gitlab.Client, opts *gitlab.CreateProjectOptions, g
 // configureProject applies the shared setup steps to any course project:
 // template files, branch protection, issue board, approval config, daily issues.
 // All steps are idempotent — safe to call on both new and existing projects.
-func configureProject(git *gitlab.Client, projectID int64, projectName string, vars templateVars) error {
+func configureProject(git *gitlab.Client, projectID int64, projectName string, vars templateVars) (resultErr error) {
+	return configureProjectWithMaterial(git, projectID, projectName, vars, nil)
+}
+
+func configureProjectWithMaterial(git *gitlab.Client, projectID int64, projectName string, vars templateVars, material *materialSnapshot) (resultErr error) {
 	// Branch protection — GitLab auto-protects 'main' with default settings
 	// when the first commit is pushed, so we must unprotect first to apply our
 	// desired access levels. We unprotect BEFORE creating files so the initial
@@ -234,9 +243,32 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 	if unprotectErr != nil && !isNotFoundError(unprotectErr) {
 		return fmt.Errorf("unprotect branch for %q: %w", projectName, unprotectErr)
 	}
+	protectionRestored := false
+	// A failed template fetch or commit must not leave an existing project
+	// writable. Retry protection before returning any setup error.
+	defer func() {
+		if protectionRestored {
+			return
+		}
+		_, _, protectErr := git.ProtectedBranches.ProtectRepositoryBranches(projectID, &gitlab.ProtectRepositoryBranchesOptions{
+			Name:             gitlab.Ptr("main"),
+			PushAccessLevel:  gitlab.Ptr(gitlab.NoPermissions),
+			MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
+			AllowForcePush:   gitlab.Ptr(false),
+		})
+		if protectErr != nil && !isAlreadyExistsError(protectErr) {
+			log.WithError(protectErr).WithField("project", projectName).Error("failed to restore main branch protection")
+			resultErr = errors.Join(resultErr, fmt.Errorf("restore main protection for %q: %w", projectName, protectErr))
+		}
+	}()
 
 	// Template files (idempotent: skip files that already exist)
-	err := createProjectFiles(git, projectID, projectName, vars)
+	var err error
+	if material == nil {
+		err = createProjectFiles(git, projectID, projectName, vars)
+	} else {
+		err = createProjectFilesFromTemplates(git, projectID, projectName, vars, material.templates)
+	}
 	if err != nil {
 		return err
 	}
@@ -253,6 +285,7 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 	if err != nil && !isAlreadyExistsError(err) {
 		return fmt.Errorf("protect branch for %q: %w", projectName, err)
 	}
+	protectionRestored = true
 
 	// Issue board — skipped; GitLab provides a default board and custom lists
 	// add complexity with no clear benefit for the intro course workflow.
@@ -265,7 +298,12 @@ func configureProject(git *gitlab.Client, projectID int64, projectName string, v
 
 	// A repository without its course issues is incomplete. A retry will skip
 	// issues that were created successfully and fill in any missing ones.
-	if err = createDailyIssues(git, projectID, projectName); err != nil {
+	if material == nil {
+		err = createDailyIssues(git, projectID, projectName)
+	} else {
+		err = createDailyIssuesFromTemplates(git, projectID, projectName, material.issues)
+	}
+	if err != nil {
 		return fmt.Errorf("create daily issues for %q: %w", projectName, err)
 	}
 
@@ -303,6 +341,10 @@ func studentProjectDisplayName(studentName, login string) string {
 }
 
 func CreateStudentProject(p StudentProjectParams) error {
+	return createStudentProjectWithMaterial(p, nil)
+}
+
+func createStudentProjectWithMaterial(p StudentProjectParams, material *materialSnapshot) error {
 	if p.RepoName == "" || p.StudentName == "" {
 		return fmt.Errorf("student project needs a university login and student name")
 	}
@@ -329,10 +371,10 @@ func CreateStudentProject(p StudentProjectParams) error {
 	}
 
 	// 2. Shared project setup (files, branch protection, board, approvals, issues)
-	err = configureProject(git, project.ID, p.RepoName, templateVars{
+	err = configureProjectWithMaterial(git, project.ID, p.RepoName, templateVars{
 		StudentName:        p.StudentName,
 		SubmissionDeadline: p.SubmissionDeadline,
-	})
+	}, material)
 	if err != nil {
 		return err
 	}
@@ -389,6 +431,10 @@ func createProjectFiles(git *gitlab.Client, projectID int64, repoName string, va
 	if err != nil {
 		return fmt.Errorf("fetch templates for %q: %w", repoName, err)
 	}
+	return createProjectFilesFromTemplates(git, projectID, repoName, vars, templates)
+}
+
+func createProjectFilesFromTemplates(git *gitlab.Client, projectID int64, repoName string, vars templateVars, templates []templateFile) error {
 	existingFiles := make(map[string]bool)
 	nodes, treeErr := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.TreeNode, *gitlab.Response, error) {
 		return git.Repositories.ListTree(projectID, &gitlab.ListTreeOptions{
@@ -425,7 +471,7 @@ func createProjectFiles(git *gitlab.Client, projectID int64, repoName string, va
 		return nil
 	}
 
-	_, _, err = git.Commits.CreateCommit(projectID, &gitlab.CreateCommitOptions{
+	_, _, err := git.Commits.CreateCommit(projectID, &gitlab.CreateCommitOptions{
 		Branch:        gitlab.Ptr("main"),
 		CommitMessage: gitlab.Ptr("Initialize repository from course template"),
 		Actions:       actions,
@@ -449,11 +495,44 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 	}
 	for _, r := range rules {
 		if r.Name == "Tutor Approval" {
+			if r.ApprovalsRequired == 1 && r.RuleType != "any_approver" && approvalRuleIncludesGroup(r, tutorsGroupID) {
+				return nil
+			}
+			// GitLab cannot convert an any-approver rule into a regular group
+			// rule. Verify its replacement before removing the old rule.
+			if r.RuleType == "any_approver" {
+				created, _, createErr := git.Projects.CreateProjectApprovalRule(projectID, &gitlab.CreateProjectLevelRuleOptions{
+					Name:              gitlab.Ptr("Tutor Approval"),
+					ApprovalsRequired: gitlab.Ptr(int64(1)),
+					GroupIDs:          gitlab.Ptr([]int64{tutorsGroupID}),
+				})
+				if createErr != nil {
+					return fmt.Errorf("replace tutor approval rule for %q: %w", repoName, createErr)
+				}
+				if created.RuleType == "any_approver" || !approvalRuleIncludesGroup(created, tutorsGroupID) {
+					return fmt.Errorf("replacement tutor approval rule for %q does not restrict approvers to the tutors group", repoName)
+				}
+				if _, deleteErr := git.Projects.DeleteProjectApprovalRule(projectID, r.ID); deleteErr != nil {
+					return fmt.Errorf("remove old any-approver rule for %q: %w", repoName, deleteErr)
+				}
+				return nil
+			}
+			updated, _, updateErr := git.Projects.UpdateProjectApprovalRule(projectID, r.ID, &gitlab.UpdateProjectLevelRuleOptions{
+				Name:              gitlab.Ptr("Tutor Approval"),
+				ApprovalsRequired: gitlab.Ptr(int64(1)),
+				GroupIDs:          gitlab.Ptr([]int64{tutorsGroupID}),
+			})
+			if updateErr != nil {
+				return fmt.Errorf("repair tutor approval rule for %q: %w", repoName, updateErr)
+			}
+			if updated.RuleType == "any_approver" || !approvalRuleIncludesGroup(updated, tutorsGroupID) {
+				return fmt.Errorf("tutor approval rule for %q does not restrict approvers to the tutors group", repoName)
+			}
 			return nil
 		}
 	}
 
-	_, _, err = git.Projects.CreateProjectApprovalRule(projectID, &gitlab.CreateProjectLevelRuleOptions{
+	created, _, err := git.Projects.CreateProjectApprovalRule(projectID, &gitlab.CreateProjectLevelRuleOptions{
 		Name:              gitlab.Ptr("Tutor Approval"),
 		ApprovalsRequired: gitlab.Ptr(int64(1)),
 		GroupIDs:          gitlab.Ptr([]int64{tutorsGroupID}),
@@ -461,8 +540,20 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 	if err != nil {
 		return fmt.Errorf("create approval rule for %q: %w", repoName, err)
 	}
+	if created.RuleType == "any_approver" || !approvalRuleIncludesGroup(created, tutorsGroupID) {
+		return fmt.Errorf("tutor approval rule for %q does not restrict approvers to the tutors group", repoName)
+	}
 
 	return nil
+}
+
+func approvalRuleIncludesGroup(rule *gitlab.ProjectApprovalRule, groupID int64) bool {
+	for _, group := range rule.Groups {
+		if group.ID == groupID {
+			return true
+		}
+	}
+	return false
 }
 
 // ensureApprovalConfiguration sets project-level approval policies:
@@ -501,6 +592,9 @@ func getOrCreateTutorSubgroup(tutorGitlabUsername, tutorFirstName, tutorLastName
 		return 0, "", fmt.Errorf("check tutor subgroup %q: %w", tutorGitlabUsername, err)
 	}
 	if existing != nil {
+		if err := ensureGroupMember(git, existing.ID, tutorGitlabUserID, gitlab.MaintainerPermissions); err != nil {
+			return 0, "", fmt.Errorf("repair tutor subgroup membership: %w", err)
+		}
 		return existing.ID, existing.FullPath, nil
 	}
 
@@ -523,19 +617,37 @@ func getOrCreateTutorSubgroup(tutorGitlabUsername, tutorFirstName, tutorLastName
 		if findErr != nil || raceGroup == nil {
 			return 0, "", fmt.Errorf("tutor subgroup %q conflict but not found: %w", tutorGitlabUsername, err)
 		}
+		if err := ensureGroupMember(git, raceGroup.ID, tutorGitlabUserID, gitlab.MaintainerPermissions); err != nil {
+			return 0, "", fmt.Errorf("repair tutor subgroup membership: %w", err)
+		}
 		return raceGroup.ID, raceGroup.FullPath, nil
 	}
 
 	// 3. Add tutor as Maintainer on subgroup (inherits to all projects)
-	_, _, err = git.GroupMembers.AddGroupMember(group.ID, &gitlab.AddGroupMemberOptions{
-		UserID:      gitlab.Ptr(tutorGitlabUserID),
-		AccessLevel: gitlab.Ptr(gitlab.MaintainerPermissions),
-	})
-	if err != nil && !isAlreadyExistsError(err) {
+	if err := ensureGroupMember(git, group.ID, tutorGitlabUserID, gitlab.MaintainerPermissions); err != nil {
 		return 0, "", fmt.Errorf("add tutor as maintainer on subgroup %q: %w", tutorGitlabUsername, err)
 	}
 
 	return group.ID, group.FullPath, nil
+}
+
+func ensureGroupMember(git *gitlab.Client, groupID, userID int64, access gitlab.AccessLevelValue) error {
+	member, _, err := git.GroupMembers.GetGroupMember(groupID, userID)
+	if err == nil {
+		if member.AccessLevel >= access {
+			return nil
+		}
+		_, _, err = git.GroupMembers.EditGroupMember(groupID, userID, &gitlab.EditGroupMemberOptions{AccessLevel: gitlab.Ptr(access)})
+		return err
+	}
+	if !isNotFoundError(err) {
+		return err
+	}
+	_, _, err = git.GroupMembers.AddGroupMember(groupID, &gitlab.AddGroupMemberOptions{UserID: gitlab.Ptr(userID), AccessLevel: gitlab.Ptr(access)})
+	if err != nil && !isAlreadyExistsError(err) {
+		return err
+	}
+	return nil
 }
 
 // createDailyIssues creates all daily issues from the teaching material repo's
@@ -552,6 +664,10 @@ func createDailyIssues(git *gitlab.Client, projectID int64, repoName string) err
 	if err != nil {
 		return fmt.Errorf("fetch issue templates: %w", err)
 	}
+	return createDailyIssuesFromTemplates(git, projectID, repoName, templates)
+}
+
+func createDailyIssuesFromTemplates(git *gitlab.Client, projectID int64, repoName string, templates []issueTemplate) error {
 
 	if len(templates) == 0 {
 		return fmt.Errorf("no daily issue templates found in teaching material repo daily_issues/ directory")
@@ -592,6 +708,10 @@ func createDailyIssues(git *gitlab.Client, projectID int64, repoName string) err
 // ci_cd/ directory. All course projects reference this project's .gitlab-ci.yml
 // via CIConfigPath. Fully idempotent: safe to re-run on an existing course.
 func createCICDProject(git *gitlab.Client, introCourseGroupID int64, introCourseGroupPath string) error {
+	return createCICDProjectWithMaterial(git, introCourseGroupID, introCourseGroupPath, nil)
+}
+
+func createCICDProjectWithMaterial(git *gitlab.Client, introCourseGroupID int64, introCourseGroupPath string, material *materialSnapshot) error {
 	const cicdProjectName = "ci-cd"
 
 	project, err := createOrGetProject(git, &gitlab.CreateProjectOptions{
@@ -613,9 +733,14 @@ func createCICDProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 		return fmt.Errorf("GITLAB_TEACHING_MATERIAL_PROJECT_ID not configured")
 	}
 
-	cicdFiles, err := svc.cicd.get(git, svc.teachingMaterialProjectID)
-	if err != nil {
-		return fmt.Errorf("fetch CI/CD files: %w", err)
+	var cicdFiles []templateFile
+	if material == nil {
+		cicdFiles, err = svc.cicd.get(git, svc.teachingMaterialProjectID)
+		if err != nil {
+			return fmt.Errorf("fetch CI/CD files: %w", err)
+		}
+	} else {
+		cicdFiles = material.ciFiles
 	}
 	if len(cicdFiles) == 0 {
 		return fmt.Errorf("no CI/CD files found in teaching material repo ci_cd/ directory")
@@ -666,6 +791,10 @@ func createCICDProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 // from the shared parent group.
 // Fully idempotent: safe to re-run on an existing course.
 func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourseGroupPath string, tutorsGroupID int64) error {
+	return createDemoProjectWithMaterial(git, introCourseGroupID, introCourseGroupPath, tutorsGroupID, nil)
+}
+
+func createDemoProjectWithMaterial(git *gitlab.Client, introCourseGroupID int64, introCourseGroupPath string, tutorsGroupID int64, material *materialSnapshot) error {
 	const demoProjectName = "demo"
 	ciCDRepoPath := introCourseGroupPath + "/ci-cd"
 
@@ -675,10 +804,10 @@ func createDemoProject(git *gitlab.Client, introCourseGroupID int64, introCourse
 	}
 
 	// Shared project setup (files, branch protection, board, approvals, issues)
-	err = configureProject(git, project.ID, demoProjectName, templateVars{
+	err = configureProjectWithMaterial(git, project.ID, demoProjectName, templateVars{
 		StudentName:        "Demo",
 		SubmissionDeadline: "See the course schedule in Outline",
-	})
+	}, material)
 	if err != nil {
 		return err
 	}

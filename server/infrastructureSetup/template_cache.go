@@ -69,9 +69,13 @@ func (tc *templateCache) get(client *gitlab.Client, projectID string) ([]templat
 // teaching material repo and fetches their content. Uses auto-pagination
 // to handle directories with more than 100 entries.
 func fetchTemplateFiles(client *gitlab.Client, projectID string) ([]templateFile, error) {
+	return fetchTemplateFilesAtRef(client, projectID, templateRef)
+}
+
+func fetchTemplateFilesAtRef(client *gitlab.Client, projectID, ref string) ([]templateFile, error) {
 	opts := &gitlab.ListTreeOptions{
 		Path:      gitlab.Ptr(templateDir),
-		Ref:       gitlab.Ptr(templateRef),
+		Ref:       gitlab.Ptr(ref),
 		Recursive: gitlab.Ptr(true),
 		ListOptions: gitlab.ListOptions{
 			PerPage: 100,
@@ -92,7 +96,7 @@ func fetchTemplateFiles(client *gitlab.Client, projectID string) ([]templateFile
 		}
 
 		raw, _, err := client.RepositoryFiles.GetRawFile(projectID, node.Path, &gitlab.GetRawFileOptions{
-			Ref: gitlab.Ptr(templateRef),
+			Ref: gitlab.Ptr(ref),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("fetch file %q from project %q: %w", node.Path, projectID, err)
@@ -162,9 +166,13 @@ func (cc *cicdCache) get(client *gitlab.Client, projectID string) ([]templateFil
 // and fetches their content. Returns an empty slice (no error) if the directory
 // does not exist — CI/CD pipeline config is optional.
 func fetchCICDFiles(client *gitlab.Client, projectID string) ([]templateFile, error) {
+	return fetchCICDFilesAtRef(client, projectID, templateRef)
+}
+
+func fetchCICDFilesAtRef(client *gitlab.Client, projectID, ref string) ([]templateFile, error) {
 	opts := &gitlab.ListTreeOptions{
 		Path:      gitlab.Ptr(cicdDir),
-		Ref:       gitlab.Ptr(templateRef),
+		Ref:       gitlab.Ptr(ref),
 		Recursive: gitlab.Ptr(true),
 		ListOptions: gitlab.ListOptions{
 			PerPage: 100,
@@ -201,7 +209,7 @@ func fetchCICDFiles(client *gitlab.Client, projectID string) ([]templateFile, er
 		}
 
 		raw, _, err := client.RepositoryFiles.GetRawFile(projectID, node.Path, &gitlab.GetRawFileOptions{
-			Ref: gitlab.Ptr(templateRef),
+			Ref: gitlab.Ptr(ref),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("fetch CI/CD file %q from project %q: %w", node.Path, projectID, err)
@@ -262,9 +270,13 @@ func (ic *issueCache) get(client *gitlab.Client, projectID string) ([]issueTempl
 // fetchIssueTemplates lists all .md files under daily_issues/ and parses each
 // into a title (from the first # heading) and description (the rest).
 func fetchIssueTemplates(client *gitlab.Client, projectID string) ([]issueTemplate, error) {
+	return fetchIssueTemplatesAtRef(client, projectID, templateRef)
+}
+
+func fetchIssueTemplatesAtRef(client *gitlab.Client, projectID, ref string) ([]issueTemplate, error) {
 	opts := &gitlab.ListTreeOptions{
 		Path:      gitlab.Ptr(dailyIssuesDir),
-		Ref:       gitlab.Ptr(templateRef),
+		Ref:       gitlab.Ptr(ref),
 		Recursive: gitlab.Ptr(false),
 		ListOptions: gitlab.ListOptions{
 			PerPage: 100,
@@ -290,7 +302,7 @@ func fetchIssueTemplates(client *gitlab.Client, projectID string) ([]issueTempla
 		}
 
 		raw, _, err := client.RepositoryFiles.GetRawFile(projectID, node.Path, &gitlab.GetRawFileOptions{
-			Ref: gitlab.Ptr(templateRef),
+			Ref: gitlab.Ptr(ref),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("fetch issue file %q: %w", node.Path, err)
@@ -320,4 +332,3 @@ func parseIssueContent(content string) (title, description string) {
 	}
 	return "", strings.TrimSpace(content)
 }
-
