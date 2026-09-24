@@ -205,9 +205,15 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 	if !branch.Protected {
 		issue("Demo main branch is not protected.")
 	}
-	protectedMain, _, protectionErr := git.ProtectedBranches.GetProtectedBranch(demo.ID, "main")
-	if protectionErr != nil || !mainBranchProtectionMatches(protectedMain, 0) {
+	matchingRules, protectionErr := listMatchingMainProtections(git, demo.ID)
+	if protectionErr != nil {
+		return nil, protectionErr
+	}
+	if len(matchingRules) != 1 || matchingRules[0].Name != "main" || !mainBranchProtectionMatches(matchingRules[0], 0) {
 		issue("Demo main must reject direct pushes and allow only Maintainers to merge.")
+	}
+	if err := checkCourseStatusBoard(git, demo.ID, demo.PathWithNamespace); err != nil {
+		issue("Demo needs its GitLab status board: " + err.Error())
 	}
 	pipelines, _, pipelineErr := git.Pipelines.ListProjectPipelines(demo.ID, &gitlab.ListProjectPipelinesOptions{
 		Ref: gitlab.Ptr("main"), ListOptions: gitlab.ListOptions{PerPage: 1},
@@ -221,6 +227,29 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 	}
 	if len(pipelines) == 0 || pipelines[0].SHA != status.DemoProject.SHA || pipelines[0].Status != "success" {
 		issue("The latest demo main pipeline has not passed for its current commit.")
+	}
+	branches, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.Branch, *gitlab.Response, error) {
+		return git.Branches.ListBranches(demo.ID, &gitlab.ListBranchesOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}, p)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list demo branches: %w", err)
+	}
+	for _, candidate := range branches {
+		if candidate.Name != "main" {
+			issue("Demo has exercise branches; reset it before student initialization.")
+			break
+		}
+	}
+	openMRs, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.BasicMergeRequest, *gitlab.Response, error) {
+		return git.MergeRequests.ListProjectMergeRequests(demo.ID, &gitlab.ListProjectMergeRequestsOptions{
+			State: gitlab.Ptr("opened"), ListOptions: gitlab.ListOptions{PerPage: 100},
+		}, p)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list demo merge requests: %w", err)
+	}
+	if len(openMRs) > 0 {
+		issue("Demo has open merge requests; reset it before student initialization.")
 	}
 	if tutors != nil {
 		rules, _, rulesErr := git.Projects.GetProjectApprovalRules(demo.ID, nil)
@@ -244,6 +273,13 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 		return nil, fmt.Errorf("list demo issues: %w", err)
 	}
 	status.DemoProject.IssueCount = len(issues)
+	workItemsClean, err := demoWorkItemsClean(git, demo.PathWithNamespace, len(issues))
+	if err != nil {
+		return nil, err
+	}
+	if !workItemsClean {
+		issue("Demo work items have been changed; reset it to restore Open status before student initialization.")
+	}
 	current, compareErr := demoMatchesSource(git, svc.teachingMaterialProjectID, status.Source.SHA, demo.ID, issues, status.CIProject)
 	if compareErr != nil {
 		return nil, compareErr

@@ -15,6 +15,8 @@ import { Link, useParams } from 'react-router-dom'
 import type { GitlabRepoRequest } from '../../../interfaces/GitlabRepoRequest'
 import { createGitlabRepo } from '../../../network/mutations/createGitlabRepo'
 import { getGitlabCourseSetup } from '../../../network/queries/getGitlabCourseSetup'
+import { getPeerAssignments } from '../../../network/queries/getPeerAssignments'
+import { getSeatPlan } from '../../../network/queries/getSeatPlan'
 import { gitlabCourseGroup } from '../../../utils/gitlabCourseGroup'
 import type { ParticipationWithDevProfiles } from '../interfaces/pariticipationWithDevProfiles'
 
@@ -47,6 +49,16 @@ export const CreateGitlabReposDialog = ({
     queryKey: ['gitlab-course-setup', phaseId, semesterTag],
     queryFn: () => getGitlabCourseSetup(phaseId ?? '', semesterTag),
     enabled: Boolean(isDialogOpen && phaseId && semesterTag),
+  })
+  const { data: seats, isError: seatsError } = useQuery({
+    queryKey: ['seatPlan', phaseId],
+    queryFn: () => getSeatPlan(phaseId ?? ''),
+    enabled: Boolean(isDialogOpen && phaseId),
+  })
+  const { data: peers, isError: peersError } = useQuery({
+    queryKey: ['peerAssignments', phaseId],
+    queryFn: () => getPeerAssignments(phaseId ?? ''),
+    enabled: Boolean(isDialogOpen && phaseId),
   })
 
   const createGitlabRepoMutation = useMutation({
@@ -88,6 +100,23 @@ export const CreateGitlabReposDialog = ({
       `${participation.participation.student.firstName ?? ''} ${participation.participation.student.lastName ?? ''}`.trim() &&
       !participation.gitlabStatus?.gitlabSuccess,
   )
+  const readyIDs = new Set(
+    participationsReadyForGitlab.map((item) => item.participation.courseParticipationID),
+  )
+  const seatedWithTutor = new Set(
+    (seats ?? [])
+      .filter((seat) => !seat.isTutorSeat && seat.assignedStudent && seat.assignedTutor)
+      .map((seat) => seat.assignedStudent),
+  )
+  const studentsWithPeers = new Set((peers ?? []).flatMap((peer) => [peer.studentID, peer.peerID]))
+  const missingTutorSeats = [...readyIDs].filter((id) => !seatedWithTutor.has(id)).length
+  const missingPeerGroups = [...readyIDs].filter((id) => !studentsWithPeers.has(id)).length
+  const assignmentsReady =
+    Boolean(seats && peers) &&
+    !seatsError &&
+    !peersError &&
+    missingTutorSeats === 0 &&
+    missingPeerGroups === 0
 
   const triggerCreateRepos = async () => {
     stopRequested.current = false
@@ -149,9 +178,8 @@ export const CreateGitlabReposDialog = ({
         <DialogHeader>
           <DialogTitle>Create Student Repositories</DialogTitle>
           <DialogDescription>
-            Each ready student receives a repository from the verified teaching material.
-            <br />
-            <strong>Important: </strong>Make sure that every student has a tutor assigned!
+            Each ready student receives a repository from the verified teaching material. Seat,
+            tutor, and peer assignments must be complete before the batch starts.
           </DialogDescription>
         </DialogHeader>
 
@@ -208,6 +236,11 @@ export const CreateGitlabReposDialog = ({
             name. Students still completing a profile are skipped for now and can be created in a
             later run.
           </p>
+          <p className='mb-3 text-sm'>
+            Assignment check: {missingTutorSeats} ready students without a tutor seat;{' '}
+            {missingPeerGroups} without a peer group.
+            {(seatsError || peersError) && ' Could not load assignments.'}
+          </p>
           {pendingProfiles.length > 0 && (
             <p className='mb-3 text-sm'>
               Waiting for profile:{' '}
@@ -223,6 +256,7 @@ export const CreateGitlabReposDialog = ({
             disabled={
               isCreatingRepos ||
               !courseSetup?.checks.demoReady ||
+              !assignmentsReady ||
               !demoTested ||
               !deadline.trim() ||
               participationsReadyForGitlab.length === 0

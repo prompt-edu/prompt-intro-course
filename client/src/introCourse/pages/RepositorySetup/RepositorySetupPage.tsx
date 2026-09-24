@@ -157,8 +157,10 @@ export const RepositorySetupPage = () => {
         <div>
           <ManagementPageHeader>Repository Setup</ManagementPageHeader>
           <p className='mt-2 text-muted-foreground'>
-            The teaching material is the source for the shared CI project and the demo repository.
-            Use the demo to test the same starter files and daily issues students will receive.
+            Import tutors and their GitLab usernames, then set up the course groups and demo. After
+            a material update, repair shared CI and reset the demo to load the new files. Test it,
+            then reset again to leave a clean instructor copy. Assign seats and peers before
+            initializing student repositories.
           </p>
         </div>
         <Button variant='outline' onClick={() => refetch()} disabled={isFetching}>
@@ -266,10 +268,10 @@ export const RepositorySetupPage = () => {
           </h2>
           <p className='text-sm text-muted-foreground'>
             Test the starter app, daily issues, tutor approval, and CI here before creating student
-            repositories. The demo does not verify student or peer permissions; test those on a
-            controlled student-style repository before setting up the class. Repair fills missing
-            setup; it does not overwrite files or issue text in an existing demo after the teaching
-            material changes.
+            repositories. The status board shows Open, In Progress, In Review, Blocked, and Done.
+            After practicing with branches or merge requests, reset the demo so the instructor copy
+            is clean. Repair fills missing setup; it does not overwrite changed files or issues.
+            Student and peer permissions still need a controlled student-style test.
           </p>
         </div>
         <dl className='grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[11rem_1fr]'>
@@ -281,6 +283,21 @@ export const RepositorySetupPage = () => {
           <dd className='font-mono'>{data?.demoProject?.sha?.slice(0, 12) || '—'}</dd>
           <dt>Daily issues</dt>
           <dd>{data?.demoProject?.issueCount ?? '—'}</dd>
+          <dt>Status board</dt>
+          <dd>
+            {data?.demoProject?.url ? (
+              <a
+                className='text-primary underline underline-offset-2'
+                href={`${data.demoProject.url}/-/boards`}
+                target='_blank'
+                rel='noopener noreferrer'
+              >
+                Open board
+              </a>
+            ) : (
+              '—'
+            )}
+          </dd>
           <dt>Main pipeline</dt>
           <dd>
             {data?.demoProject?.pipelineUrl ? (
@@ -323,8 +340,8 @@ export const RepositorySetupPage = () => {
               <DialogTitle>Reset the demo repository</DialogTitle>
               <DialogDescription>
                 The current demo, including its branches, issues, and merge requests, would be
-                preserved under an archive path. A new demo would be created from the current
-                teaching material. Student repositories would not be changed.
+                preserved in the demo-archives subgroup. A new demo would be created from the
+                current teaching material. Student repositories would not be changed.
               </DialogDescription>
             </DialogHeader>
             <div className='space-y-2'>

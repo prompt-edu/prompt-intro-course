@@ -728,6 +728,7 @@ func TestCreateOrGetProject(t *testing.T) {
 }
 
 func TestCreateDemoProject(t *testing.T) {
+	board := &fakeStatusBoard{}
 	var (
 		projectCreated      atomic.Bool
 		branchProtected     atomic.Bool
@@ -741,6 +742,17 @@ func TestCreateDemoProject(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
+		if board.handle(t, w, r) {
+			return
+		}
+		if path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodGet {
+			if branchProtected.Load() {
+				_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}]`))
+			} else {
+				_, _ = w.Write([]byte(`[]`))
+			}
+			return
+		}
 
 		// CreateProject
 		if r.Method == http.MethodPost && path == "/api/v4/projects" {
@@ -879,7 +891,8 @@ func TestCreateDemoProject(t *testing.T) {
 	// Verify all setup steps executed
 	assert.True(t, projectCreated.Load(), "project should be created")
 	assert.True(t, branchProtected.Load(), "main branch should be protected")
-	// Issue board setup is no longer part of configureProject
+	assert.True(t, board.created, "course status board should be created")
+	assert.Len(t, board.lists, 5)
 	assert.True(t, approvalRuleCreated.Load(), "demo should require tutor approval")
 
 	// Verify CI/CD config path points to shared repo
@@ -948,9 +961,23 @@ func TestFetchTemplateFilesPartialFailure(t *testing.T) {
 
 func TestCreateDemoProjectIdempotent(t *testing.T) {
 	// Verify createDemoProject succeeds when all resources already exist
+	board := &fakeStatusBoard{created: true, hidden: true, lists: map[string]int{
+		"gid://gitlab/WorkItems::Statuses::Custom::Status/80": 0,
+		"gid://gitlab/WorkItems::Statuses::Custom::Status/81": 1,
+		"gid://gitlab/WorkItems::Statuses::Custom::Status/85": 2,
+		"gid://gitlab/WorkItems::Statuses::Custom::Status/87": 3,
+		"gid://gitlab/WorkItems::Statuses::Custom::Status/82": 4,
+	}}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
+		if board.handle(t, w, r) {
+			return
+		}
+		if path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}]`))
+			return
+		}
 
 		// CreateProject returns 409 Conflict (project already exists)
 		if r.Method == http.MethodPost && path == "/api/v4/projects" {
@@ -1577,6 +1604,9 @@ func TestConfigureProjectDoesNotUnprotectExistingMainForMissingTemplate(t *testi
 	var unprotected bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300/protected_branches":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `[{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}]`)
 		case r.Method == http.MethodDelete && r.URL.Path == "/api/v4/projects/300/protected_branches/main":
 			unprotected = true
 			w.WriteHeader(http.StatusNoContent)

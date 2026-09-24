@@ -183,6 +183,14 @@ func TestEnsureMainBranchProtectionRepairsBroadDefault(t *testing.T) {
 	var patched map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodGet {
+			if patched == nil {
+				_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"id":1,"access_level":30}],"merge_access_levels":[{"id":2,"access_level":30}]}]`))
+			} else {
+				_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"id":3,"access_level":0}],"merge_access_levels":[{"id":4,"access_level":40},{"id":5,"user_id":9,"access_level":40}]}]`))
+			}
+			return
+		}
 		if r.URL.Path != "/api/v4/projects/300/protected_branches/main" {
 			http.NotFound(w, r)
 			return
@@ -210,6 +218,49 @@ func TestEnsureMainBranchProtectionRepairsBroadDefault(t *testing.T) {
 	assert.Equal(t, false, patched["allow_force_push"])
 	assert.Len(t, patched["allowed_to_push"], 2)
 	assert.Len(t, patched["allowed_to_merge"], 3)
+}
+
+func TestEnsureMainBranchProtectionCollapsesDuplicateRules(t *testing.T) {
+	deleted, patched := false, false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodGet:
+			if !deleted {
+				_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"access_level":30}],"merge_access_levels":[{"access_level":40}]},{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}]`))
+			} else if !patched {
+				_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"access_level":30}],"merge_access_levels":[{"access_level":40}]}]`))
+			} else {
+				_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}]`))
+			}
+		case r.URL.Path == "/api/v4/projects/300/protected_branches/main" && r.Method == http.MethodDelete:
+			deleted = true
+			w.WriteHeader(http.StatusNoContent)
+		case r.URL.Path == "/api/v4/projects/300/protected_branches/main" && r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(`{"name":"main","push_access_levels":[{"id":1,"access_level":30}],"merge_access_levels":[{"id":2,"access_level":40}]}`))
+		case r.URL.Path == "/api/v4/projects/300/protected_branches/main" && r.Method == http.MethodPatch:
+			patched = true
+			_, _ = w.Write([]byte(`{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	require.NoError(t, ensureMainBranchProtection(client, 300, 0))
+	assert.True(t, deleted)
+	assert.True(t, patched)
+}
+
+func TestEnsureMainBranchProtectionRejectsWildcard(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[{"name":"m*","push_access_levels":[{"access_level":30}],"merge_access_levels":[{"access_level":40}]}]`))
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	require.ErrorContains(t, ensureMainBranchProtection(client, 300, 0), `"m*" also matches main`)
 }
 
 func TestStudentProjectMemberUpgrade(t *testing.T) {

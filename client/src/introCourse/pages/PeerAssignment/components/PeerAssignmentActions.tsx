@@ -146,34 +146,43 @@ export const PeerAssignmentActions = ({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-
-        <Button
-          onClick={() => syncMutation.mutate()}
-          disabled={isLoading || peerAssignments.length === 0 || !semesterTag}
-          size='sm'
-          variant='outline'
-        >
-          {syncMutation.isPending ? (
-            <Loader2 className='h-4 w-4 animate-spin mr-1' />
-          ) : (
-            <GitBranch className='h-4 w-4 mr-1' />
-          )}
-          Check / Set Up Legacy GitLab Review Access
-        </Button>
-        <Button
-          onClick={() => unsyncMutation.mutate()}
-          disabled={isLoading || peerAssignments.length === 0 || !semesterTag}
-          size='sm'
-          variant='outline'
-        >
-          {unsyncMutation.isPending ? (
-            <Loader2 className='h-4 w-4 animate-spin mr-1' />
-          ) : (
-            <Unlink className='h-4 w-4 mr-1' />
-          )}
-          Remove Legacy GitLab Access
-        </Button>
       </div>
+
+      <details className='text-sm text-muted-foreground'>
+        <summary className='cursor-pointer'>Older courses: per-peer GitLab access</summary>
+        <p className='mt-2'>
+          New repositories grant review access through the tutor subgroup. These actions are only
+          for repositories created with the older per-peer access model.
+        </p>
+        <div className='mt-2 flex flex-wrap gap-2'>
+          <Button
+            onClick={() => syncMutation.mutate()}
+            disabled={isLoading || peerAssignments.length === 0 || !semesterTag}
+            size='sm'
+            variant='outline'
+          >
+            {syncMutation.isPending ? (
+              <Loader2 className='h-4 w-4 animate-spin mr-1' />
+            ) : (
+              <GitBranch className='h-4 w-4 mr-1' />
+            )}
+            Check older review access
+          </Button>
+          <Button
+            onClick={() => unsyncMutation.mutate()}
+            disabled={isLoading || peerAssignments.length === 0 || !semesterTag}
+            size='sm'
+            variant='outline'
+          >
+            {unsyncMutation.isPending ? (
+              <Loader2 className='h-4 w-4 animate-spin mr-1' />
+            ) : (
+              <Unlink className='h-4 w-4 mr-1' />
+            )}
+            Remove older review access
+          </Button>
+        </div>
+      </details>
 
       {error && (
         <Alert variant='destructive' data-testid='peer-assignment-error'>
