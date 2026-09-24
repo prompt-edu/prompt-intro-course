@@ -222,14 +222,52 @@ func createOrGetProject(git *gitlab.Client, opts *gitlab.CreateProjectOptions, g
 		if !strings.EqualFold(project.PathWithNamespace, projectPath) {
 			return nil, fmt.Errorf("project path %q resolves to %q; release the old path before retrying", projectPath, project.PathWithNamespace)
 		}
+		if opts.CIConfigPath != nil {
+			if err = reconcileCourseProjectSettings(git, project, opts); err != nil {
+				return nil, fmt.Errorf("repair existing project %q settings: %w", projectPath, err)
+			}
+		}
 		log.WithField("project", *opts.Name).Info("project already exists, continuing with setup")
 	}
 	return project, nil
 }
 
+func courseProjectSettingsMatch(project *gitlab.Project, opts *gitlab.CreateProjectOptions) bool {
+	return project != nil && project.CIConfigPath == *opts.CIConfigPath &&
+		project.Visibility == *opts.Visibility && project.MergeMethod == *opts.MergeMethod &&
+		project.SquashOption == *opts.SquashOption &&
+		project.RemoveSourceBranchAfterMerge == *opts.RemoveSourceBranchAfterMerge &&
+		project.OnlyAllowMergeIfPipelineSucceeds == *opts.OnlyAllowMergeIfPipelineSucceeds &&
+		project.OnlyAllowMergeIfAllDiscussionsAreResolved == *opts.OnlyAllowMergeIfAllDiscussionsAreResolved
+}
+
+func reconcileCourseProjectSettings(git *gitlab.Client, project *gitlab.Project, opts *gitlab.CreateProjectOptions) error {
+	if courseProjectSettingsMatch(project, opts) {
+		return nil
+	}
+	_, _, err := git.Projects.EditProject(project.ID, &gitlab.EditProjectOptions{
+		CIConfigPath: opts.CIConfigPath, Visibility: opts.Visibility,
+		MergeMethod: opts.MergeMethod, SquashOption: opts.SquashOption,
+		RemoveSourceBranchAfterMerge:              opts.RemoveSourceBranchAfterMerge,
+		OnlyAllowMergeIfPipelineSucceeds:          opts.OnlyAllowMergeIfPipelineSucceeds,
+		OnlyAllowMergeIfAllDiscussionsAreResolved: opts.OnlyAllowMergeIfAllDiscussionsAreResolved,
+	})
+	if err != nil {
+		return err
+	}
+	updated, _, err := git.Projects.GetProject(project.ID, nil)
+	if err != nil {
+		return err
+	}
+	if !courseProjectSettingsMatch(updated, opts) {
+		return fmt.Errorf("GitLab did not confirm the shared CI and merge settings")
+	}
+	return nil
+}
+
 // configureProjectWithMaterial applies the shared template, branch protection,
 // issue board, approval, and daily issue setup to a course project.
-func configureProjectWithMaterial(git *gitlab.Client, projectID int64, projectName string, vars templateVars, material *materialSnapshot) (resultErr error) {
+func configureProjectWithMaterial(git *gitlab.Client, projectID int64, projectName string, vars templateVars, material *materialSnapshot, mergeOwnerID int64) error {
 	var templates []templateFile
 	if material == nil {
 		svc := InfrastructureServiceSingleton
@@ -244,52 +282,29 @@ func configureProjectWithMaterial(git *gitlab.Client, projectID int64, projectNa
 	} else {
 		templates = material.templates
 	}
-	// Branch protection — GitLab auto-protects 'main' with default settings
-	// when the first commit is pushed, so we must unprotect first to apply our
-	// desired access levels. We unprotect BEFORE creating files so the initial
-	// commit doesn't trigger default protection rules.
-	_, unprotectErr := git.ProtectedBranches.UnprotectRepositoryBranches(projectID, "main")
-	if unprotectErr != nil && !isNotFoundError(unprotectErr) {
-		return fmt.Errorf("unprotect branch for %q: %w", projectName, unprotectErr)
+	// On retries, repair an existing branch before any later operation can fail.
+	// In particular, missing template files must not leave an old Developer
+	// merge rule in place. A brand-new branch is protected after its first commit.
+	_, _, branchErr := git.Branches.GetBranch(projectID, "main")
+	if branchErr == nil {
+		if err := ensureMainBranchProtection(git, projectID, 0); err != nil {
+			return fmt.Errorf("secure existing main for %q: %w", projectName, err)
+		}
+	} else if !isNotFoundError(branchErr) {
+		return fmt.Errorf("check existing main for %q: %w", projectName, branchErr)
 	}
-	protectionRestored := false
-	// A failed template fetch or commit must not leave an existing project
-	// writable. Retry protection before returning any setup error.
-	defer func() {
-		if protectionRestored {
-			return
-		}
-		_, _, protectErr := git.ProtectedBranches.ProtectRepositoryBranches(projectID, &gitlab.ProtectRepositoryBranchesOptions{
-			Name:             gitlab.Ptr("main"),
-			PushAccessLevel:  gitlab.Ptr(gitlab.NoPermissions),
-			MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
-			AllowForcePush:   gitlab.Ptr(false),
-		})
-		if protectErr != nil && !isAlreadyExistsError(protectErr) {
-			log.WithError(protectErr).WithField("project", projectName).Error("failed to restore main branch protection")
-			resultErr = errors.Join(resultErr, fmt.Errorf("restore main protection for %q: %w", projectName, protectErr))
-		}
-	}()
-
 	// Template files (idempotent: skip files that already exist)
 	err := createProjectFilesFromTemplates(git, projectID, projectName, vars, templates)
 	if err != nil {
 		return err
 	}
 
-	// Re-protect branch with our desired settings. Push is set to NoPermissions
-	// to force all changes through merge requests; merge access is Developer
-	// (tutors are Maintainer). Tolerate already-exists in case of retry.
-	_, _, err = git.ProtectedBranches.ProtectRepositoryBranches(projectID, &gitlab.ProtectRepositoryBranchesOptions{
-		Name:             gitlab.Ptr("main"),
-		PushAccessLevel:  gitlab.Ptr(gitlab.NoPermissions),
-		MergeAccessLevel: gitlab.Ptr(gitlab.DeveloperPermissions),
-		AllowForcePush:   gitlab.Ptr(false),
-	})
-	if err != nil && !isAlreadyExistsError(err) {
-		return fmt.Errorf("protect branch for %q: %w", projectName, err)
+	// Never unprotect an existing project during a retry: peers already have
+	// Developer access there. Restrict merge access before later setup steps can
+	// fail, so a retry cannot leave classmates able to merge this student's MR.
+	if err = ensureMainBranchProtection(git, projectID, mergeOwnerID); err != nil {
+		return fmt.Errorf("protect main for %q: %w", projectName, err)
 	}
-	protectionRestored = true
 
 	// Issue board — skipped; GitLab provides a default board and custom lists
 	// add complexity with no clear benefit for the intro course workflow.
@@ -312,6 +327,94 @@ func configureProjectWithMaterial(git *gitlab.Client, projectID int64, projectNa
 	}
 
 	return nil
+}
+
+func ensureMainBranchProtection(git *gitlab.Client, projectID, mergeOwnerID int64) error {
+	branch, _, err := git.ProtectedBranches.GetProtectedBranch(projectID, "main")
+	if isNotFoundError(err) {
+		branch, _, err = git.ProtectedBranches.ProtectRepositoryBranches(projectID, &gitlab.ProtectRepositoryBranchesOptions{
+			Name: gitlab.Ptr("main"), PushAccessLevel: gitlab.Ptr(gitlab.NoPermissions),
+			MergeAccessLevel: gitlab.Ptr(gitlab.MaintainerPermissions), AllowForcePush: gitlab.Ptr(false),
+		})
+		if isAlreadyExistsError(err) {
+			branch, _, err = git.ProtectedBranches.GetProtectedBranch(projectID, "main")
+		}
+	}
+	if err != nil {
+		return err
+	}
+	var pushUpdates, mergeUpdates []*gitlab.BranchPermissionOptions
+	pushDenied, maintainerPresent, ownerPresent := false, false, false
+	for _, access := range branch.PushAccessLevels {
+		if access.AccessLevel == gitlab.NoPermissions && access.UserID == 0 && access.GroupID == 0 && !pushDenied {
+			pushDenied = true
+		} else {
+			pushUpdates = append(pushUpdates, &gitlab.BranchPermissionOptions{ID: gitlab.Ptr(access.ID), Destroy: gitlab.Ptr(true)})
+		}
+	}
+	if !pushDenied {
+		pushUpdates = append(pushUpdates, &gitlab.BranchPermissionOptions{AccessLevel: gitlab.Ptr(gitlab.NoPermissions)})
+	}
+	for _, access := range branch.MergeAccessLevels {
+		switch {
+		case access.UserID == mergeOwnerID && mergeOwnerID != 0 && !ownerPresent:
+			ownerPresent = true
+		case access.UserID == 0 && access.GroupID == 0 && access.AccessLevel == gitlab.MaintainerPermissions && !maintainerPresent:
+			maintainerPresent = true
+		default:
+			mergeUpdates = append(mergeUpdates, &gitlab.BranchPermissionOptions{ID: gitlab.Ptr(access.ID), Destroy: gitlab.Ptr(true)})
+		}
+	}
+	if !maintainerPresent {
+		mergeUpdates = append(mergeUpdates, &gitlab.BranchPermissionOptions{AccessLevel: gitlab.Ptr(gitlab.MaintainerPermissions)})
+	}
+	if mergeOwnerID != 0 && !ownerPresent {
+		mergeUpdates = append(mergeUpdates, &gitlab.BranchPermissionOptions{UserID: gitlab.Ptr(mergeOwnerID)})
+	}
+	if len(pushUpdates) > 0 || len(mergeUpdates) > 0 || branch.AllowForcePush {
+		options := &gitlab.UpdateProtectedBranchOptions{AllowForcePush: gitlab.Ptr(false)}
+		if len(pushUpdates) > 0 {
+			options.AllowedToPush = gitlab.Ptr(pushUpdates)
+		}
+		if len(mergeUpdates) > 0 {
+			options.AllowedToMerge = gitlab.Ptr(mergeUpdates)
+		}
+		branch, _, err = git.ProtectedBranches.UpdateProtectedBranch(projectID, "main", options)
+		if err != nil {
+			return err
+		}
+	}
+	if !mainBranchProtectionMatches(branch, mergeOwnerID) {
+		return fmt.Errorf("GitLab did not confirm main branch push and merge restrictions")
+	}
+	return nil
+}
+
+func mainBranchProtectionMatches(branch *gitlab.ProtectedBranch, mergeOwnerID int64) bool {
+	if branch == nil || branch.AllowForcePush || len(branch.PushAccessLevels) != 1 ||
+		branch.PushAccessLevels[0].AccessLevel != gitlab.NoPermissions ||
+		branch.PushAccessLevels[0].UserID != 0 || branch.PushAccessLevels[0].GroupID != 0 ||
+		len(branch.MergeAccessLevels) != 1+boolToInt(mergeOwnerID != 0) {
+		return false
+	}
+	maintainerPresent, ownerPresent := false, mergeOwnerID == 0
+	for _, access := range branch.MergeAccessLevels {
+		if access.UserID == mergeOwnerID && mergeOwnerID != 0 {
+			ownerPresent = true
+		} else if access.UserID == 0 && access.GroupID == 0 && access.AccessLevel == gitlab.MaintainerPermissions {
+			maintainerPresent = true
+		} else {
+			return false
+		}
+	}
+	return maintainerPresent && ownerPresent
+}
+
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 // StudentProjectParams bundles the parameters for CreateStudentProject to
@@ -382,7 +485,7 @@ func createStudentProjectWithMaterial(p StudentProjectParams, material *material
 	err = configureProjectWithMaterial(git, project.ID, p.RepoName, templateVars{
 		StudentName:        p.StudentName,
 		SubmissionDeadline: p.SubmissionDeadline,
-	}, material)
+	}, material, 0)
 	if err != nil {
 		return err
 	}
@@ -392,10 +495,11 @@ func createStudentProjectWithMaterial(p StudentProjectParams, material *material
 	if err != nil {
 		return err
 	}
-	// Peers need Developer to request changes, so only this repository's
-	// student and Maintainers may merge into its protected main branch.
-	if err = restrictStudentMainMergeAccess(git, project.ID, p.DevID); err != nil {
-		return fmt.Errorf("restrict main merge access for %q: %w", p.RepoName, err)
+	// GitLab requires a protected-branch user grant to already be a project
+	// member. Until then, only Maintainers may merge; never open access to all
+	// Developers during a partial setup or retry.
+	if err = ensureMainBranchProtection(git, project.ID, p.DevID); err != nil {
+		return fmt.Errorf("grant student-only main merge access for %q: %w", p.RepoName, err)
 	}
 	if err = ensureGroupMember(git, peerGroup.ID, p.DevID, gitlab.DeveloperPermissions); err != nil {
 		return fmt.Errorf("add student to peer review group for %q: %w", p.RepoName, err)
@@ -542,6 +646,52 @@ func ensureProjectSharedWithPeerGroup(git *gitlab.Client, projectID, peerGroupID
 	return verifyPeerGroupShare(git, projectID, peerGroupID)
 }
 
+func ensureProjectSharedWithGroupAtLeast(git *gitlab.Client, projectID, groupID int64, minimum gitlab.AccessLevelValue) error {
+	project, _, err := git.Projects.GetProject(projectID, nil)
+	if err != nil {
+		return err
+	}
+	for _, shared := range project.SharedWithGroups {
+		if shared.GroupID == groupID {
+			if shared.GroupAccessLevel >= int64(minimum) {
+				return nil
+			}
+			if _, err = git.Projects.DeleteSharedProjectFromGroup(projectID, groupID); err != nil {
+				return fmt.Errorf("remove insufficient shared CI access: %w", err)
+			}
+			if _, err = git.Projects.ShareProjectWithGroup(projectID, &gitlab.ShareWithGroupOptions{
+				GroupID: gitlab.Ptr(groupID), GroupAccess: gitlab.Ptr(minimum),
+			}); err != nil {
+				_, rollbackErr := git.Projects.ShareProjectWithGroup(projectID, &gitlab.ShareWithGroupOptions{
+					GroupID: gitlab.Ptr(groupID), GroupAccess: gitlab.Ptr(gitlab.AccessLevelValue(shared.GroupAccessLevel)),
+				})
+				return fmt.Errorf("upgrade shared CI access: %w; restore previous access: %v", err, rollbackErr)
+			}
+			return verifyProjectGroupAccess(git, projectID, groupID, minimum)
+		}
+	}
+	_, err = git.Projects.ShareProjectWithGroup(projectID, &gitlab.ShareWithGroupOptions{
+		GroupID: gitlab.Ptr(groupID), GroupAccess: gitlab.Ptr(minimum),
+	})
+	if err != nil && !isAlreadyExistsError(err) {
+		return err
+	}
+	return verifyProjectGroupAccess(git, projectID, groupID, minimum)
+}
+
+func verifyProjectGroupAccess(git *gitlab.Client, projectID, groupID int64, minimum gitlab.AccessLevelValue) error {
+	project, _, err := git.Projects.GetProject(projectID, nil)
+	if err != nil {
+		return err
+	}
+	for _, shared := range project.SharedWithGroups {
+		if shared.GroupID == groupID && shared.GroupAccessLevel >= int64(minimum) {
+			return nil
+		}
+	}
+	return fmt.Errorf("GitLab did not confirm shared CI access for developer group")
+}
+
 func verifyPeerGroupShare(git *gitlab.Client, projectID, peerGroupID int64) error {
 	project, _, err := git.Projects.GetProject(projectID, nil)
 	if err != nil {
@@ -650,9 +800,8 @@ func ensureStudentProjectMember(git *gitlab.Client, projectID, userID int64) err
 	return nil
 }
 
-// createProjectFiles adds missing template files without overwriting files a
-// student may already have edited. Retrying a partly initialized project fills
-// gaps instead of treating an existing file as a successful full setup.
+// createProjectFiles adds the template to a new project without overwriting
+// files that a student may already have edited.
 func createProjectFiles(git *gitlab.Client, projectID int64, repoName string, vars templateVars) error {
 	svc := InfrastructureServiceSingleton
 	if svc.teachingMaterialProjectID == "" {
@@ -702,6 +851,16 @@ func createProjectFilesFromTemplates(git *gitlab.Client, projectID int64, repoNa
 	if len(actions) == 0 {
 		return nil
 	}
+	// An existing repository may already be shared with Developer peers. Do not
+	// open its protected main branch to repair missing template files. A fresh
+	// project has no main branch yet and can be initialized safely here.
+	_, _, branchErr := git.Branches.GetBranch(projectID, "main")
+	if branchErr == nil {
+		return fmt.Errorf("%q has missing template files on an existing main branch; repair them through a reviewed MR or reset the demo", repoName)
+	}
+	if !isNotFoundError(branchErr) {
+		return fmt.Errorf("check main branch for %q: %w", repoName, branchErr)
+	}
 
 	_, _, err := git.Commits.CreateCommit(projectID, &gitlab.CreateCommitOptions{
 		Branch:        gitlab.Ptr("main"),
@@ -727,7 +886,7 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 	}
 	for _, r := range rules {
 		if r.Name == "Tutor Approval" {
-			if r.ApprovalsRequired == 1 && r.RuleType != "any_approver" && approvalRuleIncludesGroup(r, tutorsGroupID) {
+			if tutorApprovalRuleIsStrict(r, tutorsGroupID) {
 				return nil
 			}
 			// GitLab cannot convert an any-approver rule into a regular group
@@ -741,7 +900,7 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 				if createErr != nil {
 					return fmt.Errorf("replace tutor approval rule for %q: %w", repoName, createErr)
 				}
-				if created.RuleType == "any_approver" || !approvalRuleIncludesGroup(created, tutorsGroupID) {
+				if !tutorApprovalRuleIsStrict(created, tutorsGroupID) {
 					return fmt.Errorf("replacement tutor approval rule for %q does not restrict approvers to the tutors group", repoName)
 				}
 				if _, deleteErr := git.Projects.DeleteProjectApprovalRule(projectID, r.ID); deleteErr != nil {
@@ -750,14 +909,16 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 				return nil
 			}
 			updated, _, updateErr := git.Projects.UpdateProjectApprovalRule(projectID, r.ID, &gitlab.UpdateProjectLevelRuleOptions{
-				Name:              gitlab.Ptr("Tutor Approval"),
-				ApprovalsRequired: gitlab.Ptr(int64(1)),
-				GroupIDs:          gitlab.Ptr([]int64{tutorsGroupID}),
+				Name:                          gitlab.Ptr("Tutor Approval"),
+				ApprovalsRequired:             gitlab.Ptr(int64(1)),
+				UserIDs:                       gitlab.Ptr([]int64{}),
+				GroupIDs:                      gitlab.Ptr([]int64{tutorsGroupID}),
+				AppliesToAllProtectedBranches: gitlab.Ptr(true),
 			})
 			if updateErr != nil {
 				return fmt.Errorf("repair tutor approval rule for %q: %w", repoName, updateErr)
 			}
-			if updated.RuleType == "any_approver" || !approvalRuleIncludesGroup(updated, tutorsGroupID) {
+			if !tutorApprovalRuleIsStrict(updated, tutorsGroupID) {
 				return fmt.Errorf("tutor approval rule for %q does not restrict approvers to the tutors group", repoName)
 			}
 			return nil
@@ -772,11 +933,28 @@ func ensureApprovalRule(git *gitlab.Client, projectID int64, repoName string, tu
 	if err != nil {
 		return fmt.Errorf("create approval rule for %q: %w", repoName, err)
 	}
-	if created.RuleType == "any_approver" || !approvalRuleIncludesGroup(created, tutorsGroupID) {
+	if !tutorApprovalRuleIsStrict(created, tutorsGroupID) {
 		return fmt.Errorf("tutor approval rule for %q does not restrict approvers to the tutors group", repoName)
 	}
 
 	return nil
+}
+
+func tutorApprovalRuleIsStrict(rule *gitlab.ProjectApprovalRule, groupID int64) bool {
+	if rule == nil || rule.RuleType != "regular" || rule.ApprovalsRequired != 1 ||
+		len(rule.Users) != 0 || len(rule.Groups) != 1 || rule.Groups[0].ID != groupID {
+		return false
+	}
+	// An unscoped rule applies to all branches. A scoped rule must cover main.
+	if rule.AppliesToAllProtectedBranches || len(rule.ProtectedBranches) == 0 {
+		return true
+	}
+	for _, branch := range rule.ProtectedBranches {
+		if branch.Name == "main" {
+			return true
+		}
+	}
+	return false
 }
 
 func approvalRuleIncludesGroup(rule *gitlab.ProjectApprovalRule, groupID int64) bool {
@@ -1053,7 +1231,7 @@ func createDemoProjectWithMaterial(git *gitlab.Client, introCourseGroupID int64,
 	err = configureProjectWithMaterial(git, project.ID, demoProjectName, templateVars{
 		StudentName:        "Demo",
 		SubmissionDeadline: "See the course schedule in Outline",
-	}, material)
+	}, material, 0)
 	if err != nil {
 		return err
 	}

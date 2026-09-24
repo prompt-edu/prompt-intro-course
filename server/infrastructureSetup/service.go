@@ -28,9 +28,8 @@ type InfrastructureService struct {
 	verifiedStudentSetup      verifiedStudentSetupCache
 }
 
-// A repository batch can contain dozens of students. Keep the expensive demo
-// comparison and teaching-material download for a short period, while checking
-// the source and demo main commits before every individual repository.
+// A repository batch can contain dozens of students. Recheck live readiness
+// for each one, but reuse the pinned teaching-material download briefly.
 type verifiedStudentSetupCache struct {
 	mu          sync.Mutex
 	coursePhase uuid.UUID
@@ -54,20 +53,18 @@ func verifiedMaterialForStudent(ctx context.Context, coursePhaseID uuid.UUID, se
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
-	if cache.material != nil && cache.coursePhase == coursePhaseID && cache.semesterTag == semesterTag && time.Since(cache.checkedAt) < verifiedStudentSetupTTL {
-		source, _, sourceErr := git.Branches.GetBranch(svc.teachingMaterialProjectID, "main")
-		demo, _, demoErr := git.Branches.GetBranch(cache.demoID, "main")
-		if sourceErr == nil && demoErr == nil && source.Commit != nil && demo.Commit != nil && source.Commit.ID == cache.sourceSHA && demo.Commit.ID == cache.demoSHA && demo.Protected {
-			return cache.material, nil
-		}
-	}
-
+	// Recheck all readiness conditions for each student. Source/demo SHAs alone
+	// cannot detect changed tutor access, shared CI, approval rules, or pipelines.
 	status, err := CourseInfrastructureStatus(ctx, coursePhaseID, semesterTag)
 	if err != nil {
 		return nil, fmt.Errorf("check demo readiness: %w", err)
 	}
 	if !status.Checks.DemoReady || status.Source == nil || status.DemoProject == nil {
 		return nil, fmt.Errorf("demo repository is not ready for current teaching material; repair and test it before creating student repos")
+	}
+	if cache.material != nil && cache.coursePhase == coursePhaseID && cache.semesterTag == semesterTag &&
+		cache.sourceSHA == status.Source.SHA && cache.demoSHA == status.DemoProject.SHA && time.Since(cache.checkedAt) < verifiedStudentSetupTTL {
+		return cache.material, nil
 	}
 	material, err := loadMaterialSnapshot(git, svc.teachingMaterialProjectID, status.Source.SHA)
 	if err != nil {
@@ -111,8 +108,9 @@ func CreateCourseInfrastructure(ctx context.Context, coursePhaseID uuid.UUID, se
 	var errs []error
 
 	// 2.) Create the developer group
-	if _, err = createDeveloperTopLevelGroup(courseGroup.ID); err != nil {
-		errs = append(errs, fmt.Errorf("create developer group: %w", err))
+	developerGroup, developerErr := createDeveloperTopLevelGroup(courseGroup.ID)
+	if developerErr != nil {
+		errs = append(errs, fmt.Errorf("create developer group: %w", developerErr))
 	}
 
 	// 3.) Create the tutor groups
@@ -149,6 +147,13 @@ func CreateCourseInfrastructure(ctx context.Context, coursePhaseID uuid.UUID, se
 	// course setup complete if it is missing or could not be updated.
 	if err = createCICDProjectWithMaterial(git, introCourseGroup.ID, introCourseGroup.FullPath, material); err != nil {
 		return fmt.Errorf("set up shared CI/CD project: %w", err)
+	}
+	ciProject, _, err := git.Projects.GetProject(introCourseGroup.FullPath+"/ci-cd", nil)
+	if err != nil {
+		return fmt.Errorf("find shared CI/CD project: %w", err)
+	}
+	if err = ensureProjectSharedWithGroupAtLeast(git, ciProject.ID, developerGroup.ID, gitlab.ReporterPermissions); err != nil {
+		return fmt.Errorf("grant students read access to shared CI/CD project: %w", err)
 	}
 
 	// 7.) The demo is the course's reference project and setup smoke test.

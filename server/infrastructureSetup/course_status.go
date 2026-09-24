@@ -157,6 +157,21 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 	ci, _, err := git.Projects.GetProject(ciPath, nil)
 	if err == nil && strings.EqualFold(ci.PathWithNamespace, ciPath) {
 		status.CIProject = &repositoryLink{ID: ci.ID, URL: ci.WebURL}
+		developers, groupErr := findSubGroup("developer", course.ID)
+		if groupErr != nil {
+			return nil, fmt.Errorf("get developer group for CI access: %w", groupErr)
+		}
+		ciReadable := false
+		if developers != nil {
+			for _, shared := range ci.SharedWithGroups {
+				if shared.GroupID == developers.ID && shared.GroupAccessLevel >= int64(gitlab.ReporterPermissions) {
+					ciReadable = true
+				}
+			}
+		}
+		if !ciReadable {
+			issue("Students do not have read access to the shared CI configuration project.")
+		}
 	} else if err != nil && !isNotFoundError(err) {
 		return nil, fmt.Errorf("get CI project: %w", err)
 	} else {
@@ -176,6 +191,9 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 		return status, nil
 	}
 	status.DemoProject = &demoStatus{repositoryLink: repositoryLink{ID: demo.ID, URL: demo.WebURL}}
+	if !courseProjectSettingsMatch(demo, newCourseProjectOptions("demo", "demo", intro.ID, ciPath)) {
+		issue("Demo CI path or merge-request settings differ from the course policy.")
+	}
 	branch, _, err := git.Branches.GetBranch(demo.ID, "main")
 	if err != nil {
 		issue("Demo main branch is missing.")
@@ -186,6 +204,10 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 	}
 	if !branch.Protected {
 		issue("Demo main branch is not protected.")
+	}
+	protectedMain, _, protectionErr := git.ProtectedBranches.GetProtectedBranch(demo.ID, "main")
+	if protectionErr != nil || !mainBranchProtectionMatches(protectedMain, 0) {
+		issue("Demo main must reject direct pushes and allow only Maintainers to merge.")
 	}
 	pipelines, _, pipelineErr := git.Pipelines.ListProjectPipelines(demo.ID, &gitlab.ListProjectPipelinesOptions{
 		Ref: gitlab.Ptr("main"), ListOptions: gitlab.ListOptions{PerPage: 1},
@@ -207,7 +229,7 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 		}
 		valid := false
 		for _, rule := range rules {
-			if rule.Name == "Tutor Approval" && rule.ApprovalsRequired == 1 && rule.RuleType != "any_approver" && approvalRuleIncludesGroup(rule, tutors.ID) {
+			if rule.Name == "Tutor Approval" && tutorApprovalRuleIsStrict(rule, tutors.ID) {
 				valid = true
 			}
 		}

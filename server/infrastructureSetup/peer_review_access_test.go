@@ -108,6 +108,36 @@ func TestPeerReviewShareUpgradesReporterToDeveloper(t *testing.T) {
 	assert.Equal(t, 1, shares)
 }
 
+func TestSharedCIGrantsDeveloperGroupReporterReadAccess(t *testing.T) {
+	shared := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300":
+			shares := []any{}
+			if shared {
+				shares = append(shares, map[string]any{"group_id": 20, "group_access_level": 20})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 300, "shared_with_groups": shares})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects/300/share":
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			assert.Equal(t, float64(20), body["group_id"])
+			assert.Equal(t, float64(20), body["group_access"])
+			shared = true
+			w.WriteHeader(http.StatusCreated)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	require.NoError(t, ensureProjectSharedWithGroupAtLeast(client, 300, 20, gitlab.ReporterPermissions))
+	require.NoError(t, ensureProjectSharedWithGroupAtLeast(client, 300, 20, gitlab.ReporterPermissions))
+	assert.True(t, shared)
+}
+
 func TestStudentMainMergeAccessExcludesPeerDevelopers(t *testing.T) {
 	mergedByDeveloperRole := true
 	updates := 0
@@ -147,6 +177,39 @@ func TestStudentMainMergeAccessExcludesPeerDevelopers(t *testing.T) {
 	require.NoError(t, restrictStudentMainMergeAccess(client, 300, 9))
 	require.NoError(t, restrictStudentMainMergeAccess(client, 300, 9))
 	assert.Equal(t, 1, updates)
+}
+
+func TestEnsureMainBranchProtectionRepairsBroadDefault(t *testing.T) {
+	var patched map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/api/v4/projects/300/protected_branches/main" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method == http.MethodPatch {
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&patched))
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name": "main", "push_access_levels": []any{map[string]any{"id": 3, "access_level": 0}},
+				"merge_access_levels": []any{map[string]any{"id": 4, "access_level": 40}, map[string]any{"id": 5, "user_id": 9, "access_level": 40}},
+			})
+			return
+		}
+		require.Equal(t, http.MethodGet, r.Method)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"name": "main", "push_access_levels": []any{map[string]any{"id": 1, "access_level": 30}},
+			"merge_access_levels": []any{map[string]any{"id": 2, "access_level": 30}},
+		})
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	// The protection is made safe before approvals and issue creation run.
+	require.NoError(t, ensureMainBranchProtection(client, 300, 9))
+	require.NotNil(t, patched)
+	assert.Equal(t, false, patched["allow_force_push"])
+	assert.Len(t, patched["allowed_to_push"], 2)
+	assert.Len(t, patched["allowed_to_merge"], 3)
 }
 
 func TestStudentProjectMemberUpgrade(t *testing.T) {

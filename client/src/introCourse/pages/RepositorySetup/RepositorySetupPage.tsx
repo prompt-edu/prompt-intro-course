@@ -265,9 +265,11 @@ export const RepositorySetupPage = () => {
             3. Demo repository
           </h2>
           <p className='text-sm text-muted-foreground'>
-            Test the starter app, daily issues, merge requests, approvals, and CI here before
-            creating student repositories. Repair fills missing setup; it does not overwrite files
-            or issue text in an existing demo after the teaching material changes.
+            Test the starter app, daily issues, tutor approval, and CI here before creating student
+            repositories. The demo does not verify student or peer permissions; test those on a
+            controlled student-style repository before setting up the class. Repair fills missing
+            setup; it does not overwrite files or issue text in an existing demo after the teaching
+            material changes.
           </p>
         </div>
         <dl className='grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[11rem_1fr]'>
