@@ -11,10 +11,11 @@ import (
 )
 
 type materialSnapshot struct {
-	sha       string
-	templates []templateFile
-	issues    []issueTemplate
-	ciFiles   []templateFile
+	sha          string
+	templates    []templateFile
+	issues       []issueTemplate
+	ciFiles      []templateFile
+	git2Exercise map[string][]templateFile
 }
 
 type resetDemoRequest struct {
@@ -55,10 +56,14 @@ func loadMaterialSnapshot(git *gitlab.Client, projectID, expectedSHA string) (*m
 	if err != nil {
 		return nil, err
 	}
+	git2Exercise, err := fetchGit2ExerciseAtRef(git, projectID, sha)
+	if err != nil {
+		return nil, err
+	}
 	if len(templates) == 0 || len(issues) == 0 || len(ciFiles) == 0 {
 		return nil, fmt.Errorf("teaching material must contain repository files, daily issues, and CI configuration")
 	}
-	return &materialSnapshot{sha: sha, templates: templates, issues: issues, ciFiles: ciFiles}, nil
+	return &materialSnapshot{sha: sha, templates: templates, issues: issues, ciFiles: ciFiles, git2Exercise: git2Exercise}, nil
 }
 
 func verifySharedCI(git *gitlab.Client, ciProjectID int64, material *materialSnapshot) error {
