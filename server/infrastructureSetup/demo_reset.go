@@ -108,6 +108,10 @@ func ResetDemo(ctx context.Context, coursePhaseID uuid.UUID, request resetDemoRe
 	if oldProject.Path != "demo" || oldProject.PathWithNamespace != introPath+"/demo" || !strings.HasSuffix(oldProject.PathWithNamespace, "/Introcourse/demo") {
 		return nil, fmt.Errorf("the expected project is no longer the active demo")
 	}
+	archiveGroup, err := createTeachingGroup(status.Groups["introCourse"].ID, "demo-archives")
+	if err != nil {
+		return nil, fmt.Errorf("prepare demo archive group: %w", err)
+	}
 	archivePath := fmt.Sprintf("demo-before-reset-%s-%s", time.Now().UTC().Format("20060102-150405"), uuid.NewString()[:6])
 	archived, _, err := git.Projects.EditProject(oldProject.ID, &gitlab.EditProjectOptions{
 		Name: gitlab.Ptr("Demo before reset"), Path: gitlab.Ptr(archivePath),
@@ -139,5 +143,15 @@ func ResetDemo(ctx context.Context, coursePhaseID uuid.UUID, request resetDemoRe
 	}
 	result.DemoURL = newProject.WebURL
 	result.DemoID = newProject.ID
+	// Keep repeated experiments out of the active Introcourse project list.
+	_, _, err = git.Projects.TransferProject(oldProject.ID, &gitlab.TransferProjectOptions{Namespace: archiveGroup.ID})
+	if err != nil {
+		return result, fmt.Errorf("replacement demo exists, but move old demo to archives failed: %w", err)
+	}
+	moved, _, err := git.Projects.GetProject(oldProject.ID, nil)
+	if err != nil || moved == nil || moved.Namespace == nil || moved.Namespace.ID != archiveGroup.ID {
+		return result, fmt.Errorf("replacement demo exists, but GitLab did not confirm the archive transfer")
+	}
+	result.ArchiveURL = moved.WebURL
 	return result, nil
 }

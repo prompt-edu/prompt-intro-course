@@ -3,6 +3,7 @@ package infrastructureSetup
 import (
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 	"unicode"
 
@@ -306,8 +307,9 @@ func configureProjectWithMaterial(git *gitlab.Client, projectID int64, projectNa
 		return fmt.Errorf("protect main for %q: %w", projectName, err)
 	}
 
-	// Issue board — skipped; GitLab provides a default board and custom lists
-	// add complexity with no clear benefit for the intro course workflow.
+	if err = ensureCourseStatusBoard(git, projectID); err != nil {
+		return fmt.Errorf("configure status board for %q: %w", projectName, err)
+	}
 
 	// Approval configuration (reset approvals on push, prevent self-approval)
 	err = ensureApprovalConfiguration(git, projectID, projectName)
@@ -330,6 +332,26 @@ func configureProjectWithMaterial(git *gitlab.Client, projectID int64, projectNa
 }
 
 func ensureMainBranchProtection(git *gitlab.Client, projectID, mergeOwnerID int64) error {
+	// GitLab applies the most permissive of *all* matching rules. A single GET
+	// can return a strict rule while another exact or wildcard rule still lets
+	// Developers push. Remove duplicate exact rules before configuring one.
+	rules, err := listMatchingMainProtections(git, projectID)
+	if err != nil {
+		return err
+	}
+	exact := 0
+	for _, rule := range rules {
+		if rule.Name != "main" {
+			return fmt.Errorf("protected branch rule %q also matches main; resolve it before course setup", rule.Name)
+		}
+		exact++
+	}
+	for exact > 1 {
+		if _, err := git.ProtectedBranches.UnprotectRepositoryBranches(projectID, "main"); err != nil {
+			return fmt.Errorf("remove duplicate main protection: %w", err)
+		}
+		exact--
+	}
 	branch, _, err := git.ProtectedBranches.GetProtectedBranch(projectID, "main")
 	if isNotFoundError(err) {
 		branch, _, err = git.ProtectedBranches.ProtectRepositoryBranches(projectID, &gitlab.ProtectRepositoryBranchesOptions{
@@ -387,7 +409,35 @@ func ensureMainBranchProtection(git *gitlab.Client, projectID, mergeOwnerID int6
 	if !mainBranchProtectionMatches(branch, mergeOwnerID) {
 		return fmt.Errorf("GitLab did not confirm main branch push and merge restrictions")
 	}
+	rules, err = listMatchingMainProtections(git, projectID)
+	if err != nil {
+		return err
+	}
+	if len(rules) != 1 || rules[0].Name != "main" || !mainBranchProtectionMatches(rules[0], mergeOwnerID) {
+		return fmt.Errorf("GitLab did not confirm exactly one strict main branch rule")
+	}
 	return nil
+}
+
+func listMatchingMainProtections(git *gitlab.Client, projectID int64) ([]*gitlab.ProtectedBranch, error) {
+	all, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.ProtectedBranch, *gitlab.Response, error) {
+		return git.ProtectedBranches.ListProtectedBranches(projectID, &gitlab.ListProtectedBranchesOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}, p)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list protected branch rules: %w", err)
+	}
+	var matching []*gitlab.ProtectedBranch
+	for _, rule := range all {
+		if rule.Name == "main" || protectedPatternMatchesMain(rule.Name) {
+			matching = append(matching, rule)
+		}
+	}
+	return matching, nil
+}
+
+func protectedPatternMatchesMain(pattern string) bool {
+	matched, err := path.Match(pattern, "main")
+	return err == nil && matched
 }
 
 func mainBranchProtectionMatches(branch *gitlab.ProtectedBranch, mergeOwnerID int64) bool {
@@ -1099,8 +1149,8 @@ func createDailyIssuesFromTemplates(git *gitlab.Client, projectID int64, repoNam
 
 	// Fetch existing issue titles for idempotency check
 	existingTitles := make(map[string]bool)
-	existingIssues, _, err := git.Issues.ListProjectIssues(projectID, &gitlab.ListProjectIssuesOptions{
-		ListOptions: gitlab.ListOptions{PerPage: 100},
+	existingIssues, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.Issue, *gitlab.Response, error) {
+		return git.Issues.ListProjectIssues(projectID, &gitlab.ListProjectIssuesOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}, p)
 	})
 	if err != nil {
 		return fmt.Errorf("list existing issues for %q: %w", repoName, err)
