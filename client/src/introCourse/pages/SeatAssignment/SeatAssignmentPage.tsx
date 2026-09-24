@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   type CoursePhaseParticipationsWithResolution,
   getCoursePhaseParticipations,
+  PassStatus,
 } from '@tumaet/prompt-shared-state'
 import {
   Button,
@@ -94,7 +95,9 @@ export const SeatAssignmentPage = () => {
     isParticipationsError || isDeveloperProfileError || isTutorsLoadingError || isSeatPlanError
 
   const developerWithProfiles = useGetParticipationsWithDevProfile(
-    coursePhaseParticipations?.participations || [],
+    coursePhaseParticipations?.participations.filter(
+      (participation) => participation.passStatus !== PassStatus.FAILED,
+    ) || [],
     developerProfiles || [],
   )
   const seatCandidates = developerWithProfiles.filter(

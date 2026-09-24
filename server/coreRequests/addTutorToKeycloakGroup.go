@@ -45,5 +45,25 @@ func SendAddStudentsToKeycloakGroup(authHeader string, courseID uuid.UUID, stude
 		return fmt.Errorf("core server returned %s: %s", resp.Status, string(respBody))
 	}
 
+	var result struct {
+		FailedToAddStudentIDs    []uuid.UUID `json:"failedToAddStudentIDs"`
+		SucceededToAddStudentIDs []uuid.UUID `json:"succeededToAddStudentIDs"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("decode core Keycloak group response: %w", err)
+	}
+	if len(result.FailedToAddStudentIDs) > 0 {
+		return fmt.Errorf("core could not add %d of %d tutors to Keycloak group %q", len(result.FailedToAddStudentIDs), len(studentIDs), groupName)
+	}
+	added := make(map[uuid.UUID]bool, len(result.SucceededToAddStudentIDs))
+	for _, id := range result.SucceededToAddStudentIDs {
+		added[id] = true
+	}
+	for _, id := range studentIDs {
+		if !added[id] {
+			return fmt.Errorf("core did not confirm tutor %s in Keycloak group %q", id, groupName)
+		}
+	}
+
 	return nil
 }

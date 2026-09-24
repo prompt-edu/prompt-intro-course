@@ -46,7 +46,7 @@ export class TutorImportPage extends IntroCoursePhasePage {
   }
 
   get groupCreatedStatus(): Locator {
-    return this.page.getByText('Keycloak group has been created')
+    return this.page.getByText('Tutor group configured in PROMPT')
   }
 
   // Idempotent: creates the Keycloak group only if it does not exist yet, so the

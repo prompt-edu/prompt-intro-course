@@ -43,6 +43,17 @@ INSERT INTO public.course_phase VALUES ('4179d58a-d00d-4fa7-94a5-397bc69fab02', 
 --
 INSERT INTO public.course_phase_graph VALUES ('d000000d-0000-0000-0000-00000000000d', '4179d58a-d00d-4fa7-94a5-397bc69fab02');
 
+-- The imported tutor IDs are core student IDs, not course-participation IDs.
+-- Keycloak group assignment resolves those IDs to university logins through
+-- core; the tutors need not participate as students in this course.
+INSERT INTO public.student VALUES
+('a0000000-0000-0000-0000-000000000001', 'Alice', 'Mueller', 'alice.mueller@example.com', '030001', 'ga01abc', true, 'female', 'DE', 'Computer Science', 'master', 3, '2025-04-01 09:00:00'),
+('a0000000-0000-0000-0000-000000000002', 'Bob', 'Schmidt', 'bob.schmidt@example.com', '030002', 'ga02bcd', true, 'male', 'DE', 'Computer Science', 'master', 3, '2025-04-01 09:00:00'),
+('a0000000-0000-0000-0000-000000000003', 'Clara', 'Weber', 'clara.weber@example.com', '030003', 'ga03cde', true, 'female', 'DE', 'Computer Science', 'master', 3, '2025-04-01 09:00:00'),
+('a0000000-0000-0000-0000-000000000004', 'David', 'Fischer', 'david.fischer@example.com', '030004', 'ga04def', true, 'male', 'DE', 'Computer Science', 'master', 3, '2025-04-01 09:00:00'),
+('a0000000-0000-0000-0000-000000000005', 'Eva', 'Braun', 'eva.braun@example.com', '030005', 'ga05efg', true, 'female', 'DE', 'Computer Science', 'master', 3, '2025-04-01 09:00:00'),
+('a0000000-0000-0000-0000-000000000006', 'Felix', 'Wagner', 'felix.wagner@example.com', '030006', 'ga06fgh', true, 'male', 'DE', 'Computer Science', 'master', 3, '2025-04-01 09:00:00');
+
 --
 -- 56 background students matching the developer profiles, seats, and peer groups in
 -- server/database_dumps/e2e_seed.sql. Every lecturer page resolves names through
