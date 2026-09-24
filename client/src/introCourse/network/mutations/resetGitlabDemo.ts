@@ -6,12 +6,20 @@ export interface ResetGitlabDemoRequest {
   expectedSourceSHA: string
 }
 
+export interface ResetGitlabDemoResult {
+  demoUrl: string
+  demoId: number
+  archiveUrl: string
+  sourceSha: string
+}
+
 export const resetGitlabDemo = async (
   phaseId: string,
   request: ResetGitlabDemoRequest,
-): Promise<void> => {
-  await introCourseAxiosInstance.post(
+): Promise<ResetGitlabDemoResult> => {
+  const response = await introCourseAxiosInstance.post<ResetGitlabDemoResult>(
     `intro-course/api/course_phase/${phaseId}/infrastructure/gitlab/demo/reset`,
     request,
   )
+  return response.data
 }

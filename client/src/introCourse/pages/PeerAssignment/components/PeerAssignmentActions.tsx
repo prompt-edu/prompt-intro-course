@@ -72,7 +72,8 @@ export const PeerAssignmentActions = ({
       setSyncResults(results)
       setError(null)
     },
-    onError: () => setError('Could not check GitLab review access. Check the course GitLab setup.'),
+    onError: () =>
+      setError('Could not check or set up GitLab review access. Check the course GitLab setup.'),
   })
 
   const unsyncMutation = useMutation({
@@ -157,7 +158,7 @@ export const PeerAssignmentActions = ({
           ) : (
             <GitBranch className='h-4 w-4 mr-1' />
           )}
-          Check GitLab Review Access
+          Check / Set Up Legacy GitLab Review Access
         </Button>
         <Button
           onClick={() => unsyncMutation.mutate()}
@@ -184,8 +185,8 @@ export const PeerAssignmentActions = ({
         <Alert data-testid='peer-assignment-sync-results'>
           <AlertDescription>
             <p className='font-medium mb-1'>
-              GitLab access check complete: {syncResults.filter((r) => r.success).length}/
-              {syncResults.length} successful
+              GitLab review access check / setup complete:{' '}
+              {syncResults.filter((r) => r.success).length}/{syncResults.length} successful
             </p>
             {syncResults
               .filter((r) => !r.success)

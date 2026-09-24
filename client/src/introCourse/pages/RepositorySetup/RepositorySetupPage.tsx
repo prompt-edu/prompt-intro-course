@@ -21,9 +21,6 @@ import { resetGitlabDemo } from '../../network/mutations/resetGitlabDemo'
 import { getGitlabCourseSetup } from '../../network/queries/getGitlabCourseSetup'
 import { gitlabCourseGroup } from '../../utils/gitlabCourseGroup'
 
-// Keep reset in preview mode until the server's archive-and-recreate path is
-// deployed and verified against the live demo project.
-const demoResetEnabled = false
 const resetConfirmation = 'RESET DEMO'
 
 const errorMessage = (error: unknown): string => {
@@ -65,6 +62,7 @@ export const RepositorySetupPage = () => {
   )
   const queryClient = useQueryClient()
   const [notice, setNotice] = useState<string | null>(null)
+  const [archiveUrl, setArchiveUrl] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
   const [typedConfirmation, setTypedConfirmation] = useState('')
@@ -90,6 +88,7 @@ export const RepositorySetupPage = () => {
       })
       await queryClient.invalidateQueries({ queryKey })
       setNotice('Course infrastructure checked. Review the current status below.')
+      setArchiveUrl(null)
       setActionError(null)
     },
     onError: (error) => {
@@ -100,8 +99,8 @@ export const RepositorySetupPage = () => {
 
   const reset = useMutation({
     mutationFn: () => {
-      if (!demoResetEnabled || !data?.demoProject || !data.source) {
-        throw new Error('Demo reset is not available yet.')
+      if (!data?.demoProject || !data.source) {
+        throw new Error('Refresh the demo status before resetting it.')
       }
       return resetGitlabDemo(phaseId ?? '', {
         semesterTag,
@@ -109,11 +108,12 @@ export const RepositorySetupPage = () => {
         expectedSourceSHA: data.source.sha,
       })
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       setResetOpen(false)
       setTypedConfirmation('')
       await queryClient.invalidateQueries({ queryKey })
       setNotice('A new demo was created. Check its files, issues, access, and pipeline before use.')
+      setArchiveUrl(result.archiveUrl || null)
       setActionError(null)
     },
     onError: (error) => {
@@ -171,7 +171,25 @@ export const RepositorySetupPage = () => {
         </Button>
       </div>
 
-      {notice && <p className='rounded-md border border-green-300 p-3 text-sm'>{notice}</p>}
+      {notice && (
+        <p className='rounded-md border border-green-300 p-3 text-sm'>
+          {notice}
+          {archiveUrl && (
+            <>
+              {' '}
+              <a
+                className='text-primary underline underline-offset-2'
+                href={archiveUrl}
+                target='_blank'
+                rel='noopener noreferrer'
+              >
+                Open the previous demo archive
+              </a>
+              .
+            </>
+          )}
+        </p>
+      )}
       {actionError && (
         <p role='alert' className='rounded-md border border-red-300 p-3 text-sm text-red-700'>
           {actionError}
@@ -296,7 +314,7 @@ export const RepositorySetupPage = () => {
             onClick={() => setResetOpen(true)}
             disabled={!data?.demoProject}
           >
-            Preview demo reset
+            Reset demo...
           </Button>
           <DialogContent>
             <DialogHeader>
@@ -317,11 +335,6 @@ export const RepositorySetupPage = () => {
                 onChange={(event) => setTypedConfirmation(event.target.value)}
                 autoComplete='off'
               />
-              {!demoResetEnabled && (
-                <p className='text-sm text-muted-foreground'>
-                  Reset will become available after the server workflow is deployed and checked.
-                </p>
-              )}
             </div>
             <DialogFooter>
               <Button variant='outline' onClick={() => setResetOpen(false)}>
@@ -331,7 +344,6 @@ export const RepositorySetupPage = () => {
                 variant='destructive'
                 onClick={() => reset.mutate()}
                 disabled={
-                  !demoResetEnabled ||
                   typedConfirmation !== resetConfirmation ||
                   !data?.demoProject ||
                   !data?.source?.sha ||
@@ -339,7 +351,7 @@ export const RepositorySetupPage = () => {
                   setup.isPending
                 }
               >
-                {reset.isPending ? 'Resetting...' : 'Reset demo'}
+                {reset.isPending ? 'Resetting...' : 'Archive and recreate demo'}
               </Button>
             </DialogFooter>
           </DialogContent>
