@@ -708,13 +708,13 @@ func TestCreateOrGetProject(t *testing.T) {
 
 func TestCreateDemoProject(t *testing.T) {
 	var (
-		projectCreated     atomic.Bool
-		branchProtected    atomic.Bool
-		boardCreated       atomic.Bool
-		sharedWithGroup    atomic.Bool
-		dailyIssuesCreated atomic.Int32
-		commitBody         map[string]interface{}
-		createProjectBody  map[string]interface{}
+		projectCreated      atomic.Bool
+		branchProtected     atomic.Bool
+		boardCreated        atomic.Bool
+		approvalRuleCreated atomic.Bool
+		dailyIssuesCreated  atomic.Int32
+		commitBody          map[string]interface{}
+		createProjectBody   map[string]interface{}
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -808,11 +808,14 @@ func TestCreateDemoProject(t *testing.T) {
 			return
 		}
 
-		// ShareProjectWithGroup
-		if strings.HasSuffix(path, "/share") && r.Method == http.MethodPost {
-			sharedWithGroup.Store(true)
+		if path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode([]interface{}{})
+			return
+		}
+		if path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodPost {
+			approvalRuleCreated.Store(true)
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 1})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 1, "name": "Tutor Approval"})
 			return
 		}
 
@@ -852,7 +855,7 @@ func TestCreateDemoProject(t *testing.T) {
 	assert.True(t, projectCreated.Load(), "project should be created")
 	assert.True(t, branchProtected.Load(), "main branch should be protected")
 	// Issue board setup is no longer part of configureProject
-	assert.True(t, sharedWithGroup.Load(), "demo should be shared with tutors group")
+	assert.True(t, approvalRuleCreated.Load(), "demo should require tutor approval")
 
 	// Verify CI/CD config path points to shared repo
 	assert.Equal(t, ".gitlab-ci.yml@ase/ipraktikum/introcourse/ci-cd", createProjectBody["ci_config_path"])
@@ -1011,10 +1014,8 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			return
 		}
 
-		// ShareProjectWithGroup returns "already shared" (idempotent)
-		if strings.HasSuffix(path, "/share") && r.Method == http.MethodPost {
-			w.WriteHeader(http.StatusConflict)
-			_, _ = fmt.Fprint(w, `{"message":"already a member"}`)
+		if path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"id": 1, "name": "Tutor Approval", "approvals_required": 1}})
 			return
 		}
 

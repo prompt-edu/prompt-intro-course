@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 // SendEnsureCustomKeycloakGroup repairs a missing tutor group before assigning
@@ -23,7 +24,11 @@ func SendEnsureCustomKeycloakGroup(authHeader string, courseID uuid.UUID, groupN
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.WithError(closeErr).Warn("Failed to close Keycloak group response body")
+		}
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))

@@ -74,6 +74,11 @@ func CreateCourseInfrastructure(semesterTag string) error {
 	if err != nil {
 		return err
 	}
+	// Tutors need access to the demo and every future student subgroup, not only
+	// their own subgroup. Share the parent once so projects inherit that access.
+	if err = ensureTutorGroupAccess(git, introCourseGroup.ID, tutorsGroup.ID); err != nil {
+		return fmt.Errorf("share Introcourse group with tutors: %w", err)
+	}
 
 	// 6.) The shared CI config is required by every student project. Do not mark
 	// course setup complete if it is missing or could not be updated.
@@ -81,9 +86,9 @@ func CreateCourseInfrastructure(semesterTag string) error {
 		return fmt.Errorf("set up shared CI/CD project: %w", err)
 	}
 
-	// 7.) Create demo project for instructors (non-fatal: course setup can succeed without it)
+	// 7.) The demo is the course's reference project and setup smoke test.
 	if err = createDemoProject(git, introCourseGroup.ID, introCourseGroup.FullPath, tutorsGroup.ID); err != nil {
-		log.WithError(err).Error("Failed to create demo project (non-fatal)")
+		return fmt.Errorf("set up demo project: %w", err)
 	}
 
 	return nil
