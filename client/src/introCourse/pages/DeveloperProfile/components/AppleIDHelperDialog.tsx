@@ -58,8 +58,8 @@ export const AppleIDHelperDialog = () => {
               <li>Create your Apple Account and verify your email address and phone number.</li>
               <li>Enter that account&apos;s email address in your developer profile.</li>
               <li>
-                When the course invitation arrives, accept it before it expires. Sign in with the
-                same account in Xcode.
+                If the course sends you a team invitation, accept it within three days. Sign in with
+                the same account in Xcode.
               </li>
             </ol>
           </div>

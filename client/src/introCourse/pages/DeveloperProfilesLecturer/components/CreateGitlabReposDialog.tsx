@@ -208,6 +208,10 @@ export const CreateGitlabReposDialog = ({
               repositories.
             </p>
           )}
+          <p className='text-sm text-muted-foreground'>
+            Creating repositories does not invite students to the Apple team or register their
+            devices. Check Apple access and device capacity in Repository Setup separately.
+          </p>
           <label className='flex items-start gap-2 text-sm'>
             <input
               type='checkbox'
