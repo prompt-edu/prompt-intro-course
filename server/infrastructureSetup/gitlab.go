@@ -510,6 +510,14 @@ func studentBundleIdentifier(participationID uuid.UUID, introCourseGroupPath str
 	return "de.tum.cit.aet." + courseAppBundleNamespace(introCourseGroupPath) + ".s" + hex.EncodeToString(digest[:8]) + ".introcourseapp"
 }
 
+func demoTemplateVars(introCourseGroupPath string) templateVars {
+	return templateVars{
+		StudentName:        "Demo",
+		SubmissionDeadline: "See the course schedule in Outline",
+		BundleIdentifier:   "de.tum.cit.aet." + courseAppBundleNamespace(introCourseGroupPath) + ".demo.introcourseapp",
+	}
+}
+
 // GitLab project names must begin with a letter or digit and may only contain
 // letters, digits, spaces, hyphens, underscores, periods, and plus signs.
 func studentProjectDisplayName(studentName, login string) string {
@@ -1324,11 +1332,7 @@ func createDemoProjectWithMaterial(git *gitlab.Client, introCourseGroupID int64,
 	}
 
 	// Shared project setup (files, branch protection, board, approvals, issues)
-	err = configureProjectWithMaterial(git, project.ID, demoProjectName, templateVars{
-		StudentName:        "Demo",
-		SubmissionDeadline: "See the course schedule in Outline",
-		BundleIdentifier:   "de.tum.cit.aet." + courseAppBundleNamespace(introCourseGroupPath) + ".demo.introcourseapp",
-	}, material, 0)
+	err = configureProjectWithMaterial(git, project.ID, demoProjectName, demoTemplateVars(introCourseGroupPath), material, 0)
 	if err != nil {
 		return err
 	}

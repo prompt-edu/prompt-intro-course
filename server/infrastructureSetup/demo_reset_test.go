@@ -20,7 +20,7 @@ func TestDemoTemplateActionsReplaceOnlyChanges(t *testing.T) {
 		{Path: "README.md", Content: "For {{.StudentName}}\n"},
 		{Path: ".githooks/pre-commit", Content: "new", ExecuteFilemode: true},
 		{Path: "new.txt", Content: "add"},
-	})
+	}, demoTemplateVars("ase/ipraktikum/ios2627/Introcourse"))
 	require.NoError(t, err)
 	require.Len(t, actions, 3)
 	byPath := make(map[string]*gitlab.CommitActionOptions)
@@ -35,16 +35,26 @@ func TestDemoTemplateActionsReplaceOnlyChanges(t *testing.T) {
 }
 
 func TestDemoTemplateActionsRejectDuplicatePaths(t *testing.T) {
-	_, err := demoTemplateActions(nil, []templateFile{{Path: "README.md"}, {Path: "README.md"}})
+	_, err := demoTemplateActions(nil, []templateFile{{Path: "README.md"}, {Path: "README.md"}}, demoTemplateVars("ase/ipraktikum/ios2627/Introcourse"))
 	require.ErrorContains(t, err, "duplicate")
 }
 
 func TestDemoTemplateActionsAllowsUnchangedTemplate(t *testing.T) {
 	actions, err := demoTemplateActions(map[string]demoRootFile{
 		"README.md": {content: "For Demo\n"},
-	}, []templateFile{{Path: "README.md", Content: "For {{.StudentName}}\n"}})
+	}, []templateFile{{Path: "README.md", Content: "For {{.StudentName}}\n"}}, demoTemplateVars("ase/ipraktikum/ios2627/Introcourse"))
 	require.NoError(t, err)
 	require.Empty(t, actions)
+}
+
+func TestDemoResetKeepsCourseBundleIdentifier(t *testing.T) {
+	vars := demoTemplateVars("ase/ipraktikum/ios2627/Introcourse")
+	actions, err := demoTemplateActions(nil, []templateFile{{
+		Path: "project.yml", Content: "PRODUCT_BUNDLE_IDENTIFIER: {{.BundleIdentifier}}",
+	}}, vars)
+	require.NoError(t, err)
+	require.Len(t, actions, 1)
+	require.Equal(t, "PRODUCT_BUNDLE_IDENTIFIER: de.tum.cit.aet.ios2627.demo.introcourseapp", *actions[0].Content)
 }
 
 func TestResetDemoIssuesDoesNotTouchCleanDailyIssue(t *testing.T) {
