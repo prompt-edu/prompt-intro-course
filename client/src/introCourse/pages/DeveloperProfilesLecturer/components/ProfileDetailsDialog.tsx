@@ -78,10 +78,19 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
     retry: false,
   })
   const appleMutation = useMutation({
-    mutationFn: (action: AppleAction) =>
-      action === 'invite'
-        ? inviteToAppleTeam(phaseId, participationId)
-        : registerAppleDevice(phaseId, participationId, action),
+    mutationFn: (action: AppleAction) => {
+      const profile = participantWithProfile.devProfile
+      if (!profile) throw new Error('Save the developer profile first.')
+      if (action === 'invite') return inviteToAppleTeam(phaseId, participationId, profile.appleID)
+      const udid =
+        action === 'iphone'
+          ? profile.iPhoneUDID
+          : action === 'ipad'
+            ? profile.iPadUDID
+            : profile.appleWatchUDID
+      if (!udid) throw new Error('Save the device UDID first.')
+      return registerAppleDevice(phaseId, participationId, action, udid)
+    },
     onSuccess: () => {
       setAppleAction(null)
       setAppleActionError(null)

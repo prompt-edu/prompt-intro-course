@@ -53,7 +53,18 @@ func inviteAppleDeveloper(c *gin.Context) {
 	if !ok {
 		return
 	}
+	var request struct {
+		ExpectedEmail string `json:"expectedEmail" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Confirm the saved Apple Account email"})
+		return
+	}
 	email := strings.TrimSpace(profile.AppleID)
+	if !strings.EqualFold(email, strings.TrimSpace(request.ExpectedEmail)) {
+		c.JSON(http.StatusConflict, gin.H{"error": "The developer profile changed. Reopen it before inviting."})
+		return
+	}
 	parsed, err := mail.ParseAddress(email)
 	if email == "" || err != nil || parsed.Address != email {
 		c.JSON(http.StatusConflict, gin.H{"error": "Save a valid Apple Account email in the developer profile first"})
@@ -92,6 +103,17 @@ func registerAppleDevice(c *gin.Context) {
 		return
 	}
 	udid = strings.TrimSpace(udid)
+	var request struct {
+		ExpectedUDID string `json:"expectedUDID" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Confirm the saved device UDID"})
+		return
+	}
+	if !strings.EqualFold(udid, strings.TrimSpace(request.ExpectedUDID)) {
+		c.JSON(http.StatusConflict, gin.H{"error": "The developer profile changed. Reopen it before registering."})
+		return
+	}
 	if udid == "" {
 		c.JSON(http.StatusConflict, gin.H{"error": "Save this device UDID in the developer profile first"})
 		return
