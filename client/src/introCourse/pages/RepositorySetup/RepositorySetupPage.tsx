@@ -306,6 +306,18 @@ export const RepositorySetupPage = () => {
             label='Demo matches teaching material'
           />
         </ul>
+        <p className='text-sm'>
+          Team ID readiness does not check Apple device slots or student access.{' '}
+          <a
+            className='text-primary underline underline-offset-2'
+            href='https://github.com/prompt-edu/prompt-intro-course/actions/workflows/apple-device-capacity.yml'
+            target='_blank'
+            rel='noopener noreferrer'
+          >
+            Run the read-only Apple capacity check
+          </a>{' '}
+          before registering devices.
+        </p>
         <Dialog
           open={resetOpen}
           onOpenChange={(open) => {
