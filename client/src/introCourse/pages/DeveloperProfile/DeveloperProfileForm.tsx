@@ -92,16 +92,16 @@ export const DeveloperProfileForm = ({
       {status && <p className='text-muted-foreground mb-4'>{status}</p>}
       <Form {...form}>
         <form onSubmit={form.handleSubmit(handleSubmit)} className='space-y-8'>
-          {/* Apple ID Field */}
+          {/* Apple Account email for the course team invitation */}
           <FormField
             control={form.control}
             name='appleID'
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Apple ID</FormLabel>
+                <FormLabel>Apple Account email</FormLabel>
                 <FormDescription>
-                  Enter the email address associated with your Apple ID. If you do not have an Apple
-                  ID you MUST create one.
+                  Enter the email address of the Apple Account you will use in Xcode. We will send
+                  the course developer team invitation to this address.
                 </FormDescription>
                 <FormControl>
                   <div className='flex items-center space-x-2'>

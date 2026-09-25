@@ -163,7 +163,7 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
                 name='appleID'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Apple ID</FormLabel>
+                    <FormLabel>Apple Account email</FormLabel>
                     <FormDescription>
                       Leave empty if unconfirmed. The student can add or correct it in their own
                       profile.
