@@ -63,6 +63,14 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
   type AppleAction = 'invite' | 'iphone' | 'ipad' | 'watch'
   const [appleAction, setAppleAction] = useState<AppleAction | null>(null)
   const [appleActionError, setAppleActionError] = useState<string | null>(null)
+  const deviceToRegister =
+    appleAction === 'iphone'
+      ? { label: 'iPhone', udid: participantWithProfile.devProfile?.iPhoneUDID }
+      : appleAction === 'ipad'
+        ? { label: 'iPad', udid: participantWithProfile.devProfile?.iPadUDID }
+        : appleAction === 'watch'
+          ? { label: 'Apple Watch', udid: participantWithProfile.devProfile?.appleWatchUDID }
+          : null
   const { data: appleStatus, isError: appleStatusError } = useQuery({
     queryKey: ['apple-team-profile', phaseId, participationId],
     queryFn: () => getAppleProfileStatus(phaseId, participationId),
@@ -265,8 +273,8 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {appleAction === 'invite'
-                  ? 'Apple will email the address saved in this profile. The invitation grants Developer access with provisioning to the TUM Apple team.'
-                  : 'This uses a device registration slot on the TUM Apple team. Check the saved UDID before continuing.'}
+                  ? `Apple will email ${participantWithProfile.devProfile?.appleID}. The invitation grants Developer access with provisioning across the TUM Apple team.`
+                  : `Apple will register ${deviceToRegister?.label} UDID ${deviceToRegister?.udid}. This uses a team device slot.`}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
