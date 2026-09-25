@@ -62,24 +62,24 @@ func Configured() bool {
 
 func NewFromEnvironment() (*Client, error) {
 	if !Configured() {
-		return nil, errors.New("Apple team API credentials are not configured")
+		return nil, errors.New("apple team API credentials are not configured")
 	}
 	keyBytes, err := base64.StdEncoding.DecodeString(os.Getenv("APPLE_PRIVATE_KEY_B64"))
 	if err != nil {
-		return nil, errors.New("Apple team private key is not valid base64")
+		return nil, errors.New("apple team private key is not valid base64")
 	}
 	keyBytes = []byte(strings.ReplaceAll(string(keyBytes), `\n`, "\n"))
 	block, _ := pem.Decode(keyBytes)
 	if block == nil {
-		return nil, errors.New("Apple team private key is not valid PEM")
+		return nil, errors.New("apple team private key is not valid PEM")
 	}
 	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, errors.New("Apple team private key is not valid PKCS8")
+		return nil, errors.New("apple team private key is not valid PKCS8")
 	}
 	key, ok := parsed.(*ecdsa.PrivateKey)
 	if !ok {
-		return nil, errors.New("Apple team private key is not an EC key")
+		return nil, errors.New("apple team private key is not an EC key")
 	}
 	return &Client{
 		issuer: strings.TrimSpace(os.Getenv("APPLE_ISSUER_ID")), keyID: strings.TrimSpace(os.Getenv("APPLE_KEY_ID")), key: key,
@@ -110,7 +110,7 @@ func (c *Client) token() (string, error) {
 func (c *Client) page(ctx context.Context, path string) (*applePage, error) {
 	endpoint, err := url.Parse(path)
 	if err != nil || endpoint.Scheme != "https" || endpoint.Host != "api.appstoreconnect.apple.com" {
-		return nil, errors.New("Apple API returned an invalid page URL")
+		return nil, errors.New("apple API returned an invalid page URL")
 	}
 	token, err := c.token()
 	if err != nil {
@@ -125,13 +125,13 @@ func (c *Client) page(ctx context.Context, path string) (*applePage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("query Apple team API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Apple team API returned HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("apple team API returned HTTP %d", resp.StatusCode)
 	}
 	var result applePage
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&result); err != nil {
-		return nil, errors.New("Apple team API returned an invalid response")
+		return nil, errors.New("apple team API returned an invalid response")
 	}
 	return &result, nil
 }
