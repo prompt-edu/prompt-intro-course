@@ -100,8 +100,8 @@ export const DeveloperProfileForm = ({
               <FormItem>
                 <FormLabel>Apple Account email</FormLabel>
                 <FormDescription>
-                  Enter the email address of the Apple Account you will use in Xcode. We will send
-                  the course developer team invitation to this address.
+                  Enter the email address of the Apple Account you will use in Xcode. If you are
+                  invited to the course developer team, the invitation goes to this address.
                 </FormDescription>
                 <FormControl>
                   <div className='flex items-center space-x-2'>

@@ -18,6 +18,7 @@ import { useParams } from 'react-router-dom'
 import type { GitlabResource } from '../../interfaces/GitlabCourseSetupStatus'
 import { createIntroCourseGitlabInfrastructure } from '../../network/mutations/createIntroCourseGitlabInfrastructure'
 import { resetGitlabDemo } from '../../network/mutations/resetGitlabDemo'
+import { getAppleTeamCapacity } from '../../network/queries/getAppleTeamStatus'
 import { getGitlabCourseSetup } from '../../network/queries/getGitlabCourseSetup'
 import { gitlabCourseGroup } from '../../utils/gitlabCourseGroup'
 
@@ -71,6 +72,16 @@ export const RepositorySetupPage = () => {
     queryKey,
     queryFn: () => getGitlabCourseSetup(phaseId ?? '', semesterTag),
     enabled: Boolean(phaseId && semesterTag),
+  })
+  const {
+    data: appleCapacity,
+    isError: appleCapacityError,
+    refetch: refetchAppleCapacity,
+  } = useQuery({
+    queryKey: ['apple-team-capacity', phaseId],
+    queryFn: () => getAppleTeamCapacity(phaseId ?? ''),
+    enabled: Boolean(phaseId),
+    retry: false,
   })
 
   const { mutate: markInfrastructureSetup } = useModifyCoursePhase(
@@ -162,7 +173,14 @@ export const RepositorySetupPage = () => {
             initializing student repositories.
           </p>
         </div>
-        <Button variant='outline' onClick={() => refetch()} disabled={isFetching}>
+        <Button
+          variant='outline'
+          onClick={() => {
+            refetch()
+            refetchAppleCapacity()
+          }}
+          disabled={isFetching}
+        >
           {isFetching ? (
             <Loader2 className='mr-2 h-4 w-4 animate-spin' />
           ) : (
@@ -307,16 +325,11 @@ export const RepositorySetupPage = () => {
           />
         </ul>
         <p className='text-sm'>
-          Team ID readiness does not check Apple device slots or student access.{' '}
-          <a
-            className='text-primary underline underline-offset-2'
-            href='https://github.com/prompt-edu/prompt-intro-course/actions/workflows/apple-device-capacity.yml'
-            target='_blank'
-            rel='noopener noreferrer'
-          >
-            Run the read-only Apple capacity check
-          </a>{' '}
-          before registering devices.
+          {appleCapacity
+            ? `Apple team iPhone slots: ${appleCapacity.availableIPhones} available (${appleCapacity.registeredIPhones} of ${appleCapacity.limit} registered). Disabled devices still count until Apple's membership-year reset.`
+            : appleCapacityError
+              ? 'Apple team device capacity could not be checked. Check the Apple API connection before registering devices.'
+              : 'Checking Apple team device capacity...'}
         </p>
         <Dialog
           open={resetOpen}
