@@ -142,7 +142,7 @@ func applyTemplateVars(content string, vars templateVars) string {
 	if bundleIdentifier == "" {
 		// The instructor demo uses one stable identifier. Student repositories
 		// always supply an identifier derived from their participation ID.
-		bundleIdentifier = "de.tum.cit.ase.introcourse.demo"
+		bundleIdentifier = "de.tum.cit.aet.introcourse.demo"
 	}
 	developmentTeam := vars.DevelopmentTeam
 	if developmentTeam == "" {

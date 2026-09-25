@@ -284,7 +284,7 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 	if !workItemsClean {
 		issue("Demo work items have been changed; reset it to restore Open status before student initialization.")
 	}
-	current, compareErr := demoMatchesSource(git, svc.teachingMaterialProjectID, status.Source.SHA, demo.ID, issues, status.CIProject)
+	current, compareErr := demoMatchesSource(git, svc.teachingMaterialProjectID, status.Source.SHA, demo.ID, issues, status.CIProject, semesterTag)
 	if compareErr != nil {
 		return nil, compareErr
 	}
@@ -296,7 +296,7 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 	return status, nil
 }
 
-func demoMatchesSource(git *gitlab.Client, sourceProjectID, sourceSHA string, demoID int64, demoIssues []*gitlab.Issue, ci *repositoryLink) (bool, error) {
+func demoMatchesSource(git *gitlab.Client, sourceProjectID, sourceSHA string, demoID int64, demoIssues []*gitlab.Issue, ci *repositoryLink, semesterTag string) (bool, error) {
 	templates, err := fetchTemplateFilesAtRef(git, sourceProjectID, sourceSHA)
 	if err != nil {
 		return false, err
@@ -327,7 +327,7 @@ func demoMatchesSource(git *gitlab.Client, sourceProjectID, sourceSHA string, de
 			return false, nil
 		}
 		actual, _, readErr := git.RepositoryFiles.GetRawFile(demoID, file.Path, &gitlab.GetRawFileOptions{Ref: gitlab.Ptr("main")})
-		if readErr != nil || string(actual) != applyTemplateVars(file.Content, templateVars{StudentName: "Demo", SubmissionDeadline: "See the course schedule in Outline"}) {
+		if readErr != nil || string(actual) != applyTemplateVars(file.Content, templateVars{StudentName: "Demo", SubmissionDeadline: "See the course schedule in Outline", BundleIdentifier: "de.tum.cit.aet." + strings.ToLower(semesterTag) + ".demo.introcourseapp"}) {
 			return false, nil
 		}
 	}

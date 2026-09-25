@@ -37,10 +37,11 @@ func TestStudentProjectDisplayName(t *testing.T) {
 func TestStudentBundleIdentifier(t *testing.T) {
 	first := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 	second := uuid.MustParse("22222222-2222-4222-8222-222222222222")
-	identifier := studentBundleIdentifier(first)
-	assert.Equal(t, identifier, studentBundleIdentifier(first))
-	assert.NotEqual(t, identifier, studentBundleIdentifier(second))
-	assert.Regexp(t, `^de\.tum\.cit\.ase\.introcourse\.s[0-9a-f]{16}$`, identifier)
+	const coursePath = "ase/ipraktikum/ios2627/Introcourse"
+	identifier := studentBundleIdentifier(first, coursePath)
+	assert.Equal(t, identifier, studentBundleIdentifier(first, coursePath))
+	assert.NotEqual(t, identifier, studentBundleIdentifier(second, coursePath))
+	assert.Regexp(t, `^de\.tum\.cit\.aet\.ios2627\.s[0-9a-f]{16}\.introcourseapp$`, identifier)
 	assert.NotContains(t, identifier, first.String())
 }
 
@@ -70,8 +71,8 @@ func TestApplyTemplateVars(t *testing.T) {
 		{
 			name:     "sets the assigned app identifier",
 			content:  "PRODUCT_BUNDLE_IDENTIFIER: {{.BundleIdentifier}}",
-			vars:     templateVars{BundleIdentifier: "de.tum.cit.ase.introcourse.s1234567890abcdef"},
-			expected: "PRODUCT_BUNDLE_IDENTIFIER: de.tum.cit.ase.introcourse.s1234567890abcdef",
+			vars:     templateVars{BundleIdentifier: "de.tum.cit.aet.ios2627.s1234567890abcdef.introcourseapp"},
+			expected: "PRODUCT_BUNDLE_IDENTIFIER: de.tum.cit.aet.ios2627.s1234567890abcdef.introcourseapp",
 		},
 		{
 			name:     "sets the signing team",

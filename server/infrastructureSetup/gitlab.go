@@ -500,9 +500,14 @@ type StudentProjectParams struct {
 
 // Keep the App ID stable across project renames and setup retries without
 // publishing a student's name, university login, or participation ID in it.
-func studentBundleIdentifier(participationID uuid.UUID) string {
+func courseAppBundleNamespace(introCourseGroupPath string) string {
+	// The parent of Introcourse is the semester group, for example ios2627.
+	return strings.ToLower(path.Base(path.Dir(introCourseGroupPath)))
+}
+
+func studentBundleIdentifier(participationID uuid.UUID, introCourseGroupPath string) string {
 	digest := sha256.Sum256(participationID[:])
-	return "de.tum.cit.ase.introcourse.s" + hex.EncodeToString(digest[:8])
+	return "de.tum.cit.aet." + courseAppBundleNamespace(introCourseGroupPath) + ".s" + hex.EncodeToString(digest[:8]) + ".introcourseapp"
 }
 
 // GitLab project names must begin with a letter or digit and may only contain
@@ -559,7 +564,7 @@ func createStudentProjectWithMaterial(p StudentProjectParams, material *material
 	err = configureProjectWithMaterial(git, project.ID, p.RepoName, templateVars{
 		StudentName:        p.StudentName,
 		SubmissionDeadline: p.SubmissionDeadline,
-		BundleIdentifier:   studentBundleIdentifier(p.CourseParticipationID),
+		BundleIdentifier:   studentBundleIdentifier(p.CourseParticipationID, p.IntroCourseGroupPath),
 		DevelopmentTeam:    p.DevelopmentTeam,
 	}, material, 0)
 	if err != nil {
@@ -1322,6 +1327,7 @@ func createDemoProjectWithMaterial(git *gitlab.Client, introCourseGroupID int64,
 	err = configureProjectWithMaterial(git, project.ID, demoProjectName, templateVars{
 		StudentName:        "Demo",
 		SubmissionDeadline: "See the course schedule in Outline",
+		BundleIdentifier:   "de.tum.cit.aet." + courseAppBundleNamespace(introCourseGroupPath) + ".demo.introcourseapp",
 	}, material, 0)
 	if err != nil {
 		return err
