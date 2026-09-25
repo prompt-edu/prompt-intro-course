@@ -1299,8 +1299,15 @@ func createDemoProjectWithMaterial(git *gitlab.Client, introCourseGroupID int64,
 	const demoProjectName = "demo"
 	ciCDRepoPath := introCourseGroupPath + "/ci-cd"
 
-	project, err := createOrGetProject(git, newCourseProjectOptions(demoProjectName, demoProjectName, introCourseGroupID, ciCDRepoPath), introCourseGroupPath)
+	options := newCourseProjectOptions(demoProjectName, demoProjectName, introCourseGroupID, ciCDRepoPath)
+	// The demo is repeatedly reset for teaching-material checks. Do not email
+	// every inherited course member when GitLab moves an older demo snapshot.
+	options.EmailsEnabled = gitlab.Ptr(false)
+	project, err := createOrGetProject(git, options, introCourseGroupPath)
 	if err != nil {
+		return err
+	}
+	if err := ensureDemoEmailNotificationsDisabled(git, project); err != nil {
 		return err
 	}
 
@@ -1330,5 +1337,22 @@ func createDemoProjectWithMaterial(git *gitlab.Client, introCourseGroupID int64,
 		return err
 	}
 
+	return nil
+}
+
+func ensureDemoEmailNotificationsDisabled(git *gitlab.Client, project *gitlab.Project) error {
+	if project == nil {
+		return fmt.Errorf("demo project is missing")
+	}
+	if !project.EmailsEnabled {
+		return nil
+	}
+	updated, _, err := git.Projects.EditProject(project.ID, &gitlab.EditProjectOptions{EmailsEnabled: gitlab.Ptr(false)})
+	if err != nil {
+		return fmt.Errorf("disable demo project emails: %w", err)
+	}
+	if updated.EmailsEnabled {
+		return fmt.Errorf("GitLab did not disable demo project emails")
+	}
 	return nil
 }

@@ -114,6 +114,9 @@ func ResetDemo(ctx context.Context, coursePhaseID uuid.UUID, request resetDemoRe
 	if oldProject.Path != "demo" || oldProject.PathWithNamespace != introPath+"/demo" || !strings.HasSuffix(oldProject.PathWithNamespace, "/Introcourse/demo") {
 		return nil, fmt.Errorf("the expected project is no longer the active demo")
 	}
+	if err := ensureDemoEmailNotificationsDisabled(git, oldProject); err != nil {
+		return nil, err
+	}
 	archiveGroup, err := createTeachingGroup(status.Groups["introCourse"].ID, "demo-archives")
 	if err != nil {
 		return nil, fmt.Errorf("prepare demo archive group: %w", err)

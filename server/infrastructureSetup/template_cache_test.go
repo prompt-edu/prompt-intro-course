@@ -912,6 +912,7 @@ func TestCreateDemoProject(t *testing.T) {
 
 	// Verify CI/CD config path points to shared repo
 	assert.Equal(t, ".gitlab-ci.yml@ase/ipraktikum/introcourse/ci-cd", createProjectBody["ci_config_path"])
+	assert.Equal(t, false, createProjectBody["emails_enabled"], "demo notifications should start disabled")
 
 	// Verify commit payload: template vars substituted correctly
 	require.NotNil(t, commitBody, "commit should have been created")
@@ -929,6 +930,23 @@ func TestCreateDemoProject(t *testing.T) {
 
 	// Verify daily issues were created
 	assert.Equal(t, int32(1), dailyIssuesCreated.Load(), "should create 1 daily issue")
+}
+
+func TestDisableExistingDemoEmailNotifications(t *testing.T) {
+	var edited map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/api/v4/projects/300" {
+			http.NotFound(w, r)
+			return
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&edited))
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": 300, "emails_enabled": false})
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	require.NoError(t, ensureDemoEmailNotificationsDisabled(client, &gitlab.Project{ID: 300, EmailsEnabled: true}))
+	assert.Equal(t, false, edited["emails_enabled"])
 }
 
 func TestFetchTemplateFilesPartialFailure(t *testing.T) {
