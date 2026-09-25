@@ -162,7 +162,7 @@ func (c *Client) create(ctx context.Context, resource string, attributes any) er
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("Apple team API rejected %s with HTTP %d", resource, resp.StatusCode)
+		return fmt.Errorf("apple team API rejected %s with HTTP %d", resource, resp.StatusCode)
 	}
 	return nil
 }
