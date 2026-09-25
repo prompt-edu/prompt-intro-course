@@ -49,13 +49,13 @@ func TestAppleTeamTokenAndCapacity(t *testing.T) {
 		if !ecdsa.Verify(&key.PublicKey, hash[:], new(big.Int).SetBytes(signature[:32]), new(big.Int).SetBytes(signature[32:])) {
 			t.Fatal("Apple API signature did not verify")
 		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"attributes":{"deviceClass":"IPHONE","status":"ENABLED"}},{"attributes":{"deviceClass":"IPHONE","status":"DISABLED"}},{"attributes":{"deviceClass":"IPAD","status":"ENABLED"}}],"links":{"next":""}}`))}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"attributes":{"deviceClass":"IPHONE","status":"ENABLED"}},{"attributes":{"deviceClass":"IPHONE","status":"DISABLED"}},{"attributes":{"deviceClass":"IPAD","status":"ENABLED"}},{"attributes":{"deviceClass":"APPLE_WATCH","status":"ENABLED"}}],"links":{"next":""}}`))}, nil
 	})}
 	capacity, err := client.Capacity(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if capacity.RegisteredIPhones != 2 || capacity.AvailableIPhones != 98 {
+	if capacity.RegisteredIPhones != 2 || capacity.AvailableIPhones != 98 || capacity.AvailableIPads != 99 || capacity.AvailableWatches != 99 {
 		t.Fatalf("incorrect capacity: %+v", capacity)
 	}
 }

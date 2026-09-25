@@ -31,6 +31,10 @@ type Client struct {
 type Capacity struct {
 	RegisteredIPhones int `json:"registeredIPhones"`
 	AvailableIPhones  int `json:"availableIPhones"`
+	RegisteredIPads   int `json:"registeredIPads"`
+	AvailableIPads    int `json:"availableIPads"`
+	RegisteredWatches int `json:"registeredWatches"`
+	AvailableWatches  int `json:"availableWatches"`
 	Limit             int `json:"limit"`
 }
 
@@ -146,13 +150,20 @@ func (c *Client) Capacity(ctx context.Context) (Capacity, error) {
 		}
 		for _, device := range page.Data {
 			// Disabled devices still consume a slot until the membership-year reset.
-			if device.Attributes.DeviceClass == "IPHONE" {
+			switch device.Attributes.DeviceClass {
+			case "IPHONE":
 				result.RegisteredIPhones++
+			case "IPAD":
+				result.RegisteredIPads++
+			case "APPLE_WATCH":
+				result.RegisteredWatches++
 			}
 		}
 		path = page.Links.Next
 	}
 	result.AvailableIPhones = max(0, result.Limit-result.RegisteredIPhones)
+	result.AvailableIPads = max(0, result.Limit-result.RegisteredIPads)
+	result.AvailableWatches = max(0, result.Limit-result.RegisteredWatches)
 	return result, nil
 }
 

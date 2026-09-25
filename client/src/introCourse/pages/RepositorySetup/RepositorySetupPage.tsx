@@ -326,7 +326,7 @@ export const RepositorySetupPage = () => {
         </ul>
         <p className='text-sm'>
           {appleCapacity
-            ? `Apple team iPhone slots: ${appleCapacity.availableIPhones} available (${appleCapacity.registeredIPhones} of ${appleCapacity.limit} registered). Disabled devices still count until Apple's membership-year reset.`
+            ? `Apple team device slots available: ${appleCapacity.availableIPhones} iPhone, ${appleCapacity.availableIPads} iPad, ${appleCapacity.availableWatches} Apple Watch (limit ${appleCapacity.limit} per family). Disabled devices still count until Apple's membership-year reset.`
             : appleCapacityError
               ? 'Apple team device capacity could not be checked. Check the Apple API connection before registering devices.'
               : 'Checking Apple team device capacity...'}

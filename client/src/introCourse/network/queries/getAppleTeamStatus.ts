@@ -3,6 +3,10 @@ import { introCourseAxiosInstance } from '../introCourseServerConfig'
 export interface AppleTeamCapacity {
   registeredIPhones: number
   availableIPhones: number
+  registeredIPads: number
+  availableIPads: number
+  registeredWatches: number
+  availableWatches: number
   limit: number
 }
 
