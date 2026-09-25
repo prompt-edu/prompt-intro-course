@@ -331,6 +331,11 @@ export const RepositorySetupPage = () => {
               ? 'Apple team device capacity could not be checked. Check the Apple API connection before registering devices.'
               : 'Checking Apple team device capacity...'}
         </p>
+        <p className='text-sm text-muted-foreground'>
+          Student team invitations are separate from repository setup. Apple provisioning access
+          also exposes information about the team’s other apps, so decide who needs it before
+          inviting students.
+        </p>
         <Dialog
           open={resetOpen}
           onOpenChange={(open) => {

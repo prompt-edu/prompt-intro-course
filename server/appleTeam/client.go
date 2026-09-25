@@ -57,7 +57,7 @@ type applePage struct {
 }
 
 func Configured() bool {
-	return os.Getenv("APPLE_ISSUER_ID") != "" && os.Getenv("APPLE_KEY_ID") != "" && os.Getenv("APPLE_PRIVATE_KEY_B64") != ""
+	return strings.TrimSpace(os.Getenv("APPLE_ISSUER_ID")) != "" && strings.TrimSpace(os.Getenv("APPLE_KEY_ID")) != "" && os.Getenv("APPLE_PRIVATE_KEY_B64") != ""
 }
 
 func NewFromEnvironment() (*Client, error) {
@@ -82,7 +82,7 @@ func NewFromEnvironment() (*Client, error) {
 		return nil, errors.New("Apple team private key is not an EC key")
 	}
 	return &Client{
-		issuer: os.Getenv("APPLE_ISSUER_ID"), keyID: os.Getenv("APPLE_KEY_ID"), key: key,
+		issuer: strings.TrimSpace(os.Getenv("APPLE_ISSUER_ID")), keyID: strings.TrimSpace(os.Getenv("APPLE_KEY_ID")), key: key,
 		http: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}},
