@@ -1,6 +1,7 @@
 package appleTeam
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
@@ -138,6 +139,89 @@ func (c *Client) page(ctx context.Context, path string) (*applePage, error) {
 		return nil, errors.New("apple team API returned an invalid response")
 	}
 	return &result, nil
+}
+
+func (c *Client) create(ctx context.Context, resource string, attributes any) error {
+	token, err := c.token()
+	if err != nil {
+		return err
+	}
+	body, err := json.Marshal(map[string]any{"data": map[string]any{"type": resource, "attributes": attributes}})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiBase+"/v1/"+resource, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("contact Apple team API: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("Apple team API rejected %s with HTTP %d", resource, resp.StatusCode)
+	}
+	return nil
+}
+
+// InviteDeveloper grants provisioning access. A pending or active invitation is
+// left alone so a retry never sends a second email.
+func (c *Client) InviteDeveloper(ctx context.Context, email, firstName, lastName string) (bool, error) {
+	status, err := c.ProfileStatus(ctx, email, nil)
+	if err != nil {
+		return false, err
+	}
+	if status.Membership != "none" {
+		if !status.ProvisioningAllowed {
+			return false, errors.New("existing Apple team access lacks provisioning; update that membership in App Store Connect")
+		}
+		return false, nil
+	}
+	if err := c.create(ctx, "userInvitations", map[string]any{
+		"email": email, "firstName": firstName, "lastName": lastName,
+		"roles": []string{"DEVELOPER"}, "provisioningAllowed": true,
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// RegisterDevice is idempotent for an enabled UDID. Apple does not restore a
+// disabled device through this endpoint; the lecturer must resolve that case.
+func (c *Client) RegisterDevice(ctx context.Context, udid, name, kind string) (bool, error) {
+	matches, err := c.lookup(ctx, "devices", "udid", udid, "udid,status")
+	if err != nil {
+		return false, err
+	}
+	for _, device := range matches.Data {
+		if strings.EqualFold(device.Attributes.UDID, udid) {
+			if device.Attributes.Status == "ENABLED" {
+				return false, nil
+			}
+			return false, errors.New("this device is disabled in Apple Developer; resolve it there")
+		}
+	}
+	capacity, err := c.Capacity(ctx)
+	if err != nil {
+		return false, err
+	}
+	available := map[string]int{
+		"iphone": capacity.AvailableIPhones,
+		"ipad":   capacity.AvailableIPads,
+		"watch":  capacity.AvailableWatches,
+	}[kind]
+	if available < 1 {
+		return false, fmt.Errorf("no Apple %s registration slots remain", kind)
+	}
+	if err := c.create(ctx, "devices", map[string]any{
+		"name": name, "platform": "IOS", "udid": udid,
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (c *Client) Capacity(ctx context.Context) (Capacity, error) {
