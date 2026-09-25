@@ -35,6 +35,8 @@ func setupInfrastructureRouter(router *gin.RouterGroup, authMiddleware func(allo
 	infrastructureRouter.GET("/apple/status", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), getAppleTeamStatus)
 	infrastructureRouter.GET("/apple/self", authMiddleware(promptSDK.CourseStudent), getOwnAppleTeamStatus)
 	infrastructureRouter.GET("/apple/profile/:courseParticipationID", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), getAppleProfileStatus)
+	infrastructureRouter.POST("/apple/profile/:courseParticipationID/invitation", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), inviteAppleDeveloper)
+	infrastructureRouter.POST("/apple/profile/:courseParticipationID/devices/:kind", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), registerAppleDevice)
 
 	// Route for manually overwriting the status (i.e. if instructor manually created or fixed the repo)
 	infrastructureRouter.PUT("/gitlab/student-setup/:courseParticipationID/manual", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), manuallyOverwriteStudentGitlabStatus)

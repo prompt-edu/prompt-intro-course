@@ -332,9 +332,9 @@ export const RepositorySetupPage = () => {
               : 'Checking Apple team device capacity...'}
         </p>
         <p className='text-sm text-muted-foreground'>
-          Student team invitations are separate from repository setup. Apple provisioning access
-          also exposes information about the team’s other apps, so decide who needs it before
-          inviting students.
+          In Developer Profiles, review each saved Apple Account email and device UDID before
+          inviting or registering them. These actions are separate from GitLab repository setup.
+          Apple provisioning access also exposes information about the team’s other apps.
         </p>
         <Dialog
           open={resetOpen}

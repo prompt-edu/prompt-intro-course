@@ -92,3 +92,92 @@ func TestProfileStatusChecksOnlyRequestedAccountAndDevice(t *testing.T) {
 		t.Fatalf("incorrect Apple profile status: %+v", status)
 	}
 }
+
+func TestInviteDeveloperUsesSavedIdentityAndProvisioning(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &Client{issuer: "issuer", keyID: "KEY1234567", key: key}
+	posts := 0
+	client.http = &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Path {
+		case "/v1/users", "/v1/userInvitations":
+			if req.Method == http.MethodGet {
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[]}`))}, nil
+			}
+			posts++
+			var request struct {
+				Data struct {
+					Type       string `json:"type"`
+					Attributes struct {
+						Email               string   `json:"email"`
+						FirstName           string   `json:"firstName"`
+						LastName            string   `json:"lastName"`
+						Roles               []string `json:"roles"`
+						ProvisioningAllowed bool     `json:"provisioningAllowed"`
+					} `json:"attributes"`
+				} `json:"data"`
+			}
+			if err := json.NewDecoder(req.Body).Decode(&request); err != nil {
+				t.Fatal(err)
+			}
+			if request.Data.Type != "userInvitations" || request.Data.Attributes.Email != "student@example.edu" ||
+				request.Data.Attributes.FirstName != "First" || request.Data.Attributes.LastName != "Last" ||
+				len(request.Data.Attributes.Roles) != 1 || request.Data.Attributes.Roles[0] != "DEVELOPER" ||
+				!request.Data.Attributes.ProvisioningAllowed {
+				t.Fatalf("incorrect invitation request: %+v", request)
+			}
+			return &http.Response{StatusCode: http.StatusCreated, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+		}
+		t.Fatalf("unexpected path: %s", req.URL.Path)
+		return nil, nil
+	})}
+	created, err := client.InviteDeveloper(context.Background(), "student@example.edu", "First", "Last")
+	if err != nil || !created || posts != 1 {
+		t.Fatalf("invitation failed: created=%v posts=%d err=%v", created, posts, err)
+	}
+}
+
+func TestRegisterDeviceChecksCapacityBeforeWriting(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &Client{issuer: "issuer", keyID: "KEY1234567", key: key}
+	posts := 0
+	client.http = &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path != "/v1/devices" {
+			t.Fatalf("unexpected path: %s", req.URL.Path)
+		}
+		if req.Method == http.MethodPost {
+			posts++
+			var request struct {
+				Data struct {
+					Type       string `json:"type"`
+					Attributes struct {
+						Name     string `json:"name"`
+						Platform string `json:"platform"`
+						UDID     string `json:"udid"`
+					} `json:"attributes"`
+				} `json:"data"`
+			}
+			if err := json.NewDecoder(req.Body).Decode(&request); err != nil {
+				t.Fatal(err)
+			}
+			if request.Data.Type != "devices" || request.Data.Attributes.Name != "Intro Course Device" ||
+				request.Data.Attributes.Platform != "IOS" || request.Data.Attributes.UDID != "TEST-UDID" {
+				t.Fatalf("incorrect device request: %+v", request)
+			}
+			return &http.Response{StatusCode: http.StatusCreated, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+		}
+		if req.URL.Query().Has("filter[udid]") {
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[]}`))}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[],"links":{"next":""}}`))}, nil
+	})}
+	created, err := client.RegisterDevice(context.Background(), "TEST-UDID", "Intro Course Device", "iphone")
+	if err != nil || !created || posts != 1 {
+		t.Fatalf("registration failed: created=%v posts=%d err=%v", created, posts, err)
+	}
+}

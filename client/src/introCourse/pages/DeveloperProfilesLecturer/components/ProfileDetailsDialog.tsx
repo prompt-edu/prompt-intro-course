@@ -1,6 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Button,
   Checkbox,
   Dialog,
@@ -19,6 +27,7 @@ import {
   Input,
   Separator,
 } from '@tumaet/prompt-ui-components'
+import { isAxiosError } from 'axios'
 import { AlertTriangle, CheckCircle, Laptop, Smartphone, Tablet, Watch } from 'lucide-react'
 import type React from 'react'
 import { useState } from 'react'
@@ -26,6 +35,7 @@ import { useForm } from 'react-hook-form'
 import { GitLabUsernameCheckMessage } from '../../../components/GitLabUsernameCheckMessage'
 import { useGitLabUsernameCheck } from '../../../hooks/useGitLabUsernameCheck'
 import type { PostDeveloperProfile } from '../../../interfaces/PostDeveloperProfile'
+import { inviteToAppleTeam, registerAppleDevice } from '../../../network/mutations/onboardAppleTeam'
 import { updateDeveloperProfile } from '../../../network/mutations/updateDeveloperProfile'
 import { updateGitLabStatusCreated } from '../../../network/mutations/updateGitlabStatus'
 import { getAppleProfileStatus } from '../../../network/queries/getAppleTeamStatus'
@@ -50,11 +60,51 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
 }) => {
   const queryClient = useQueryClient()
   const participationId = participantWithProfile.participation.courseParticipationID
+  type AppleAction = 'invite' | 'iphone' | 'ipad' | 'watch'
+  const [appleAction, setAppleAction] = useState<AppleAction | null>(null)
+  const [appleActionError, setAppleActionError] = useState<string | null>(null)
+  const deviceToRegister =
+    appleAction === 'iphone'
+      ? { label: 'iPhone', udid: participantWithProfile.devProfile?.iPhoneUDID }
+      : appleAction === 'ipad'
+        ? { label: 'iPad', udid: participantWithProfile.devProfile?.iPadUDID }
+        : appleAction === 'watch'
+          ? { label: 'Apple Watch', udid: participantWithProfile.devProfile?.appleWatchUDID }
+          : null
   const { data: appleStatus, isError: appleStatusError } = useQuery({
     queryKey: ['apple-team-profile', phaseId, participationId],
     queryFn: () => getAppleProfileStatus(phaseId, participationId),
-    enabled: Boolean(participantWithProfile.devProfile?.appleID),
+    enabled: Boolean(participantWithProfile.devProfile),
     retry: false,
+  })
+  const appleMutation = useMutation({
+    mutationFn: (action: AppleAction) => {
+      const profile = participantWithProfile.devProfile
+      if (!profile) throw new Error('Save the developer profile first.')
+      if (action === 'invite') return inviteToAppleTeam(phaseId, participationId, profile.appleID)
+      const udid =
+        action === 'iphone'
+          ? profile.iPhoneUDID
+          : action === 'ipad'
+            ? profile.iPadUDID
+            : profile.appleWatchUDID
+      if (!udid) throw new Error('Save the device UDID first.')
+      return registerAppleDevice(phaseId, participationId, action, udid)
+    },
+    onSuccess: () => {
+      setAppleAction(null)
+      setAppleActionError(null)
+      queryClient.invalidateQueries({ queryKey: ['apple-team-profile', phaseId, participationId] })
+      queryClient.invalidateQueries({ queryKey: ['apple-team-capacity', phaseId] })
+    },
+    onError: (error: unknown) => {
+      const message =
+        isAxiosError(error) && typeof error.response?.data?.error === 'string'
+          ? error.response.data.error
+          : 'Apple onboarding failed. Check the team connection and try again.'
+      setAppleActionError(message)
+      setAppleAction(null)
+    },
   })
   const gitLabCheck = useGitLabUsernameCheck(phaseId)
   const form = useForm<InstructorDeveloperFormValues>({
@@ -158,7 +208,7 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
 
-        {participantWithProfile.devProfile?.appleID && (
+        {participantWithProfile.devProfile && (
           <div className='rounded-md border p-3 text-sm'>
             <strong>Apple team</strong>
             <p>
@@ -180,8 +230,75 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
                   {device}: {registered ? 'registered' : 'not registered'}
                 </p>
               ))}
+            {appleStatus && (
+              <div className='mt-3 flex flex-wrap gap-2'>
+                {appleStatus.membership === 'none' && participantWithProfile.devProfile.appleID && (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    onClick={() => setAppleAction('invite')}
+                  >
+                    Invite to Apple team
+                  </Button>
+                )}
+                {(
+                  [
+                    ['iphone', 'iPhone', participantWithProfile.devProfile.iPhoneUDID],
+                    ['ipad', 'iPad', participantWithProfile.devProfile.iPadUDID],
+                    ['watch', 'Apple Watch', participantWithProfile.devProfile.appleWatchUDID],
+                  ] as const
+                ).map(([kind, label, udid]) =>
+                  udid && !appleStatus.devices[label] ? (
+                    <Button
+                      key={kind}
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      onClick={() => setAppleAction(kind)}
+                    >
+                      Register {label}
+                    </Button>
+                  ) : null,
+                )}
+              </div>
+            )}
+            {appleActionError && <p className='mt-2 text-destructive'>{appleActionError}</p>}
           </div>
         )}
+
+        <AlertDialog
+          open={appleAction !== null}
+          onOpenChange={(open) => {
+            if (!open) setAppleAction(null)
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {appleAction === 'invite'
+                  ? 'Send Apple team invitation?'
+                  : 'Register this device with Apple?'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {appleAction === 'invite'
+                  ? `Apple will email ${participantWithProfile.devProfile?.appleID}. The invitation grants Developer access with provisioning across the TUM Apple team.`
+                  : `Apple will register ${deviceToRegister?.label} UDID ${deviceToRegister?.udid}. This uses a team device slot.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={appleMutation.isPending}
+                onClick={() => {
+                  if (appleAction) appleMutation.mutate(appleAction)
+                }}
+              >
+                {appleAction === 'invite' ? 'Send invitation' : 'Register device'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {form.formState.errors.root && (
           <div className='mb-4 rounded bg-red-100 p-2 text-red-700'>
