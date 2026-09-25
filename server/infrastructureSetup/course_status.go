@@ -32,6 +32,7 @@ type repositoryChecks struct {
 	TutorsReady     bool `json:"tutorsReady"`
 	DemoReady       bool `json:"demoReady"`
 	MaterialCurrent bool `json:"materialCurrent"`
+	SigningReady    bool `json:"signingReady"`
 }
 
 type courseInfrastructureStatus struct {
@@ -63,6 +64,8 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 		Groups:      map[string]*repositoryLink{"course": nil, "tutors": nil, "introCourse": nil},
 		Issues:      []string{},
 	}
+	_, signingErr := developmentTeamID()
+	status.Checks.SigningReady = signingErr == nil
 	issue := func(message string) { status.Issues = append(status.Issues, message) }
 	svc := InfrastructureServiceSingleton
 	if svc.teachingMaterialProjectID == "" {

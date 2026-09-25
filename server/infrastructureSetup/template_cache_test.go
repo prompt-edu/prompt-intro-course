@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -33,6 +34,32 @@ func TestStudentProjectDisplayName(t *testing.T) {
 	assert.Equal(t, "Çelik Yücel - go57bak", studentProjectDisplayName("Çelik Yücel", "go57bak"))
 }
 
+func TestStudentBundleIdentifier(t *testing.T) {
+	first := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	second := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+	identifier := studentBundleIdentifier(first)
+	assert.Equal(t, identifier, studentBundleIdentifier(first))
+	assert.NotEqual(t, identifier, studentBundleIdentifier(second))
+	assert.Regexp(t, `^de\.tum\.cit\.ase\.introcourse\.s[0-9a-f]{16}$`, identifier)
+	assert.NotContains(t, identifier, first.String())
+}
+
+func TestStudentBundleTemplateRequiresPlaceholder(t *testing.T) {
+	assert.NoError(t, validateStudentSigningTemplate([]templateFile{{Path: "project.yml", Content: "PRODUCT_BUNDLE_IDENTIFIER: {{.BundleIdentifier}}\nDEVELOPMENT_TEAM: {{.DevelopmentTeam}}"}}))
+	assert.ErrorContains(t, validateStudentSigningTemplate([]templateFile{{Path: "project.yml", Content: "PRODUCT_BUNDLE_IDENTIFIER: duplicate"}}), "lacks")
+	assert.ErrorContains(t, validateStudentSigningTemplate(nil), "no project.yml")
+}
+
+func TestDevelopmentTeamID(t *testing.T) {
+	t.Setenv("APPLE_DEVELOPMENT_TEAM_ID", "")
+	_, err := developmentTeamID()
+	assert.ErrorContains(t, err, "APPLE_DEVELOPMENT_TEAM_ID")
+	t.Setenv("APPLE_DEVELOPMENT_TEAM_ID", "ABCDEFGHIJ")
+	teamID, err := developmentTeamID()
+	assert.NoError(t, err)
+	assert.Equal(t, "ABCDEFGHIJ", teamID)
+}
+
 func TestApplyTemplateVars(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -40,6 +67,18 @@ func TestApplyTemplateVars(t *testing.T) {
 		vars     templateVars
 		expected string
 	}{
+		{
+			name:     "sets the assigned app identifier",
+			content:  "PRODUCT_BUNDLE_IDENTIFIER: {{.BundleIdentifier}}",
+			vars:     templateVars{BundleIdentifier: "de.tum.cit.ase.introcourse.s1234567890abcdef"},
+			expected: "PRODUCT_BUNDLE_IDENTIFIER: de.tum.cit.ase.introcourse.s1234567890abcdef",
+		},
+		{
+			name:     "sets the signing team",
+			content:  "DEVELOPMENT_TEAM: {{.DevelopmentTeam}}",
+			vars:     templateVars{DevelopmentTeam: "ABCDEFGHIJ"},
+			expected: "DEVELOPMENT_TEAM: ABCDEFGHIJ",
+		},
 		{
 			name:    "replaces student name and deadline",
 			content: "# {{.StudentName}}'s App\n\n**Deadline:** **{{.SubmissionDeadline}}**",

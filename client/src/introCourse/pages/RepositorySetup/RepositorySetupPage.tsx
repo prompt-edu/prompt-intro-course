@@ -298,6 +298,10 @@ export const RepositorySetupPage = () => {
         <ul className='space-y-1 text-sm'>
           <Check ok={data?.checks?.demoReady ?? false} label='Demo setup is ready' />
           <Check
+            ok={data?.checks?.signingReady ?? false}
+            label='Apple Developer team ID is configured for student repositories'
+          />
+          <Check
             ok={data?.checks?.materialCurrent ?? false}
             label='Demo matches teaching material'
           />

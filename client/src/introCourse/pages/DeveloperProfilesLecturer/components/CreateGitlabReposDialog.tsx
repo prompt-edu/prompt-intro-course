@@ -202,6 +202,12 @@ export const CreateGitlabReposDialog = ({
               Demo configuration is not ready for student repositories.
             </p>
           )}
+          {courseSetup && !courseSetup.checks.signingReady && (
+            <p className='text-sm text-amber-700'>
+              The course Apple Developer team ID must be configured before creating student
+              repositories.
+            </p>
+          )}
           <label className='flex items-start gap-2 text-sm'>
             <input
               type='checkbox'
@@ -256,6 +262,7 @@ export const CreateGitlabReposDialog = ({
             disabled={
               isCreatingRepos ||
               !courseSetup?.checks.demoReady ||
+              !courseSetup?.checks.signingReady ||
               !assignmentsReady ||
               !demoTested ||
               !deadline.trim() ||
