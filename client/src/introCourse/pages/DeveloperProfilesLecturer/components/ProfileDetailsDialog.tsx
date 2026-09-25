@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
   Checkbox,
@@ -28,6 +28,7 @@ import { useGitLabUsernameCheck } from '../../../hooks/useGitLabUsernameCheck'
 import type { PostDeveloperProfile } from '../../../interfaces/PostDeveloperProfile'
 import { updateDeveloperProfile } from '../../../network/mutations/updateDeveloperProfile'
 import { updateGitLabStatusCreated } from '../../../network/mutations/updateGitlabStatus'
+import { getAppleProfileStatus } from '../../../network/queries/getAppleTeamStatus'
 import {
   type InstructorDeveloperFormValues,
   instructorDevProfile,
@@ -48,6 +49,13 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
   onSaved,
 }) => {
   const queryClient = useQueryClient()
+  const participationId = participantWithProfile.participation.courseParticipationID
+  const { data: appleStatus, isError: appleStatusError } = useQuery({
+    queryKey: ['apple-team-profile', phaseId, participationId],
+    queryFn: () => getAppleProfileStatus(phaseId, participationId),
+    enabled: Boolean(participantWithProfile.devProfile?.appleID),
+    retry: false,
+  })
   const gitLabCheck = useGitLabUsernameCheck(phaseId)
   const form = useForm<InstructorDeveloperFormValues>({
     resolver: zodResolver(instructorDevProfile),
@@ -74,6 +82,7 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
         devProfile,
       ),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['apple-team-profile', phaseId, participationId] })
       onSaved()
       onClose()
     },
@@ -149,6 +158,31 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
 
+        {participantWithProfile.devProfile?.appleID && (
+          <div className='rounded-md border p-3 text-sm'>
+            <strong>Apple team</strong>
+            <p>
+              {appleStatus
+                ? appleStatus.membership === 'active'
+                  ? appleStatus.provisioningAllowed
+                    ? 'Access and provisioning are active.'
+                    : 'Membership is active; provisioning access is missing.'
+                  : appleStatus.membership === 'invited'
+                    ? 'Invitation pending.'
+                    : 'No active membership or pending invitation.'
+                : appleStatusError
+                  ? 'Could not check Apple team access.'
+                  : 'Checking Apple team access...'}
+            </p>
+            {appleStatus &&
+              Object.entries(appleStatus.devices).map(([device, registered]) => (
+                <p key={device}>
+                  {device}: {registered ? 'registered' : 'not registered'}
+                </p>
+              ))}
+          </div>
+        )}
+
         {form.formState.errors.root && (
           <div className='mb-4 rounded bg-red-100 p-2 text-red-700'>
             {form.formState.errors.root.message}
@@ -163,7 +197,7 @@ export const ProfileDetailsDialog: React.FC<ProfileDetailsDialogProps> = ({
                 name='appleID'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Apple ID</FormLabel>
+                    <FormLabel>Apple Account email</FormLabel>
                     <FormDescription>
                       Leave empty if unconfirmed. The student can add or correct it in their own
                       profile.

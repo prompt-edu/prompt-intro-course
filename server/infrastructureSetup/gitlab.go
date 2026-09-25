@@ -1,12 +1,15 @@
 package infrastructureSetup
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path"
 	"strings"
 	"unicode"
 
+	"github.com/google/uuid"
 	"github.com/prompt-edu/prompt-intro-course/server/gitlabutil"
 	log "github.com/sirupsen/logrus"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -482,15 +485,37 @@ func boolToInt(value bool) int {
 // StudentProjectParams bundles the parameters for CreateStudentProject to
 // avoid a long positional parameter list with multiple same-typed values.
 type StudentProjectParams struct {
-	RepoName             string
-	DevID                int64
-	TutorSubgroupID      int64
-	TutorSubgroupPath    string
-	TutorsGroupID        int64
-	DevGroupID           int64
-	IntroCourseGroupPath string
-	StudentName          string
-	SubmissionDeadline   string
+	CourseParticipationID uuid.UUID
+	RepoName              string
+	DevID                 int64
+	TutorSubgroupID       int64
+	TutorSubgroupPath     string
+	TutorsGroupID         int64
+	DevGroupID            int64
+	IntroCourseGroupPath  string
+	StudentName           string
+	SubmissionDeadline    string
+	DevelopmentTeam       string
+}
+
+// Keep the App ID stable across project renames and setup retries without
+// publishing a student's name, university login, or participation ID in it.
+func courseAppBundleNamespace(introCourseGroupPath string) string {
+	// The parent of Introcourse is the semester group, for example ios2627.
+	return strings.ToLower(path.Base(path.Dir(introCourseGroupPath)))
+}
+
+func studentBundleIdentifier(participationID uuid.UUID, introCourseGroupPath string) string {
+	digest := sha256.Sum256(participationID[:])
+	return "de.tum.cit.aet." + courseAppBundleNamespace(introCourseGroupPath) + ".s" + hex.EncodeToString(digest[:8]) + ".introcourseapp"
+}
+
+func demoTemplateVars(introCourseGroupPath string) templateVars {
+	return templateVars{
+		StudentName:        "Demo",
+		SubmissionDeadline: "See the course schedule in Outline",
+		BundleIdentifier:   "de.tum.cit.aet." + courseAppBundleNamespace(introCourseGroupPath) + ".demo.introcourseapp",
+	}
 }
 
 // GitLab project names must begin with a letter or digit and may only contain
@@ -514,7 +539,7 @@ func CreateStudentProject(p StudentProjectParams) error {
 }
 
 func createStudentProjectWithMaterial(p StudentProjectParams, material *materialSnapshot) error {
-	if p.RepoName == "" || p.StudentName == "" {
+	if p.RepoName == "" || p.StudentName == "" || p.CourseParticipationID == uuid.Nil {
 		return fmt.Errorf("student project needs a university login and student name")
 	}
 	git, err := getClient()
@@ -547,6 +572,8 @@ func createStudentProjectWithMaterial(p StudentProjectParams, material *material
 	err = configureProjectWithMaterial(git, project.ID, p.RepoName, templateVars{
 		StudentName:        p.StudentName,
 		SubmissionDeadline: p.SubmissionDeadline,
+		BundleIdentifier:   studentBundleIdentifier(p.CourseParticipationID, p.IntroCourseGroupPath),
+		DevelopmentTeam:    p.DevelopmentTeam,
 	}, material, 0)
 	if err != nil {
 		return err
@@ -1305,10 +1332,7 @@ func createDemoProjectWithMaterial(git *gitlab.Client, introCourseGroupID int64,
 	}
 
 	// Shared project setup (files, branch protection, board, approvals, issues)
-	err = configureProjectWithMaterial(git, project.ID, demoProjectName, templateVars{
-		StudentName:        "Demo",
-		SubmissionDeadline: "See the course schedule in Outline",
-	}, material, 0)
+	err = configureProjectWithMaterial(git, project.ID, demoProjectName, demoTemplateVars(introCourseGroupPath), material, 0)
 	if err != nil {
 		return err
 	}

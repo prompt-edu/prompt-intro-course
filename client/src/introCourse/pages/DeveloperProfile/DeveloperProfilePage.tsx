@@ -1,10 +1,11 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@tumaet/prompt-ui-components'
 import { AlertCircle, CheckCircle } from 'lucide-react'
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type { PostDeveloperProfile } from '../../interfaces/PostDeveloperProfile'
 import { updateOwnDeveloperProfile } from '../../network/mutations/updateOwnDeveloperProfile'
+import { getOwnAppleTeamStatus } from '../../network/queries/getAppleTeamStatus'
 import { useIntroCourseStore } from '../../zustand/useIntroCourseStore'
 import { DeveloperProfileForm } from './DeveloperProfileForm'
 
@@ -19,12 +20,19 @@ export const DeveloperProfilePage = ({ onContinue }: DeveloperProfilePageProps) 
   const [currState, setCurrState] = useState<'input' | 'success' | 'error'>(
     developerProfile?.appleID && developerProfile.gitLabUsername ? 'success' : 'input',
   )
+  const { data: appleStatus } = useQuery({
+    queryKey: ['apple-team-self', phaseId],
+    queryFn: () => getOwnAppleTeamStatus(phaseId ?? ''),
+    enabled: Boolean(phaseId && currState === 'success'),
+    retry: false,
+  })
 
   const mutation = useMutation({
     mutationFn: (devProfile: PostDeveloperProfile) =>
       updateOwnDeveloperProfile(phaseId ?? '', devProfile),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['developer_profile'] })
+      queryClient.invalidateQueries({ queryKey: ['apple-team-self', phaseId] })
       setCurrState('success')
     },
     onError: () => {
@@ -54,6 +62,27 @@ export const DeveloperProfilePage = ({ onContinue }: DeveloperProfilePageProps) 
               <p className='text-muted-foreground max-w-md mx-auto'>
                 You have successfully submitted your developer profile.
               </p>
+              {appleStatus && (
+                <div className='text-muted-foreground max-w-md mx-auto space-y-2'>
+                  <p>
+                    {appleStatus.membership === 'active'
+                      ? appleStatus.provisioningAllowed
+                        ? 'Your course Apple team access is active.'
+                        : 'Your Apple team membership is active. Ask a tutor if Xcode says provisioning access is missing.'
+                      : appleStatus.membership === 'invited'
+                        ? 'Your course Apple team invitation is pending. Check your Apple Account email.'
+                        : 'A course Apple team invitation has not been sent yet. You can use a simulated device in Xcode.'}
+                  </p>
+                  {Object.entries(appleStatus.devices).map(([device, registered]) => (
+                    <p key={device}>
+                      {device}:{' '}
+                      {registered
+                        ? 'registered with the course team'
+                        : 'not registered with the course team'}
+                    </p>
+                  ))}
+                </div>
+              )}
               <div className='pt-4'>
                 <div className='flex justify-center gap-3'>
                   <Button variant='outline' onClick={() => setCurrState('input')}>

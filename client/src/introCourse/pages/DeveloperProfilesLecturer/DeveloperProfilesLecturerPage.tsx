@@ -225,7 +225,7 @@ export const DeveloperProfilesLecturerPage = () => {
                 </TableHead>
                 <TableHead>Devices</TableHead>
                 <TableHead>GitLab Username</TableHead>
-                <TableHead>Apple ID</TableHead>
+                <TableHead>Apple Account</TableHead>
                 <TableHead>Gitlab Status</TableHead>
                 <TableHead className='text-right'>Actions</TableHead>
               </TableRow>

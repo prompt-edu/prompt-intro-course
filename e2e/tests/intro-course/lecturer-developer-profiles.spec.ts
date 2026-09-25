@@ -130,7 +130,7 @@ test.describe('developer profiles: editing a profile', () => {
     await expect(profiles.dialog).toContainText('Edit Developer Profile')
     await expect(profiles.dialog).toContainText(BACKGROUND_STUDENTS.first.lastName)
 
-    await profiles.dialog.getByLabel('Apple ID').fill(NEW_APPLE_ID)
+    await profiles.dialog.getByLabel('Apple Account email').fill(NEW_APPLE_ID)
     await profiles.dialog.getByRole('button', { name: 'Save Profile' }).click()
 
     await expect(profiles.dialog).toBeHidden({ timeout: 30_000 })

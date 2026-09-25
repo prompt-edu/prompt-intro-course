@@ -112,11 +112,12 @@ func ResetDemo(ctx context.Context, coursePhaseID uuid.UUID, request resetDemoRe
 	if project.Path != "demo" || !strings.HasSuffix(project.PathWithNamespace, "/Introcourse/demo") {
 		return nil, fmt.Errorf("the expected project is no longer the active demo")
 	}
+	vars := demoTemplateVars(strings.TrimSuffix(project.PathWithNamespace, "/demo"))
 	root, err := originalDemoCommit(git, project.ID)
 	if err != nil {
 		return nil, err
 	}
-	if err := rewriteDemoMain(git, project.ID, root, material.templates); err != nil {
+	if err := rewriteDemoMain(git, project.ID, root, material.templates, vars); err != nil {
 		return nil, err
 	}
 	if err := closeDemoMergeRequests(git, project.ID); err != nil {
@@ -131,9 +132,7 @@ func ResetDemo(ctx context.Context, coursePhaseID uuid.UUID, request resetDemoRe
 	if err := resetDemoIssues(git, project.ID, project.PathWithNamespace, material.issues); err != nil {
 		return nil, err
 	}
-	if err := configureProjectWithMaterial(git, project.ID, "demo", templateVars{
-		StudentName: "Demo", SubmissionDeadline: "See the course schedule in Outline",
-	}, material, 0); err != nil {
+	if err := configureProjectWithMaterial(git, project.ID, "demo", vars, material, 0); err != nil {
 		return nil, err
 	}
 	if err := ensureApprovalRule(git, project.ID, "demo", status.Groups["tutors"].ID); err != nil {
@@ -169,8 +168,7 @@ type demoRootFile struct {
 	executable bool
 }
 
-func demoTemplateActions(rootFiles map[string]demoRootFile, templates []templateFile) ([]*gitlab.CommitActionOptions, error) {
-	vars := templateVars{StudentName: "Demo", SubmissionDeadline: "See the course schedule in Outline"}
+func demoTemplateActions(rootFiles map[string]demoRootFile, templates []templateFile, vars templateVars) ([]*gitlab.CommitActionOptions, error) {
 	actions := make([]*gitlab.CommitActionOptions, 0, len(templates)+len(rootFiles))
 	wanted := make(map[string]bool, len(templates))
 	for _, file := range templates {
@@ -199,7 +197,7 @@ func demoTemplateActions(rootFiles map[string]demoRootFile, templates []template
 	return actions, nil
 }
 
-func rewriteDemoMain(git *gitlab.Client, projectID int64, root string, templates []templateFile) (err error) {
+func rewriteDemoMain(git *gitlab.Client, projectID int64, root string, templates []templateFile, vars templateVars) (err error) {
 	nodes, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.TreeNode, *gitlab.Response, error) {
 		return git.Repositories.ListTree(projectID, &gitlab.ListTreeOptions{
 			Ref: gitlab.Ptr(root), Recursive: gitlab.Ptr(true), ListOptions: gitlab.ListOptions{PerPage: 100},
@@ -221,7 +219,7 @@ func rewriteDemoMain(git *gitlab.Client, projectID int64, root string, templates
 	if len(rootFiles) == 0 {
 		return fmt.Errorf("original demo has no files; refusing to rewrite main")
 	}
-	actions, err := demoTemplateActions(rootFiles, templates)
+	actions, err := demoTemplateActions(rootFiles, templates, vars)
 	if err != nil {
 		return err
 	}

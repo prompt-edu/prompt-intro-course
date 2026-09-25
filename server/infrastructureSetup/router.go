@@ -11,7 +11,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/prompt-edu/prompt-intro-course/server/appleTeam"
 	"github.com/prompt-edu/prompt-intro-course/server/coreRequests"
+	"github.com/prompt-edu/prompt-intro-course/server/developerProfile"
 	"github.com/prompt-edu/prompt-intro-course/server/gitlabutil"
 	"github.com/prompt-edu/prompt-intro-course/server/infrastructureSetup/infrastructureDTO"
 	"github.com/prompt-edu/prompt-intro-course/server/utils"
@@ -30,9 +32,69 @@ func setupInfrastructureRouter(router *gin.RouterGroup, authMiddleware func(allo
 
 	// Infrastructure status routes
 	infrastructureRouter.GET("/gitlab/student-setup", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), getAllStudentGitlabStatus)
+	infrastructureRouter.GET("/apple/status", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), getAppleTeamStatus)
+	infrastructureRouter.GET("/apple/self", authMiddleware(promptSDK.CourseStudent), getOwnAppleTeamStatus)
+	infrastructureRouter.GET("/apple/profile/:courseParticipationID", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), getAppleProfileStatus)
 
 	// Route for manually overwriting the status (i.e. if instructor manually created or fixed the repo)
 	infrastructureRouter.PUT("/gitlab/student-setup/:courseParticipationID/manual", authMiddleware(promptSDK.PromptAdmin, promptSDK.CourseLecturer), manuallyOverwriteStudentGitlabStatus)
+}
+
+func getAppleTeamStatus(c *gin.Context) {
+	client, err := appleTeam.NewFromEnvironment()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Apple team connection is not configured"})
+		return
+	}
+	capacity, err := client.Capacity(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Apple team capacity could not be checked"})
+		return
+	}
+	c.JSON(http.StatusOK, capacity)
+}
+
+func getOwnAppleTeamStatus(c *gin.Context) {
+	coursePhaseID, err := uuid.Parse(c.Param("coursePhaseID"))
+	participation, ok := c.Get("courseParticipationID")
+	if err != nil || !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Course participation is unavailable"})
+		return
+	}
+	respondAppleProfileStatus(c, coursePhaseID, participation.(uuid.UUID))
+}
+
+func getAppleProfileStatus(c *gin.Context) {
+	coursePhaseID, phaseErr := uuid.Parse(c.Param("coursePhaseID"))
+	participationID, participationErr := uuid.Parse(c.Param("courseParticipationID"))
+	if phaseErr != nil || participationErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Course participation is unavailable"})
+		return
+	}
+	respondAppleProfileStatus(c, coursePhaseID, participationID)
+}
+
+func respondAppleProfileStatus(c *gin.Context, coursePhaseID, participationID uuid.UUID) {
+	profile, err := developerProfile.GetOwnDeveloperProfile(c, coursePhaseID, participationID)
+	if err != nil || profile.CourseParticipationID == uuid.Nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Save your developer profile first"})
+		return
+	}
+	client, err := appleTeam.NewFromEnvironment()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Apple team connection is not configured"})
+		return
+	}
+	status, err := client.ProfileStatus(c.Request.Context(), profile.AppleID, map[string]string{
+		"iPhone":      profile.IPhoneUDID.String,
+		"iPad":        profile.IPadUDID.String,
+		"Apple Watch": profile.AppleWatchUDID.String,
+	})
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Apple team profile could not be checked"})
+		return
+	}
+	c.JSON(http.StatusOK, status)
 }
 
 func resetDemo(c *gin.Context) {

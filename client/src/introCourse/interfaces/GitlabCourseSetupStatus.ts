@@ -27,6 +27,7 @@ export interface GitlabCourseSetupStatus {
     tutorsReady: boolean
     demoReady: boolean
     materialCurrent: boolean
+    signingReady: boolean
   }
   issues: string[]
 }

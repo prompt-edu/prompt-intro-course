@@ -9,7 +9,7 @@ const udidSchema = z
 
 export const developerFormSchema = z
   .object({
-    appleID: z.string().email('Apple ID must be a valid email address'),
+    appleID: z.string().email('Enter a valid Apple Account email address'),
     gitLabUsername: z
       .string()
       .trim()

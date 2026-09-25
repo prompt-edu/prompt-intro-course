@@ -18,6 +18,7 @@ import { useParams } from 'react-router-dom'
 import type { GitlabResource } from '../../interfaces/GitlabCourseSetupStatus'
 import { createIntroCourseGitlabInfrastructure } from '../../network/mutations/createIntroCourseGitlabInfrastructure'
 import { resetGitlabDemo } from '../../network/mutations/resetGitlabDemo'
+import { getAppleTeamCapacity } from '../../network/queries/getAppleTeamStatus'
 import { getGitlabCourseSetup } from '../../network/queries/getGitlabCourseSetup'
 import { gitlabCourseGroup } from '../../utils/gitlabCourseGroup'
 
@@ -71,6 +72,16 @@ export const RepositorySetupPage = () => {
     queryKey,
     queryFn: () => getGitlabCourseSetup(phaseId ?? '', semesterTag),
     enabled: Boolean(phaseId && semesterTag),
+  })
+  const {
+    data: appleCapacity,
+    isError: appleCapacityError,
+    refetch: refetchAppleCapacity,
+  } = useQuery({
+    queryKey: ['apple-team-capacity', phaseId],
+    queryFn: () => getAppleTeamCapacity(phaseId ?? ''),
+    enabled: Boolean(phaseId),
+    retry: false,
   })
 
   const { mutate: markInfrastructureSetup } = useModifyCoursePhase(
@@ -162,7 +173,14 @@ export const RepositorySetupPage = () => {
             initializing student repositories.
           </p>
         </div>
-        <Button variant='outline' onClick={() => refetch()} disabled={isFetching}>
+        <Button
+          variant='outline'
+          onClick={() => {
+            refetch()
+            refetchAppleCapacity()
+          }}
+          disabled={isFetching}
+        >
           {isFetching ? (
             <Loader2 className='mr-2 h-4 w-4 animate-spin' />
           ) : (
@@ -298,10 +316,26 @@ export const RepositorySetupPage = () => {
         <ul className='space-y-1 text-sm'>
           <Check ok={data?.checks?.demoReady ?? false} label='Demo setup is ready' />
           <Check
+            ok={data?.checks?.signingReady ?? false}
+            label='Apple Developer team ID is configured for student repositories'
+          />
+          <Check
             ok={data?.checks?.materialCurrent ?? false}
             label='Demo matches teaching material'
           />
         </ul>
+        <p className='text-sm'>
+          {appleCapacity
+            ? `Apple team device slots available: ${appleCapacity.availableIPhones} iPhone, ${appleCapacity.availableIPads} iPad, ${appleCapacity.availableWatches} Apple Watch (limit ${appleCapacity.limit} per family). Disabled devices still count until Apple's membership-year reset.`
+            : appleCapacityError
+              ? 'Apple team device capacity could not be checked. Check the Apple API connection before registering devices.'
+              : 'Checking Apple team device capacity...'}
+        </p>
+        <p className='text-sm text-muted-foreground'>
+          Student team invitations are separate from repository setup. Apple provisioning access
+          also exposes information about the team’s other apps, so decide who needs it before
+          inviting students.
+        </p>
         <Dialog
           open={resetOpen}
           onOpenChange={(open) => {

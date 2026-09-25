@@ -209,6 +209,13 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 	if err != nil {
 		return err
 	}
+	if err := validateStudentSigningTemplate(material.templates); err != nil {
+		return err
+	}
+	developmentTeam, err := developmentTeamID()
+	if err != nil {
+		return err
+	}
 	// 1.) get the student developer profile
 	devProfile, err := InfrastructureServiceSingleton.queries.GetDeveloperProfileByCourseParticipationID(ctx, db.GetDeveloperProfileByCourseParticipationIDParams{
 		CourseParticipationID: courseParticipationID,
@@ -289,15 +296,17 @@ func CreateStudentInfrastructure(ctx context.Context, coursePhaseID, courseParti
 
 	// 6.) Create the student project in tutor's subgroup (fully idempotent)
 	err = createStudentProjectWithMaterial(StudentProjectParams{
-		RepoName:             repoName,
-		DevID:                studentGitlabUser.ID,
-		TutorSubgroupID:      tutorSubgroupID,
-		TutorSubgroupPath:    tutorSubgroupPath,
-		TutorsGroupID:        tutorsGroup.ID,
-		DevGroupID:           developerGroup.ID,
-		IntroCourseGroupPath: introCourseGroup.FullPath,
-		StudentName:          studentName,
-		SubmissionDeadline:   submissionDeadline,
+		CourseParticipationID: courseParticipationID,
+		RepoName:              repoName,
+		DevID:                 studentGitlabUser.ID,
+		TutorSubgroupID:       tutorSubgroupID,
+		TutorSubgroupPath:     tutorSubgroupPath,
+		TutorsGroupID:         tutorsGroup.ID,
+		DevGroupID:            developerGroup.ID,
+		IntroCourseGroupPath:  introCourseGroup.FullPath,
+		StudentName:           studentName,
+		SubmissionDeadline:    submissionDeadline,
+		DevelopmentTeam:       developmentTeam,
 	}, material)
 	if err != nil {
 		log.WithField("student", repoName).Error("Failed to create student project: ", err)

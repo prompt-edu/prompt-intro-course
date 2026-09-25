@@ -3,6 +3,8 @@ package infrastructureSetup
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -28,6 +30,18 @@ type templateFile struct {
 type templateVars struct {
 	StudentName        string
 	SubmissionDeadline string
+	BundleIdentifier   string
+	DevelopmentTeam    string
+}
+
+var appleTeamIDPattern = regexp.MustCompile(`^[A-Z0-9]{10}$`)
+
+func developmentTeamID() (string, error) {
+	teamID := strings.TrimSpace(os.Getenv("APPLE_DEVELOPMENT_TEAM_ID"))
+	if !appleTeamIDPattern.MatchString(teamID) {
+		return "", fmt.Errorf("configure a valid APPLE_DEVELOPMENT_TEAM_ID before initializing student repositories")
+	}
+	return teamID, nil
 }
 
 // templateCache provides thread-safe, fetch-once caching of template files
@@ -124,10 +138,39 @@ func fetchTemplateFilesAtRef(client *gitlab.Client, projectID, ref string) ([]te
 // applyTemplateVars replaces {{.VarName}} placeholders in content with the
 // corresponding values from vars. Files without placeholders are unchanged.
 func applyTemplateVars(content string, vars templateVars) string {
+	bundleIdentifier := vars.BundleIdentifier
+	if bundleIdentifier == "" {
+		// The instructor demo uses one stable identifier. Student repositories
+		// always supply an identifier derived from their participation ID.
+		bundleIdentifier = "de.tum.cit.aet.introcourse.demo"
+	}
+	developmentTeam := vars.DevelopmentTeam
+	if developmentTeam == "" {
+		// The demo has the same signing team once it is configured. Keep it
+		// simulator-ready while the course team is still being set up.
+		configured := strings.TrimSpace(os.Getenv("APPLE_DEVELOPMENT_TEAM_ID"))
+		if appleTeamIDPattern.MatchString(configured) {
+			developmentTeam = configured
+		}
+	}
 	return strings.NewReplacer(
 		"{{.StudentName}}", vars.StudentName,
 		"{{.SubmissionDeadline}}", vars.SubmissionDeadline,
+		"{{.BundleIdentifier}}", bundleIdentifier,
+		"{{.DevelopmentTeam}}", developmentTeam,
 	).Replace(content)
+}
+
+func validateStudentSigningTemplate(files []templateFile) error {
+	for _, file := range files {
+		if file.Path == "project.yml" {
+			if !strings.Contains(file.Content, "{{.BundleIdentifier}}") || !strings.Contains(file.Content, "{{.DevelopmentTeam}}") {
+				return fmt.Errorf("teaching material project.yml lacks the per-student bundle identifier or development team placeholder")
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("teaching material has no project.yml for the student app")
 }
 
 // --- CI/CD Pipeline Templates ---
