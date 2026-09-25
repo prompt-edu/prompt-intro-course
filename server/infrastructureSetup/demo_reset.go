@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -126,7 +128,7 @@ func ResetDemo(ctx context.Context, coursePhaseID uuid.UUID, request resetDemoRe
 	if err := ensureGit2ExerciseBranches(git, project.ID, "demo", material.git2Exercise); err != nil {
 		return nil, err
 	}
-	if err := resetDemoIssues(git, project.ID, material.issues); err != nil {
+	if err := resetDemoIssues(git, project.ID, project.PathWithNamespace, material.issues); err != nil {
 		return nil, err
 	}
 	if err := configureProjectWithMaterial(git, project.ID, "demo", templateVars{
@@ -323,7 +325,63 @@ func cleanDemoBranches(git *gitlab.Client, projectID int64) error {
 	return nil
 }
 
-func resetDemoIssues(git *gitlab.Client, projectID int64, templates []issueTemplate) error {
+func demoIssueStatusIDs(git *gitlab.Client, projectPath string) (map[int64]string, string, error) {
+	board, err := readStatusBoard(git, projectPath)
+	if err != nil {
+		return nil, "", err
+	}
+	ids, err := requiredStatusIDs(board)
+	if err != nil {
+		return nil, "", err
+	}
+	var result struct {
+		Data struct {
+			Project struct {
+				WorkItems struct {
+					Nodes []struct {
+						IID     string `json:"iid"`
+						Widgets []struct {
+							Status *struct {
+								ID string `json:"id"`
+							} `json:"status"`
+						} `json:"widgets"`
+					} `json:"nodes"`
+					PageInfo struct {
+						HasNextPage bool `json:"hasNextPage"`
+					} `json:"pageInfo"`
+				} `json:"workItems"`
+			} `json:"project"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	_, err = git.GraphQL.Do(gitlab.GraphQLQuery{
+		Query:     `query($path: ID!) { project(fullPath: $path) { workItems(first: 100) { nodes { iid widgets { ... on WorkItemWidgetStatus { status { id } } } } pageInfo { hasNextPage } } } }`,
+		Variables: map[string]any{"path": projectPath},
+	}, &result)
+	if err != nil {
+		return nil, "", fmt.Errorf("read demo issue statuses: %w", err)
+	}
+	if len(result.Errors) != 0 || result.Data.Project.WorkItems.PageInfo.HasNextPage {
+		return nil, "", fmt.Errorf("could not read all demo issue statuses before reset: %v", result.Errors)
+	}
+	statuses := make(map[int64]string, len(result.Data.Project.WorkItems.Nodes))
+	for _, item := range result.Data.Project.WorkItems.Nodes {
+		iid, parseErr := strconv.ParseInt(item.IID, 10, 64)
+		if parseErr != nil {
+			return nil, "", fmt.Errorf("read demo issue IID %q: %w", item.IID, parseErr)
+		}
+		for _, widget := range item.Widgets {
+			if widget.Status != nil {
+				statuses[iid] = widget.Status.ID
+			}
+		}
+	}
+	return statuses, ids["Open"], nil
+}
+
+func resetDemoIssues(git *gitlab.Client, projectID int64, projectPath string, templates []issueTemplate) error {
 	issues, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.Issue, *gitlab.Response, error) {
 		return git.Issues.ListProjectIssues(projectID, &gitlab.ListProjectIssuesOptions{
 			State: gitlab.Ptr("all"), Scope: gitlab.Ptr("all"), ListOptions: gitlab.ListOptions{PerPage: 100},
@@ -332,6 +390,11 @@ func resetDemoIssues(git *gitlab.Client, projectID int64, templates []issueTempl
 	if err != nil {
 		return err
 	}
+	statuses, openStatusID, err := demoIssueStatusIDs(git, projectPath)
+	if err != nil {
+		return err
+	}
+	sort.Slice(issues, func(i, j int) bool { return issues[i].IID < issues[j].IID })
 	wanted := make(map[string]issueTemplate, len(templates))
 	for _, tmpl := range templates {
 		if tmpl.Title == "" {
@@ -352,18 +415,29 @@ func resetDemoIssues(git *gitlab.Client, projectID int64, templates []issueTempl
 			continue
 		}
 		seen[issue.Title] = true
-		// Closing and reopening applies the lifecycle's default Open status,
-		// including when a practice issue was left In Review or Blocked.
-		if issue.State == "opened" {
+		// Avoid churn and notifications on already-clean daily issues. Close and
+		// reopen only when needed to restore the lifecycle's Open status.
+		needsReopen := issue.State != "opened" || statuses[issue.IID] != openStatusID
+		needsMetadata := issue.Description != tmpl.Description || len(issue.Labels) != 0 ||
+			len(issue.Assignees) != 0 || issue.Milestone != nil || issue.DueDate != nil ||
+			issue.Weight != 0 || issue.Confidential || issue.DiscussionLocked
+		if !needsReopen && !needsMetadata {
+			continue
+		}
+		if needsReopen && issue.State == "opened" {
 			if _, _, err := git.Issues.UpdateIssue(projectID, issue.IID, &gitlab.UpdateIssueOptions{StateEvent: gitlab.Ptr("close")}); err != nil {
 				return fmt.Errorf("close demo daily issue #%d: %w", issue.IID, err)
 			}
 		}
-		if _, _, err := git.Issues.UpdateIssue(projectID, issue.IID, &gitlab.UpdateIssueOptions{
-			Description: gitlab.Ptr(tmpl.Description), StateEvent: gitlab.Ptr("reopen"),
+		update := &gitlab.UpdateIssueOptions{
+			Description: gitlab.Ptr(tmpl.Description), Confidential: gitlab.Ptr(false), DiscussionLocked: gitlab.Ptr(false),
 			Labels: gitlab.Ptr(gitlab.LabelOptions{}), AssigneeIDs: gitlab.Ptr([]int64{}),
 			ResetMilestoneID: true, ResetDueDate: true, ResetWeight: true,
-		}); err != nil {
+		}
+		if needsReopen {
+			update.StateEvent = gitlab.Ptr("reopen")
+		}
+		if _, _, err := git.Issues.UpdateIssue(projectID, issue.IID, update); err != nil {
 			return fmt.Errorf("restore demo daily issue #%d: %w", issue.IID, err)
 		}
 	}

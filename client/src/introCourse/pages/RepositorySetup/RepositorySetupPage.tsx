@@ -322,9 +322,10 @@ export const RepositorySetupPage = () => {
               <DialogDescription>
                 PROMPT will replace the demo’s main branch with the current teaching material,
                 delete practice branches and extra issues, and restore the Git 2 exercise branches.
-                The project URL and existing daily issue numbers stay the same. Open merge requests
-                will close, but their history and merge request numbers will remain. Student
-                repositories are unaffected. This reset cannot be undone.
+                The project URL and existing daily issue numbers stay the same. Old comments on
+                those issues remain. Open merge requests will close, but their history and merge
+                request numbers will remain. Student repositories are unaffected. This reset cannot
+                be undone.
               </DialogDescription>
             </DialogHeader>
             <div className='space-y-2'>
