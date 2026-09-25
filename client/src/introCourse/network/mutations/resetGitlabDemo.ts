@@ -9,8 +9,6 @@ export interface ResetGitlabDemoRequest {
 export interface ResetGitlabDemoResult {
   demoUrl: string
   demoId: number
-  archiveUrl: string
-  archiveMoveRequired: boolean
   sourceSha: string
 }
 

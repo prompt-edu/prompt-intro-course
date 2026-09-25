@@ -62,7 +62,6 @@ export const RepositorySetupPage = () => {
   )
   const queryClient = useQueryClient()
   const [notice, setNotice] = useState<string | null>(null)
-  const [archiveUrl, setArchiveUrl] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
   const [typedConfirmation, setTypedConfirmation] = useState('')
@@ -88,7 +87,6 @@ export const RepositorySetupPage = () => {
       })
       await queryClient.invalidateQueries({ queryKey })
       setNotice('Course infrastructure checked. Review the current status below.')
-      setArchiveUrl(null)
       setActionError(null)
     },
     onError: (error) => {
@@ -113,11 +111,8 @@ export const RepositorySetupPage = () => {
       setTypedConfirmation('')
       await queryClient.invalidateQueries({ queryKey })
       setNotice(
-        result.archiveMoveRequired
-          ? 'A new demo was created. The previous demo is still in the Introcourse group: a GitLab Owner must move it to demo-archives. Check the new demo’s files, issues, access, and pipeline before use.'
-          : 'A new demo was created. Check its files, issues, access, and pipeline before use. GitLab may take a little longer to move the previous demo into the archive subgroup.',
+        `Demo reset in place at ${result.demoUrl}. Check its files, daily issues, practice branches, access, and pipeline before use. Old merge requests remain in GitLab history.`,
       )
-      setArchiveUrl(result.archiveUrl || null)
       setActionError(null)
     },
     onError: (error) => {
@@ -177,25 +172,7 @@ export const RepositorySetupPage = () => {
         </Button>
       </div>
 
-      {notice && (
-        <p className='rounded-md border border-green-300 p-3 text-sm'>
-          {notice}
-          {archiveUrl && (
-            <>
-              {' '}
-              <a
-                className='text-primary underline underline-offset-2'
-                href={archiveUrl}
-                target='_blank'
-                rel='noopener noreferrer'
-              >
-                Open the previous demo archive
-              </a>
-              .
-            </>
-          )}
-        </p>
-      )}
+      {notice && <p className='rounded-md border border-green-300 p-3 text-sm'>{notice}</p>}
       {actionError && (
         <p role='alert' className='rounded-md border border-red-300 p-3 text-sm text-red-700'>
           {actionError}
@@ -343,10 +320,12 @@ export const RepositorySetupPage = () => {
             <DialogHeader>
               <DialogTitle>Reset the demo repository</DialogTitle>
               <DialogDescription>
-                The current demo, including its branches, issues, and merge requests, would be
-                preserved under a unique name. PROMPT will try to move it to demo-archives; a GitLab
-                Owner may need to finish that move. A new demo would be created from the current
-                teaching material. Student repositories would not be changed.
+                PROMPT will replace the demo’s main branch with the current teaching material,
+                delete practice branches and extra issues, and restore the Git 2 exercise branches.
+                The project URL and existing daily issue numbers stay the same. Old comments on
+                those issues remain. Open merge requests will close, but their history and merge
+                request numbers will remain. Student repositories are unaffected. This reset cannot
+                be undone.
               </DialogDescription>
             </DialogHeader>
             <div className='space-y-2'>
@@ -375,7 +354,7 @@ export const RepositorySetupPage = () => {
                   setup.isPending
                 }
               >
-                {reset.isPending ? 'Resetting...' : 'Archive and recreate demo'}
+                {reset.isPending ? 'Resetting...' : 'Reset demo in place'}
               </Button>
             </DialogFooter>
           </DialogContent>

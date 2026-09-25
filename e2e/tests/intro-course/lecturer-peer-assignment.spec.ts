@@ -165,6 +165,7 @@ test.describe('peer assignments: GitLab sync without a token', () => {
     await peers.goto()
     await peers.expectGroupsLoaded()
 
+    await page.getByText('Older courses: per-peer GitLab access').click()
     await peers.syncButton.click()
     await expect(peers.error).toBeVisible({ timeout: 30_000 })
     await expect(peers.error).toContainText('GitLab')
@@ -175,6 +176,7 @@ test.describe('peer assignments: GitLab sync without a token', () => {
     await peers.goto()
     await peers.expectGroupsLoaded()
 
+    await page.getByText('Older courses: per-peer GitLab access').click()
     await peers.unsyncButton.click()
     await expect(peers.error).toBeVisible({ timeout: 30_000 })
     await expect(peers.error).toContainText('GitLab')
