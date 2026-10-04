@@ -282,7 +282,7 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 		}
 	}
 	issues, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.Issue, *gitlab.Response, error) {
-		return git.Issues.ListProjectIssues(demo.ID, &gitlab.ListProjectIssuesOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}, p)
+		return git.Issues.ListProjectIssues(demo.ID, &gitlab.ListProjectIssuesOptions{State: gitlab.Ptr("opened"), ListOptions: gitlab.ListOptions{PerPage: 100}}, p)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list demo issues: %w", err)
