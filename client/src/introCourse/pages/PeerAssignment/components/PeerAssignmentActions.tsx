@@ -100,6 +100,9 @@ export const PeerAssignmentActions = ({
 
   return (
     <div className='space-y-4'>
+      <p className='text-sm text-muted-foreground'>
+        Each tutor group forms one peer group. Students can review everyone else in their group.
+      </p>
       <div className='flex flex-wrap items-center gap-3'>
         <Badge variant={statusVariant} data-testid='peer-assignment-status'>
           {uniqueStudents} of {totalStudents} students grouped
