@@ -16,12 +16,12 @@ import (
 
 type PeerAssignmentServiceTestSuite struct {
 	suite.Suite
-	ctx          context.Context
-	cleanup      func()
-	service      PeerAssignmentService
+	ctx           context.Context
+	cleanup       func()
+	service       PeerAssignmentService
 	coursePhaseID uuid.UUID
-	studentID1   uuid.UUID
-	studentID2   uuid.UUID
+	studentID1    uuid.UUID
+	studentID2    uuid.UUID
 }
 
 func (suite *PeerAssignmentServiceTestSuite) SetupSuite() {
@@ -160,103 +160,24 @@ func (suite *PeerAssignmentServiceTestSuite) TestGetOwnPeerAssignmentNoPeers() {
 	assert.Empty(suite.T(), own.PeersWhoReviewMe)
 }
 
-// --- createPeerGroups unit tests (groups of 3-4) ---
-
-func (suite *PeerAssignmentServiceTestSuite) TestCreatePeerGroupsSingleStudent() {
-	groups := createPeerGroups([]uuid.UUID{uuid.New()})
-	assert.Empty(suite.T(), groups)
-}
-
-func (suite *PeerAssignmentServiceTestSuite) TestCreatePeerGroupsTwoStudents() {
-	groups := createPeerGroups([]uuid.UUID{uuid.New(), uuid.New()})
-	assert.Len(suite.T(), groups, 1)
-	assert.Len(suite.T(), groups[0], 2) // best-effort pair
-}
-
-func (suite *PeerAssignmentServiceTestSuite) TestCreatePeerGroupsTriple() {
-	students := make([]uuid.UUID, 3)
-	for i := range students { students[i] = uuid.New() }
-	groups := createPeerGroups(students)
-	assert.Len(suite.T(), groups, 1)
-	assert.Len(suite.T(), groups[0], 3)
-}
-
-func (suite *PeerAssignmentServiceTestSuite) TestCreatePeerGroupsQuad() {
-	// 4%3=1 → 1 quad
-	students := make([]uuid.UUID, 4)
-	for i := range students { students[i] = uuid.New() }
-	groups := createPeerGroups(students)
-	assert.Len(suite.T(), groups, 1)
-	assert.Len(suite.T(), groups[0], 4)
-}
-
-func (suite *PeerAssignmentServiceTestSuite) TestCreatePeerGroupsFive() {
-	// 5%3=2, n<8 → 1 triple + 1 pair (best effort)
-	students := make([]uuid.UUID, 5)
-	for i := range students { students[i] = uuid.New() }
-	groups := createPeerGroups(students)
-	assert.Len(suite.T(), groups, 2)
-	assert.Len(suite.T(), groups[0], 3)
-	assert.Len(suite.T(), groups[1], 2)
-}
-
-func (suite *PeerAssignmentServiceTestSuite) TestCreatePeerGroupsSix() {
-	// 6%3=0 → 2 triples
-	students := make([]uuid.UUID, 6)
-	for i := range students { students[i] = uuid.New() }
-	groups := createPeerGroups(students)
-	assert.Len(suite.T(), groups, 2)
-	for _, g := range groups { assert.Len(suite.T(), g, 3) }
-}
-
-func (suite *PeerAssignmentServiceTestSuite) TestCreatePeerGroupsSeven() {
-	// 7%3=1 → 1 triple + 1 quad
-	students := make([]uuid.UUID, 7)
-	for i := range students { students[i] = uuid.New() }
-	groups := createPeerGroups(students)
-	assert.Len(suite.T(), groups, 2)
-	assert.Len(suite.T(), groups[0], 3)
-	assert.Len(suite.T(), groups[1], 4)
-}
-
-func (suite *PeerAssignmentServiceTestSuite) TestCreatePeerGroupsEight() {
-	// 8%3=2, n>=8 → 2 quads
-	students := make([]uuid.UUID, 8)
-	for i := range students { students[i] = uuid.New() }
-	groups := createPeerGroups(students)
-	assert.Len(suite.T(), groups, 2)
-	for _, g := range groups { assert.Len(suite.T(), g, 4) }
-}
-
-func (suite *PeerAssignmentServiceTestSuite) TestCreatePeerGroupsNine() {
-	// 9%3=0 → 3 triples
-	students := make([]uuid.UUID, 9)
-	for i := range students { students[i] = uuid.New() }
-	groups := createPeerGroups(students)
-	assert.Len(suite.T(), groups, 3)
-	for _, g := range groups { assert.Len(suite.T(), g, 3) }
-}
-
-func (suite *PeerAssignmentServiceTestSuite) TestCreatePeerGroupsTen() {
-	// 10%3=1 → 2 triples + 1 quad
-	students := make([]uuid.UUID, 10)
-	for i := range students { students[i] = uuid.New() }
-	groups := createPeerGroups(students)
-	assert.Len(suite.T(), groups, 3)
-	assert.Len(suite.T(), groups[0], 3)
-	assert.Len(suite.T(), groups[1], 3)
-	assert.Len(suite.T(), groups[2], 4)
-}
-
-func (suite *PeerAssignmentServiceTestSuite) TestCreatePeerGroupsEleven() {
-	// 11%3=2, n>=8 → 1 triple + 2 quads
-	students := make([]uuid.UUID, 11)
-	for i := range students { students[i] = uuid.New() }
-	groups := createPeerGroups(students)
-	assert.Len(suite.T(), groups, 3)
-	assert.Len(suite.T(), groups[0], 3)
-	assert.Len(suite.T(), groups[1], 4)
-	assert.Len(suite.T(), groups[2], 4)
+// Tutor groups stay intact, including the seven- and eight-student groups used in class.
+func TestCreatePeerGroupsKeepsTutorGroupTogether(t *testing.T) {
+	for count := 0; count <= 12; count++ {
+		t.Run(fmt.Sprintf("%d students", count), func(t *testing.T) {
+			students := make([]uuid.UUID, count)
+			for i := range students {
+				students[i] = uuid.New()
+			}
+			groups := createPeerGroups(students)
+			if count < 2 {
+				assert.Empty(t, groups)
+				return
+			}
+			if assert.Len(t, groups, 1) {
+				assert.Equal(t, students, groups[0])
+			}
+		})
+	}
 }
 
 // --- Large-scale integration test: 56 students, 6 tutors ---
@@ -358,37 +279,21 @@ func (suite *PeerAssignmentServiceTestSuite) TestGeneratePeerAssignments56Studen
 			a.StudentID, studentTutor[a.StudentID], a.PeerID, studentTutor[a.PeerID])
 	}
 
-	// Verify: each student has 2-3 peers (groups of 3 or 4)
+	// Every student has every other member of their tutor group as a peer.
 	peerCount := make(map[uuid.UUID]int)
 	for _, a := range assignments {
 		peerCount[a.StudentID]++
 	}
-	for sid, count := range peerCount {
-		assert.True(suite.T(), count >= 2 && count <= 3,
-			"Student %s has %d peers (expected 2-3)", sid, count)
+	for i, sid := range studentIDs {
+		assert.Equal(suite.T(), tutorStudentCounts[i%numTutors]-1, peerCount[sid],
+			"Student %s is missing peers from their tutor group", sid)
 	}
 
-	// Verify: assignment count is correct
-	// Groups of 3 → 6 edges, groups of 4 → 12 edges
+	// Each group has n*(n-1) distinct directed assignments.
+	assert.Len(suite.T(), assignmentSet, len(assignments), "Duplicate peer assignment")
 	expectedCount := 0
 	for _, count := range tutorStudentCounts {
-		if count < 2 {
-			continue
-		}
-		numQuads := 0
-		switch count % 3 {
-		case 1:
-			numQuads = 1
-		case 2:
-			if count >= 8 {
-				numQuads = 2
-			}
-		}
-		numTriples := (count - 4*numQuads) / 3
-		remaining := count - 3*numTriples - 4*numQuads
-		expectedCount += numTriples * 6
-		expectedCount += numQuads * 12
-		expectedCount += remaining * (remaining - 1) // best-effort pair or single
+		expectedCount += count * (count - 1)
 	}
 	assert.Equal(suite.T(), expectedCount, len(assignments),
 		"Unexpected assignment count")

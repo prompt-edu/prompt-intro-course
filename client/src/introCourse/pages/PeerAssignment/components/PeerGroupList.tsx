@@ -280,8 +280,7 @@ export const PeerGroupList = ({
           <Users className='h-12 w-12 mx-auto text-muted-foreground mb-2' />
           <h3 className='text-lg font-medium mb-2'>No Peer Assignments</h3>
           <p className='text-muted-foreground max-w-md mx-auto'>
-            Click &quot;Generate Groups&quot; to automatically create peer review groups within each
-            tutor group.
+            Click &quot;Generate Groups&quot; to use the current tutor groups as peer groups.
           </p>
         </CardContent>
       </Card>
@@ -484,13 +483,7 @@ export const PeerGroupList = ({
                           </Popover>
                         )}
                         <Badge variant='secondary' className='text-xs'>
-                          {group.members.length === 2
-                            ? 'Pair'
-                            : group.members.length === 3
-                              ? 'Triple'
-                              : group.members.length === 4
-                                ? 'Quad'
-                                : `${group.members.length}`}
+                          {group.members.length} members
                         </Badge>
                       </div>
                     </div>
