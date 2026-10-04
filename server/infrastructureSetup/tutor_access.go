@@ -25,3 +25,48 @@ func ensureTutorGroupAccess(git *gitlab.Client, introCourseGroupID, tutorsGroupI
 	}
 	return nil
 }
+
+// Tutors retain Developer access but can merge reviewed changes into demo main.
+// Sharing the project directly is required for a group-specific branch rule.
+func ensureDemoTutorMergeAccess(git *gitlab.Client, projectID, tutorsGroupID int64) error {
+	if err := ensureProjectSharedWithGroupAtLeast(git, projectID, tutorsGroupID, gitlab.DeveloperPermissions); err != nil {
+		return fmt.Errorf("share demo with tutor group: %w", err)
+	}
+	branch, _, err := git.ProtectedBranches.GetProtectedBranch(projectID, "main")
+	if err != nil {
+		return fmt.Errorf("inspect demo main: %w", err)
+	}
+	if demoMainBranchProtectionMatches(branch, tutorsGroupID) {
+		return nil
+	}
+	if !mainBranchProtectionMatches(branch, 0) {
+		return fmt.Errorf("secure demo main before granting tutor merge access")
+	}
+	branch, _, err = git.ProtectedBranches.UpdateProtectedBranch(projectID, "main", &gitlab.UpdateProtectedBranchOptions{
+		AllowedToMerge: gitlab.Ptr([]*gitlab.BranchPermissionOptions{{GroupID: gitlab.Ptr(tutorsGroupID)}}),
+	})
+	if err != nil {
+		return fmt.Errorf("allow tutors to merge demo changes: %w", err)
+	}
+	if !demoMainBranchProtectionMatches(branch, tutorsGroupID) {
+		return fmt.Errorf("GitLab did not confirm tutor merge access and demo push restrictions")
+	}
+	return nil
+}
+
+func demoMainBranchProtectionMatches(branch *gitlab.ProtectedBranch, tutorsGroupID int64) bool {
+	if branch == nil || tutorsGroupID == 0 {
+		return false
+	}
+	base := *branch
+	base.MergeAccessLevels = nil
+	tutorGroupPresent := false
+	for _, access := range branch.MergeAccessLevels {
+		if access.GroupID == tutorsGroupID && access.UserID == 0 && !tutorGroupPresent {
+			tutorGroupPresent = true
+		} else {
+			base.MergeAccessLevels = append(base.MergeAccessLevels, access)
+		}
+	}
+	return tutorGroupPresent && mainBranchProtectionMatches(&base, 0)
+}

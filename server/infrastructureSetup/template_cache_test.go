@@ -782,6 +782,9 @@ func TestCreateDemoProject(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
+		if handleDemoTutorAccessFixture(w, r) {
+			return
+		}
 		if board.handle(t, w, r) {
 			return
 		}
@@ -853,6 +856,10 @@ func TestCreateDemoProject(t *testing.T) {
 
 		// ProtectBranch
 		if path == "/api/v4/projects/300/protected_branches/main" && r.Method == http.MethodGet {
+			if branchProtected.Load() {
+				_, _ = w.Write([]byte(`{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}`))
+				return
+			}
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -1026,6 +1033,9 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
+		if handleDemoTutorAccessFixture(w, r) {
+			return
+		}
 		if board.handle(t, w, r) {
 			return
 		}

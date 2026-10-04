@@ -212,8 +212,19 @@ func CourseInfrastructureStatus(ctx context.Context, coursePhaseID uuid.UUID, se
 	if protectionErr != nil {
 		return nil, protectionErr
 	}
-	if len(matchingRules) != 1 || matchingRules[0].Name != "main" || !mainBranchProtectionMatches(matchingRules[0], 0) {
-		issue("Demo main must reject direct pushes and allow only Maintainers to merge.")
+	if tutors == nil || len(matchingRules) != 1 || matchingRules[0].Name != "main" || !demoMainBranchProtectionMatches(matchingRules[0], tutors.ID) {
+		issue("Demo main must reject direct pushes and allow the tutor group and Maintainers to merge.")
+	}
+	demoSharedWithTutors := false
+	if tutors != nil {
+		for _, shared := range demo.SharedWithGroups {
+			if shared.GroupID == tutors.ID && shared.GroupAccessLevel >= int64(gitlab.DeveloperPermissions) {
+				demoSharedWithTutors = true
+			}
+		}
+	}
+	if !demoSharedWithTutors {
+		issue("Demo must be shared directly with the tutor group for its merge permission to work.")
 	}
 	if err := checkCourseStatusBoard(git, demo.ID, demo.PathWithNamespace); err != nil {
 		issue("Demo needs its GitLab status board: " + err.Error())
