@@ -138,6 +138,9 @@ func ResetDemo(ctx context.Context, coursePhaseID uuid.UUID, request resetDemoRe
 	if err := ensureApprovalRule(git, project.ID, "demo", status.Groups["tutors"].ID); err != nil {
 		return nil, err
 	}
+	if err := ensureDemoTutorMergeAccess(git, project.ID, status.Groups["tutors"].ID); err != nil {
+		return nil, err
+	}
 	return &resetDemoResult{DemoURL: project.WebURL, DemoID: project.ID, SourceSHA: material.sha}, nil
 }
 

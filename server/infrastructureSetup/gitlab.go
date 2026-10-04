@@ -1353,6 +1353,5 @@ func createDemoProjectWithMaterial(git *gitlab.Client, introCourseGroupID int64,
 	if err = ensureApprovalRule(git, project.ID, demoProjectName, tutorsGroupID); err != nil {
 		return err
 	}
-
-	return nil
+	return ensureDemoTutorMergeAccess(git, project.ID, tutorsGroupID)
 }
