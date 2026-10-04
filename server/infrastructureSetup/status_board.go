@@ -254,7 +254,7 @@ func demoWorkItemsClean(git *gitlab.Client, projectPath string, expectedCount in
 		} `json:"errors"`
 	}
 	_, err = git.GraphQL.Do(gitlab.GraphQLQuery{
-		Query:     `query($path: ID!) { project(fullPath: $path) { workItems(first: 100) { nodes { widgets { ... on WorkItemWidgetStatus { status { id } } } } pageInfo { hasNextPage } } } }`,
+		Query:     `query($path: ID!) { project(fullPath: $path) { workItems(first: 100, state: opened) { nodes { widgets { ... on WorkItemWidgetStatus { status { id } } } } pageInfo { hasNextPage } } } }`,
 		Variables: map[string]any{"path": projectPath},
 	}, &result)
 	if err != nil {

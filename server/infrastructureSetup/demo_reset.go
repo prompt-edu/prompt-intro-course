@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -117,7 +118,7 @@ func ResetDemo(ctx context.Context, coursePhaseID uuid.UUID, request resetDemoRe
 	if err != nil {
 		return nil, err
 	}
-	if err := rewriteDemoMain(git, project.ID, root, material.templates, vars); err != nil {
+	if err := rewriteDemoMain(git, project.ID, root, material.templates, vars, status.Groups["tutors"].ID); err != nil {
 		return nil, err
 	}
 	if err := closeDemoMergeRequests(git, project.ID); err != nil {
@@ -200,7 +201,7 @@ func demoTemplateActions(rootFiles map[string]demoRootFile, templates []template
 	return actions, nil
 }
 
-func rewriteDemoMain(git *gitlab.Client, projectID int64, root string, templates []templateFile, vars templateVars) (err error) {
+func rewriteDemoMain(git *gitlab.Client, projectID int64, root string, templates []templateFile, vars templateVars, tutorsGroupID int64) (err error) {
 	nodes, err := gitlab.ScanAndCollect(func(p gitlab.PaginationOptionFunc) ([]*gitlab.TreeNode, *gitlab.Response, error) {
 		return git.Repositories.ListTree(projectID, &gitlab.ListTreeOptions{
 			Ref: gitlab.Ptr(root), Recursive: gitlab.Ptr(true), ListOptions: gitlab.ListOptions{PerPage: 100},
@@ -234,7 +235,7 @@ func rewriteDemoMain(git *gitlab.Client, projectID int64, root string, templates
 	if err != nil {
 		return fmt.Errorf("read demo main branch protection: %w", err)
 	}
-	if !mainBranchProtectionMatches(protected, 0) {
+	if !mainBranchProtectionMatches(protected, 0) && !demoMainBranchProtectionMatches(protected, tutorsGroupID) {
 		return fmt.Errorf("demo main branch must have the expected strict protection before reset")
 	}
 	rules, err := listMatchingMainProtections(git, projectID)
@@ -252,6 +253,10 @@ func rewriteDemoMain(git *gitlab.Client, projectID int64, root string, templates
 	defer func() {
 		if restoreErr := ensureMainBranchProtection(git, projectID, 0); restoreErr != nil {
 			err = errors.Join(err, fmt.Errorf("restore demo main protection immediately: %w", restoreErr))
+			return
+		}
+		if restoreErr := ensureDemoTutorMergeAccess(git, projectID, tutorsGroupID); restoreErr != nil {
+			err = errors.Join(err, fmt.Errorf("restore demo tutor merge access: %w", restoreErr))
 		}
 	}()
 	temporary, _, err := git.ProtectedBranches.UpdateProtectedBranch(projectID, "main", &gitlab.UpdateProtectedBranchOptions{
@@ -358,7 +363,7 @@ func demoIssueStatusIDs(git *gitlab.Client, projectPath string) (map[int64]strin
 		} `json:"errors"`
 	}
 	_, err = git.GraphQL.Do(gitlab.GraphQLQuery{
-		Query:     `query($path: ID!) { project(fullPath: $path) { workItems(first: 100) { nodes { iid widgets { ... on WorkItemWidgetStatus { status { id } } } } pageInfo { hasNextPage } } } }`,
+		Query:     `query($path: ID!) { project(fullPath: $path) { workItems(first: 100, state: opened) { nodes { iid widgets { ... on WorkItemWidgetStatus { status { id } } } } pageInfo { hasNextPage } } } }`,
 		Variables: map[string]any{"path": projectPath},
 	}, &result)
 	if err != nil {
@@ -410,8 +415,8 @@ func resetDemoIssues(git *gitlab.Client, projectID int64, projectPath string, te
 	for _, issue := range issues {
 		tmpl, keep := wanted[issue.Title]
 		if !keep || seen[issue.Title] {
-			if _, err := git.Issues.DeleteIssue(projectID, issue.IID); err != nil {
-				return fmt.Errorf("delete demo practice issue #%d: %w", issue.IID, err)
+			if err := retireDemoPracticeIssue(git, projectID, issue); err != nil {
+				return err
 			}
 			continue
 		}
@@ -451,6 +456,25 @@ func resetDemoIssues(git *gitlab.Client, projectID int64, projectPath string, te
 		}); err != nil {
 			return fmt.Errorf("restore demo daily issue %q: %w", tmpl.Title, err)
 		}
+	}
+	return nil
+}
+
+// GitLab can prohibit a Maintainer from deleting another user's issue. Closing
+// it removes it from active coursework without requiring an Owner token.
+func retireDemoPracticeIssue(git *gitlab.Client, projectID int64, issue *gitlab.Issue) error {
+	response, err := git.Issues.DeleteIssue(projectID, issue.IID)
+	if err == nil || isNotFoundError(err) {
+		return nil
+	}
+	if response == nil || response.StatusCode != http.StatusForbidden {
+		return fmt.Errorf("delete demo practice issue #%d: %w", issue.IID, err)
+	}
+	if issue.State == "closed" {
+		return nil
+	}
+	if _, _, closeErr := git.Issues.UpdateIssue(projectID, issue.IID, &gitlab.UpdateIssueOptions{StateEvent: gitlab.Ptr("close")}); closeErr != nil {
+		return fmt.Errorf("close demo practice issue #%d after deletion was denied: %w", issue.IID, closeErr)
 	}
 	return nil
 }

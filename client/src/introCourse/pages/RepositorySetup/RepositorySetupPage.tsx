@@ -355,7 +355,8 @@ export const RepositorySetupPage = () => {
               <DialogTitle>Reset the demo repository</DialogTitle>
               <DialogDescription>
                 PROMPT will replace the demo’s main branch with the current teaching material,
-                delete practice branches and extra issues, and restore the Git 2 exercise branches.
+                delete practice branches, remove extra issues, and restore the Git 2 exercise
+                branches. Extra issues are closed instead if GitLab does not permit their deletion.
                 The project URL and existing daily issue numbers stay the same. Old comments on
                 those issues remain. Open merge requests will close, but their history and merge
                 request numbers will remain. Student repositories are unaffected. This reset cannot
