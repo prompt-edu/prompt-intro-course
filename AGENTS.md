@@ -202,7 +202,8 @@ Primary intro-course pages include:
 - `team`: inter-phase outputs in the team allocation shape. Every tutor is one team
   (team ID = tutor ID) holding the students seated in their seats: `GET /team` (`teams`),
   `GET /allocation` and `GET /allocation/:courseParticipationID` (`teamAllocation`).
-  Student names are cached in `participant_name` and refreshed from core on staff reads.
+  Student names are cached in `participant_name`, filled by the seat import and refreshed
+  from core on staff reads (at most every 5 minutes per phase).
 - `infrastructureSetup`: GitLab course setup and per-student repo setup/status
 - `copy`: copy endpoint registration for course-phase duplication
 - `config`: config endpoint registration for phase-level configuration
@@ -234,6 +235,7 @@ Roles used in this repo:
 
 - `PromptAdmin`
 - `CourseLecturer`
+- `CourseEditor` (only the `team` read routes; tutors are scoped to their own team)
 - `CourseStudent`
 
 ## Module Federation Pattern (Client)
