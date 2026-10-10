@@ -6,11 +6,13 @@ import {
   INTRO_COURSE_PARTICIPANT_COUNT,
   INTRO_COURSE_PHASE_ID,
   SEAT_PLAN,
+  SEEDED_TUTORS,
   SEEDED_TUTOR_COUNT,
   STUDENT_WITHOUT_PROFILE,
   STUDENT_WITH_PROFILE,
 } from '../../src/data/constants'
 import {
+  INTER_PHASE_API_SURFACES,
   LECTURER_API_SURFACES,
   MATRIX_ROLES,
   STUDENT_API_SURFACES,
@@ -39,7 +41,11 @@ test.describe('intro course api: the info endpoint', () => {
 })
 
 test.describe('intro course api: unauthenticated requests', () => {
-  for (const surface of [...LECTURER_API_SURFACES, ...STUDENT_API_SURFACES]) {
+  for (const surface of [
+    ...LECTURER_API_SURFACES,
+    ...STUDENT_API_SURFACES,
+    ...INTER_PHASE_API_SURFACES,
+  ]) {
     test(`${surface.name} without a token is rejected`, async () => {
       const anon = await request.newContext({ baseURL: INTRO_COURSE_API_URL })
       const res = await anon.get(phasePath(surface.path))
@@ -141,6 +147,91 @@ test.describe('intro course api: student-scoped endpoints', () => {
     // shell decides the survey has not been filled in yet.
     expect(res.status()).toBe(200)
     expect(await res.json()).toMatchObject({ appleID: '', gitLabUsername: '' })
+  })
+})
+
+interface TeamPerson {
+  id: string
+  firstName: string
+  lastName: string
+}
+
+interface Team {
+  id: string
+  name: string
+  members: TeamPerson[]
+  tutors: TeamPerson[]
+}
+
+test.describe('intro course api: inter-phase team outputs', () => {
+  for (const surface of INTER_PHASE_API_SURFACES) {
+    for (const role of MATRIX_ROLES) {
+      const allowed = surface.allowed.includes(role)
+
+      test(`${role} ${allowed ? 'may' : 'may not'} read ${surface.name}`, async ({
+        introCourseAs,
+      }) => {
+        const api = await introCourseAs(role)
+        const res = await api.get(phasePath(surface.path))
+
+        if (allowed) {
+          expect(res.status()).toBe(200)
+        } else {
+          expect([401, 403]).toContain(res.status())
+        }
+      })
+    }
+  }
+
+  test('every tutor row is a team with its tutor and seated students', async ({
+    introCourseAs,
+  }) => {
+    const api = await introCourseAs('course-lecturer')
+    const res = await api.get(phasePath('/team'))
+    expect(res.status()).toBe(200)
+    const { teams } = (await res.json()) as { teams: Team[] }
+
+    expect(teams.map((t) => t.id).sort()).toEqual(SEEDED_TUTORS.map((t) => t.id).sort())
+
+    const alice = SEEDED_TUTORS[0]
+    const aliceTeam = teams.find((t) => t.id === alice.id)
+    expect(aliceTeam?.name).toBe(`${alice.firstName} ${alice.lastName}`)
+    expect(aliceTeam?.tutors).toEqual([
+      { id: alice.id, firstName: alice.firstName, lastName: alice.lastName },
+    ])
+    // The lecturer's read refreshes the cached names from core.
+    expect(aliceTeam?.members).toContainEqual({
+      id: STUDENT_WITH_PROFILE.courseParticipationId,
+      firstName: STUDENT_WITH_PROFILE.firstName,
+      lastName: STUDENT_WITH_PROFILE.lastName,
+    })
+  })
+
+  test("a seated student's team allocation is their tutor's team", async ({ introCourseAs }) => {
+    const api = await introCourseAs(STUDENT_WITH_PROFILE.role)
+
+    const own = await api.get(
+      phasePath(`/allocation/${STUDENT_WITH_PROFILE.courseParticipationId}`),
+    )
+    expect(own.status()).toBe(200)
+    expect(await own.json()).toEqual({ teamAllocation: SEEDED_TUTORS[0].id })
+
+    const all = (await (await api.get(phasePath('/allocation'))).json()) as {
+      courseParticipationID: string
+      teamAllocation: string
+    }[]
+    expect(all).toContainEqual({
+      courseParticipationID: STUDENT_WITH_PROFILE.courseParticipationId,
+      teamAllocation: SEEDED_TUTORS[0].id,
+    })
+  })
+
+  test('an unseated student has no team allocation', async ({ introCourseAs }) => {
+    const api = await introCourseAs('course-lecturer')
+    const res = await api.get(
+      phasePath(`/allocation/${STUDENT_WITHOUT_PROFILE.courseParticipationId}`),
+    )
+    expect(res.status()).toBe(404)
   })
 })
 
