@@ -20,6 +20,13 @@ type DeveloperProfile struct {
 	AppleWatchUdid        pgtype.Text `json:"apple_watch_udid"`
 }
 
+type ParticipantName struct {
+	CoursePhaseID         uuid.UUID `json:"course_phase_id"`
+	CourseParticipationID uuid.UUID `json:"course_participation_id"`
+	FirstName             string    `json:"first_name"`
+	LastName              string    `json:"last_name"`
+}
+
 type PeerAssignment struct {
 	CoursePhaseID uuid.UUID `json:"course_phase_id"`
 	StudentID     uuid.UUID `json:"student_id"`

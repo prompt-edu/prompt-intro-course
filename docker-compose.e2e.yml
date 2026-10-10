@@ -200,8 +200,8 @@ services:
       - TZ=Europe/Berlin
     # initdb runs these in filename order: the migrations build the schema, the
     # existing fixture fills it, and the pin file records the applied version so
-    # the server's boot-time `migrate up` is a no-op for 0001..0006 (and still
-    # applies any future 0007+ on top).
+    # the server's boot-time `migrate up` is a no-op for 0001..0007 (and still
+    # applies any future 0008+ on top).
     #
     # Mounting the migrations individually rather than shipping a schema dump keeps
     # server/db/migration/ the single source of truth. When a migration is added,
@@ -213,6 +213,7 @@ services:
       - ./server/db/migration/0004_add_tutor_gitlab.up.sql:/docker-entrypoint-initdb.d/04_0004_add_tutor_gitlab.sql:ro
       - ./server/db/migration/0005_peer_assignment.up.sql:/docker-entrypoint-initdb.d/05_0005_peer_assignment.sql:ro
       - ./server/db/migration/0006_tutor_seat.up.sql:/docker-entrypoint-initdb.d/06_0006_tutor_seat.sql:ro
+      - ./server/db/migration/0007_participant_name.up.sql:/docker-entrypoint-initdb.d/07_0007_participant_name.sql:ro
       - ./server/database_dumps/e2e_seed.sql:/docker-entrypoint-initdb.d/50_e2e_seed.sql:ro
       - ./e2e/seed/intro-course/90_schema_migrations.sql:/docker-entrypoint-initdb.d/90_schema_migrations.sql:ro
     healthcheck:

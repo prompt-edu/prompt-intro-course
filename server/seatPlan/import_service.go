@@ -9,7 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/prompt-edu/prompt-intro-course/server/db/sqlc"
 	"github.com/prompt-edu/prompt-intro-course/server/seatPlan/seatPlanDTO"
+	"github.com/prompt-edu/prompt-intro-course/server/team"
 	promptSDK "github.com/prompt-edu/prompt-sdk"
+	"github.com/prompt-edu/prompt-sdk/promptTypes"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -171,6 +173,15 @@ func ImportSeatAssignments(
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	// The names are only a cache for the tutor teams, so a failure must not undo the import.
+	participants := make([]promptTypes.Person, 0, len(students))
+	for _, s := range students {
+		participants = append(participants, promptTypes.Person{ID: s.CourseParticipationID, FirstName: s.FirstName, LastName: s.LastName})
+	}
+	if err := team.StoreParticipantNames(ctx, svc.queries, coursePhaseID, participants); err != nil {
+		log.WithError(err).Warn("Failed to cache participant names during import")
 	}
 
 	return &seatPlanDTO.ImportResult{

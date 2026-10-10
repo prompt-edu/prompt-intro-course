@@ -106,6 +106,13 @@ func (s *ImportServiceTestSuite) TestImportStudentAndTutorByName() {
 			assert.Equal(s.T(), s.tutorID2, uuid.UUID(seat.AssignedTutor.Bytes), "Seat-2 should have Bob (tutorID2)")
 		}
 	}
+
+	// The import caches the names it matched on, so the tutor teams can show them.
+	teams, err := SeatPlanServiceSingleton.queries.GetTutorTeams(s.ctx, s.coursePhaseID)
+	require.NoError(s.T(), err)
+	require.NotEmpty(s.T(), teams)
+	assert.Equal(s.T(), s.tutorID1, teams[0].ID)
+	assert.JSONEq(s.T(), `[{"id": "`+s.studentID2.String()+`", "firstName": "Anna", "lastName": "Schmidt"}]`, string(teams[0].TeamMembers))
 }
 
 // TestImportTutorSeat verifies that isTutorSeat flag is set correctly.

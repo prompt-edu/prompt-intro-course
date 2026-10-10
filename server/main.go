@@ -20,6 +20,7 @@ import (
 	"github.com/prompt-edu/prompt-intro-course/server/infrastructureSetup"
 	"github.com/prompt-edu/prompt-intro-course/server/peerAssignment"
 	"github.com/prompt-edu/prompt-intro-course/server/seatPlan"
+	"github.com/prompt-edu/prompt-intro-course/server/team"
 	"github.com/prompt-edu/prompt-intro-course/server/tutor"
 	"github.com/prompt-edu/prompt-intro-course/server/utils"
 	promptSDK "github.com/prompt-edu/prompt-sdk"
@@ -149,6 +150,7 @@ func main() {
 	developerProfile.InitDeveloperProfileModule(api, *query, conn, gitlabAccessToken)
 	tutor.InitTutorModule(api, *query, conn)
 	seatPlan.InitSeatPlanModule(api, *query, conn)
+	team.InitTeamModule(api, *query)
 
 	// Infrastructure Setup
 	teachingMaterialProjectID := utils.GetEnv("GITLAB_TEACHING_MATERIAL_PROJECT_ID", "")
