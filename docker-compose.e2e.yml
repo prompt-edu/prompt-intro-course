@@ -213,6 +213,7 @@ services:
       - ./server/db/migration/0004_add_tutor_gitlab.up.sql:/docker-entrypoint-initdb.d/04_0004_add_tutor_gitlab.sql:ro
       - ./server/db/migration/0005_peer_assignment.up.sql:/docker-entrypoint-initdb.d/05_0005_peer_assignment.sql:ro
       - ./server/db/migration/0006_tutor_seat.up.sql:/docker-entrypoint-initdb.d/06_0006_tutor_seat.sql:ro
+      - ./server/db/migration/0007_participant_name.up.sql:/docker-entrypoint-initdb.d/07_0007_participant_name.sql:ro
       - ./server/database_dumps/e2e_seed.sql:/docker-entrypoint-initdb.d/50_e2e_seed.sql:ro
       - ./e2e/seed/intro-course/90_schema_migrations.sql:/docker-entrypoint-initdb.d/90_schema_migrations.sql:ro
     healthcheck:
