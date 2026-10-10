@@ -16,9 +16,15 @@ func GetTeamDTOFromDBModel(dbTeam db.GetTutorTeamsRow) (promptTypes.Team, error)
 		return promptTypes.Team{}, err
 	}
 
+	// Consumers bind the name as required, so a tutor without a name falls back to the ID.
+	name := strings.TrimSpace(dbTeam.FirstName + " " + dbTeam.LastName)
+	if name == "" {
+		name = dbTeam.ID.String()
+	}
+
 	return promptTypes.Team{
 		ID:      dbTeam.ID,
-		Name:    strings.TrimSpace(dbTeam.FirstName + " " + dbTeam.LastName),
+		Name:    name,
 		Members: members,
 		Tutors: []promptTypes.Person{
 			{

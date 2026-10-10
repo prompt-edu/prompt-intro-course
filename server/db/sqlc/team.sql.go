@@ -12,13 +12,12 @@ import (
 )
 
 const getTeamAllocation = `-- name: GetTeamAllocation :one
-SELECT t.id AS team_id
+SELECT s.assigned_tutor::uuid AS team_id
 FROM seat s
-         JOIN tutor t
-              ON t.course_phase_id = s.course_phase_id
-                  AND t.id = s.assigned_tutor
 WHERE s.course_phase_id = $1
   AND s.assigned_student = $2::uuid
+  AND s.assigned_tutor IS NOT NULL
+  AND NOT s.is_tutor_seat
 ORDER BY s.seat_name
 LIMIT 1
 `
@@ -37,13 +36,12 @@ func (q *Queries) GetTeamAllocation(ctx context.Context, arg GetTeamAllocationPa
 
 const getTeamAllocations = `-- name: GetTeamAllocations :many
 SELECT DISTINCT ON (s.assigned_student) s.assigned_student::uuid AS course_participation_id,
-                                        t.id                     AS team_id
+                                        s.assigned_tutor::uuid   AS team_id
 FROM seat s
-         JOIN tutor t
-              ON t.course_phase_id = s.course_phase_id
-                  AND t.id = s.assigned_tutor
 WHERE s.course_phase_id = $1
   AND s.assigned_student IS NOT NULL
+  AND s.assigned_tutor IS NOT NULL
+  AND NOT s.is_tutor_seat
 ORDER BY s.assigned_student, s.seat_name
 `
 
@@ -52,7 +50,6 @@ type GetTeamAllocationsRow struct {
 	TeamID                uuid.UUID `json:"team_id"`
 }
 
-// A student seated twice counts for the first seat by name, matching GetTeamAllocation.
 func (q *Queries) GetTeamAllocations(ctx context.Context, coursePhaseID uuid.UUID) ([]GetTeamAllocationsRow, error) {
 	rows, err := q.db.Query(ctx, getTeamAllocations, coursePhaseID)
 	if err != nil {
@@ -73,7 +70,38 @@ func (q *Queries) GetTeamAllocations(ctx context.Context, coursePhaseID uuid.UUI
 	return items, nil
 }
 
+const getTutorTeamByUniversityLogin = `-- name: GetTutorTeamByUniversityLogin :one
+SELECT id
+FROM tutor
+WHERE course_phase_id = $1
+  AND lower(trim(university_login)) = $2::text
+ORDER BY id
+LIMIT 1
+`
+
+type GetTutorTeamByUniversityLoginParams struct {
+	CoursePhaseID   uuid.UUID `json:"course_phase_id"`
+	UniversityLogin string    `json:"university_login"`
+}
+
+func (q *Queries) GetTutorTeamByUniversityLogin(ctx context.Context, arg GetTutorTeamByUniversityLoginParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getTutorTeamByUniversityLogin, arg.CoursePhaseID, arg.UniversityLogin)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getTutorTeams = `-- name: GetTutorTeams :many
+
+WITH student_seat AS (
+    SELECT DISTINCT ON (s.assigned_student) s.assigned_student, s.assigned_tutor, s.seat_name
+    FROM seat s
+    WHERE s.course_phase_id = $1
+      AND s.assigned_student IS NOT NULL
+      AND s.assigned_tutor IS NOT NULL
+      AND NOT s.is_tutor_seat
+    ORDER BY s.assigned_student, s.seat_name
+)
 SELECT t.id,
        t.first_name,
        t.last_name,
@@ -82,22 +110,20 @@ FROM tutor t
          LEFT JOIN LATERAL (
     SELECT jsonb_agg(
                    jsonb_build_object(
-                           'id', s.assigned_student,
+                           'id', ss.assigned_student,
                            'firstName', COALESCE(pn.first_name, ''),
                            'lastName', COALESCE(pn.last_name, '')
                    )
-                   ORDER BY pn.first_name, pn.last_name, s.seat_name
+                   ORDER BY pn.first_name, pn.last_name, ss.seat_name
            ) AS team_members
-    FROM seat s
+    FROM student_seat ss
              LEFT JOIN participant_name pn
-                       ON pn.course_phase_id = s.course_phase_id
-                           AND pn.course_participation_id = s.assigned_student
-    WHERE s.course_phase_id = t.course_phase_id
-      AND s.assigned_tutor = t.id
-      AND s.assigned_student IS NOT NULL
+                       ON pn.course_phase_id = t.course_phase_id
+                           AND pn.course_participation_id = ss.assigned_student
+    WHERE ss.assigned_tutor = t.id
     ) members ON TRUE
 WHERE t.course_phase_id = $1
-ORDER BY t.first_name, t.last_name
+ORDER BY t.first_name, t.last_name, t.id
 `
 
 type GetTutorTeamsRow struct {
@@ -107,6 +133,9 @@ type GetTutorTeamsRow struct {
 	TeamMembers []byte    `json:"team_members"`
 }
 
+// A student counts for the first seat by name that has a tutor and is not a tutor seat.
+// GetTutorTeams, GetTeamAllocations and GetTeamAllocation all apply this rule, so a
+// student seated twice still belongs to exactly one team.
 // One team per tutor: the tutor plus every student seated in one of their seats.
 func (q *Queries) GetTutorTeams(ctx context.Context, coursePhaseID uuid.UUID) ([]GetTutorTeamsRow, error) {
 	rows, err := q.db.Query(ctx, getTutorTeams, coursePhaseID)
@@ -142,6 +171,8 @@ SELECT $1::uuid,
 ON CONFLICT (course_phase_id, course_participation_id) DO UPDATE
     SET first_name = EXCLUDED.first_name,
         last_name  = EXCLUDED.last_name
+WHERE participant_name.first_name IS DISTINCT FROM EXCLUDED.first_name
+   OR participant_name.last_name IS DISTINCT FROM EXCLUDED.last_name
 `
 
 type UpsertParticipantNamesParams struct {
@@ -152,7 +183,8 @@ type UpsertParticipantNamesParams struct {
 }
 
 // The arrays are zipped by position (set-returning functions in the select list
-// advance in lockstep), so callers must pass them with equal lengths.
+// advance in lockstep), so callers must pass them with equal lengths. Unchanged
+// names are left alone to keep repeated refreshes from rewriting every row.
 func (q *Queries) UpsertParticipantNames(ctx context.Context, arg UpsertParticipantNamesParams) error {
 	_, err := q.db.Exec(ctx, upsertParticipantNames,
 		arg.CoursePhaseID,
