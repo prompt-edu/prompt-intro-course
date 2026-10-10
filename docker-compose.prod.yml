@@ -13,6 +13,8 @@ services:
       - SERVER_IMAGE_TAG=${SERVER_IMAGE_TAG}
       - CORE_HOST=${CORE_HOST}
       - SERVER_CORE_HOST=${SERVER_CORE_HOST}
+      - AUDIT_ENABLED=${AUDIT_ENABLED:-false}
+      - AUDIT_INGEST_KEY=${AUDIT_INGEST_KEY:-}
       - DB_HOST=db-intro-course
       - DB_PORT=5432
       - DB_NAME=${DB_NAME}

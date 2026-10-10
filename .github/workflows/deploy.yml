@@ -89,6 +89,8 @@ jobs:
             APPLE_ISSUER_ID=${{ secrets.APPLE_ISSUER_ID }}
             APPLE_KEY_ID=${{ secrets.APPLE_KEY_ID }}
             APPLE_PRIVATE_KEY_B64=$APPLE_PRIVATE_KEY_B64
+            AUDIT_ENABLED=${{ vars.AUDIT_ENABLED || 'false' }}
+            AUDIT_INGEST_KEY=${{ secrets.AUDIT_INGEST_KEY }}
             SENTRY_DSN=${{ vars.SENTRY_DSN || vars.SENTRY_DSN_INTRO_COURSE }}
             EOT
 
