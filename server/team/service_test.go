@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prompt-edu/prompt-intro-course/server/coreRequests"
 	"github.com/prompt-edu/prompt-intro-course/server/testutils"
 	"github.com/stretchr/testify/assert"
@@ -23,9 +25,23 @@ var (
 	unnamedStudentID  = uuid.MustParse("44444444-4444-4444-4444-444444444444")
 )
 
+// fakeCore serves core's participation list and counts the requests it gets.
+func fakeCore(t *testing.T, status int, participations []coreRequests.Participation) *atomic.Int32 {
+	var hits atomic.Int32
+	core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(coreRequests.ParticipationsResponse{Participations: participations})
+	}))
+	t.Cleanup(core.Close)
+	t.Setenv("SERVER_CORE_HOST", core.URL)
+	return &hits
+}
+
 type TeamServiceTestSuite struct {
 	suite.Suite
 	ctx     context.Context
+	conn    *pgxpool.Pool
 	cleanup func()
 }
 
@@ -36,9 +52,9 @@ func (suite *TeamServiceTestSuite) SetupSuite() {
 		suite.T().Fatalf("Failed to set up test database: %v", err)
 	}
 	suite.cleanup = cleanup
+	suite.conn = testDB.Conn
 	TeamServiceSingleton = &TeamService{
 		queries: *testDB.Queries,
-		conn:    testDB.Conn,
 	}
 }
 
@@ -50,6 +66,11 @@ func (suite *TeamServiceTestSuite) TearDownSuite() {
 
 func TestTeamServiceTestSuite(t *testing.T) {
 	suite.Run(t, new(TeamServiceTestSuite))
+}
+
+func (suite *TeamServiceTestSuite) exec(sql string, args ...any) {
+	_, err := suite.conn.Exec(suite.ctx, sql, args...)
+	require.NoError(suite.T(), err)
 }
 
 func (suite *TeamServiceTestSuite) TestGetTeamsBuildsOneTeamPerTutor() {
@@ -83,6 +104,34 @@ func (suite *TeamServiceTestSuite) TestGetTeamsForPhaseWithoutTutors() {
 	assert.Empty(suite.T(), teams)
 }
 
+func (suite *TeamServiceTestSuite) TestDoubleSeatedStudentBelongsToOneTeam() {
+	coursePhaseID := uuid.New()
+	firstTutor, secondTutor, student := uuid.New(), uuid.New(), uuid.New()
+	suite.exec(`INSERT INTO tutor (course_phase_id, id, first_name, last_name, email, matriculation_number, university_login)
+		VALUES ($1, $2, 'Amy', 'First', 'a@example.com', '1', 'amy'), ($1, $3, 'Zed', 'Second', 'z@example.com', '2', 'zed')`,
+		coursePhaseID, firstTutor, secondTutor)
+	// A-0 is a tutor seat and never counts; of the student seats, A-1 sorts before B-1.
+	suite.exec(`INSERT INTO seat (course_phase_id, seat_name, assigned_student, assigned_tutor, is_tutor_seat)
+		VALUES ($1, 'A-0', $2, $3, true), ($1, 'A-1', $2, $4, false), ($1, 'B-1', $2, $3, false)`,
+		coursePhaseID, student, firstTutor, secondTutor)
+
+	teams, err := GetTeams(suite.ctx, coursePhaseID)
+	require.NoError(suite.T(), err)
+	require.Len(suite.T(), teams, 2)
+	assert.Empty(suite.T(), teams[0].Members, "Amy's seats are a tutor seat and a later duplicate")
+	require.Len(suite.T(), teams[1].Members, 1)
+	assert.Equal(suite.T(), student, teams[1].Members[0].ID)
+
+	allocations, err := GetAllocations(suite.ctx, coursePhaseID)
+	require.NoError(suite.T(), err)
+	require.Len(suite.T(), allocations, 1)
+	assert.Equal(suite.T(), secondTutor, allocations[0].TeamAllocation)
+
+	teamID, err := GetAllocation(suite.ctx, coursePhaseID, student)
+	require.NoError(suite.T(), err)
+	assert.Equal(suite.T(), secondTutor, teamID)
+}
+
 func (suite *TeamServiceTestSuite) TestGetAllocations() {
 	allocations, err := GetAllocations(suite.ctx, testCoursePhaseID)
 	require.NoError(suite.T(), err)
@@ -108,13 +157,18 @@ func (suite *TeamServiceTestSuite) TestGetAllocation() {
 
 func (suite *TeamServiceTestSuite) TestRefreshParticipantNames() {
 	coursePhaseID := uuid.New()
-	var gotAuthHeader string
+	tutor, student := uuid.New(), uuid.New()
+	suite.exec(`INSERT INTO tutor (course_phase_id, id, first_name, last_name, email, matriculation_number, university_login)
+		VALUES ($1, $2, 'Tia', 'Tutor', 't@example.com', '3', 'tia')`, coursePhaseID, tutor)
+	suite.exec(`INSERT INTO seat (course_phase_id, seat_name, assigned_student, assigned_tutor) VALUES ($1, 'S-1', $2, $3)`,
+		coursePhaseID, student, tutor)
+
+	var gotAuthHeader, gotPath string
 	core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuthHeader = r.Header.Get("Authorization")
-		assert.Equal(suite.T(), "/api/course_phases/"+coursePhaseID.String()+"/participations", r.URL.Path)
+		gotAuthHeader, gotPath = r.Header.Get("Authorization"), r.URL.Path
 		_ = json.NewEncoder(w).Encode(coreRequests.ParticipationsResponse{
 			Participations: []coreRequests.Participation{
-				{CourseParticipationID: samStudentID.String(), Student: coreRequests.StudentData{FirstName: "Samantha", LastName: "Renamed"}},
+				{CourseParticipationID: student.String(), Student: coreRequests.StudentData{FirstName: "Nora", LastName: "New"}},
 				{CourseParticipationID: "not-a-uuid", Student: coreRequests.StudentData{FirstName: "Broken"}},
 			},
 		})
@@ -124,29 +178,38 @@ func (suite *TeamServiceTestSuite) TestRefreshParticipantNames() {
 
 	require.NoError(suite.T(), RefreshParticipantNames(suite.ctx, "Bearer staff", coursePhaseID))
 	assert.Equal(suite.T(), "Bearer staff", gotAuthHeader)
+	assert.Equal(suite.T(), "/api/course_phases/"+coursePhaseID.String()+"/participations", gotPath)
 
 	teams, err := GetTeams(suite.ctx, coursePhaseID)
 	require.NoError(suite.T(), err)
-	assert.Empty(suite.T(), teams, "the refresh must not create teams")
-
-	var firstName string
-	err = TeamServiceSingleton.conn.QueryRow(suite.ctx,
-		"SELECT first_name FROM participant_name WHERE course_phase_id = $1 AND course_participation_id = $2",
-		coursePhaseID, samStudentID).Scan(&firstName)
-	require.NoError(suite.T(), err)
-	assert.Equal(suite.T(), "Samantha", firstName)
+	require.Len(suite.T(), teams, 1)
+	require.Len(suite.T(), teams[0].Members, 1)
+	assert.Equal(suite.T(), "Nora", teams[0].Members[0].FirstName)
+	assert.Equal(suite.T(), "New", teams[0].Members[0].LastName)
 }
 
 func (suite *TeamServiceTestSuite) TestRefreshParticipantNamesReportsCoreFailure() {
-	core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-	}))
-	defer core.Close()
-	suite.T().Setenv("SERVER_CORE_HOST", core.URL)
+	before, err := GetTeams(suite.ctx, testCoursePhaseID)
+	require.NoError(suite.T(), err)
 
+	fakeCore(suite.T(), http.StatusForbidden, nil)
 	assert.Error(suite.T(), RefreshParticipantNames(suite.ctx, "Bearer student", testCoursePhaseID))
 
-	teams, err := GetTeams(suite.ctx, testCoursePhaseID)
+	after, err := GetTeams(suite.ctx, testCoursePhaseID)
 	require.NoError(suite.T(), err)
-	assert.Equal(suite.T(), "Sam", teams[0].Members[0].FirstName, "cached names survive a failed refresh")
+	assert.Equal(suite.T(), before, after, "cached names survive a failed refresh")
+}
+
+func (suite *TeamServiceTestSuite) TestRefreshParticipantNamesIfStaleThrottles() {
+	coursePhaseID := uuid.New()
+
+	failing := fakeCore(suite.T(), http.StatusBadGateway, nil)
+	assert.Error(suite.T(), RefreshParticipantNamesIfStale(suite.ctx, "Bearer staff", coursePhaseID))
+	assert.EqualValues(suite.T(), 1, failing.Load())
+
+	// A failed refresh is not remembered, so the next read retries.
+	working := fakeCore(suite.T(), http.StatusOK, nil)
+	require.NoError(suite.T(), RefreshParticipantNamesIfStale(suite.ctx, "Bearer staff", coursePhaseID))
+	require.NoError(suite.T(), RefreshParticipantNamesIfStale(suite.ctx, "Bearer staff", coursePhaseID))
+	assert.EqualValues(suite.T(), 1, working.Load())
 }

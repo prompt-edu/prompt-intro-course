@@ -150,7 +150,7 @@ func main() {
 	developerProfile.InitDeveloperProfileModule(api, *query, conn, gitlabAccessToken)
 	tutor.InitTutorModule(api, *query, conn)
 	seatPlan.InitSeatPlanModule(api, *query, conn)
-	team.InitTeamModule(api, *query, conn)
+	team.InitTeamModule(api, *query)
 
 	// Infrastructure Setup
 	teachingMaterialProjectID := utils.GetEnv("GITLAB_TEACHING_MATERIAL_PROJECT_ID", "")

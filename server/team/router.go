@@ -9,6 +9,7 @@ import (
 	"github.com/prompt-edu/prompt-intro-course/server/team/teamDTO"
 	promptSDK "github.com/prompt-edu/prompt-sdk"
 	"github.com/prompt-edu/prompt-sdk/keycloakTokenVerifier"
+	"github.com/prompt-edu/prompt-sdk/promptTypes"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -16,18 +17,20 @@ import (
 // and the participation level "teamAllocation" output, in the shape of the team allocation phase.
 func setupTeamRouter(router *gin.RouterGroup, authMiddleware func(allowedRoles ...string) gin.HandlerFunc) {
 	readRoles := []string{promptSDK.PromptAdmin, promptSDK.CourseLecturer, promptSDK.CourseEditor, promptSDK.CourseStudent}
+	// Confines a tutor (editor registered as a tutor of this phase) to their own team.
+	scopingMW := promptSDK.TutorScopingMiddleware(tutorTeamResolver{})
 
 	teamRouter := router.Group("/team")
-	teamRouter.GET("", authMiddleware(readRoles...), getTeams)
+	teamRouter.GET("", authMiddleware(readRoles...), scopingMW, getTeams)
 
 	allocationRouter := router.Group("/allocation")
-	allocationRouter.GET("", authMiddleware(readRoles...), getAllocations)
-	allocationRouter.GET("/:courseParticipationID", authMiddleware(readRoles...), getAllocation)
+	allocationRouter.GET("", authMiddleware(readRoles...), scopingMW, getAllocations)
+	allocationRouter.GET("/:courseParticipationID", authMiddleware(readRoles...), scopingMW, getAllocation)
 }
 
 // getTeams godoc
 // @Summary Get tutor teams
-// @Description Returns one team per tutor with the students seated in that tutor's seats. The team ID is the tutor's ID.
+// @Description Returns one team per tutor with the students seated in that tutor's seats. The team ID is the tutor's ID. A tutor only sees their own team.
 // @Tags team
 // @Produce json
 // @Param coursePhaseID path string true "Course Phase UUID"
@@ -45,9 +48,9 @@ func getTeams(c *gin.Context) {
 	}
 
 	// Students cannot read core's participation list, so they get the names cached by
-	// the last staff read instead.
+	// the seat import or the last staff read instead.
 	if canReadCoreParticipations(c) {
-		if err := RefreshParticipantNames(c, c.GetHeader("Authorization"), coursePhaseID); err != nil {
+		if err := RefreshParticipantNamesIfStale(c, c.GetHeader("Authorization"), coursePhaseID); err != nil {
 			log.WithError(err).Warn("Failed to refresh participant names, serving cached names")
 		}
 	}
@@ -57,12 +60,16 @@ func getTeams(c *gin.Context) {
 		handleError(c, http.StatusInternalServerError, err)
 		return
 	}
+
+	if tutorTeamID, scoped := promptSDK.GetTutorTeamID(c); scoped {
+		teams = filterTeamsByID(teams, tutorTeamID)
+	}
 	c.JSON(http.StatusOK, gin.H{"teams": teams})
 }
 
 // getAllocations godoc
 // @Summary Get team allocations
-// @Description Returns the team (tutor) ID of every seated student.
+// @Description Returns the team (tutor) ID of every seated student. A tutor only sees their own team's students.
 // @Tags team
 // @Produce json
 // @Param coursePhaseID path string true "Course Phase UUID"
@@ -84,6 +91,10 @@ func getAllocations(c *gin.Context) {
 		handleError(c, http.StatusInternalServerError, err)
 		return
 	}
+
+	if tutorTeamID, scoped := promptSDK.GetTutorTeamID(c); scoped {
+		allocations = filterAllocationsByTeam(allocations, tutorTeamID)
+	}
 	c.JSON(http.StatusOK, allocations)
 }
 
@@ -96,6 +107,7 @@ func getAllocations(c *gin.Context) {
 // @Param courseParticipationID path string true "Course Participation UUID"
 // @Success 200 {object} teamDTO.Allocation
 // @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security ApiKeyAuth
@@ -124,7 +136,31 @@ func getAllocation(c *gin.Context) {
 		handleError(c, http.StatusInternalServerError, err)
 		return
 	}
+
+	if tutorTeamID, scoped := promptSDK.GetTutorTeamID(c); scoped && teamID != tutorTeamID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access restricted to assigned team"})
+		return
+	}
 	c.JSON(http.StatusOK, teamDTO.Allocation{TeamAllocation: teamID})
+}
+
+func filterTeamsByID(teams []promptTypes.Team, teamID uuid.UUID) []promptTypes.Team {
+	for _, team := range teams {
+		if team.ID == teamID {
+			return []promptTypes.Team{team}
+		}
+	}
+	return []promptTypes.Team{}
+}
+
+func filterAllocationsByTeam(allocations []teamDTO.AllocationWithParticipation, teamID uuid.UUID) []teamDTO.AllocationWithParticipation {
+	result := make([]teamDTO.AllocationWithParticipation, 0)
+	for _, allocation := range allocations {
+		if allocation.TeamAllocation == teamID {
+			result = append(result, allocation)
+		}
+	}
+	return result
 }
 
 // canReadCoreParticipations mirrors the roles core admits to a phase's participation list.

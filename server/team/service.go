@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prompt-edu/prompt-intro-course/server/coreRequests"
 	db "github.com/prompt-edu/prompt-intro-course/server/db/sqlc"
 	"github.com/prompt-edu/prompt-intro-course/server/team/teamDTO"
@@ -17,9 +19,14 @@ import (
 
 var ErrAllocationNotFound = errors.New("no team allocation found for this participant")
 
+// nameRefreshInterval bounds how often staff reads of the teams copy names from core.
+const nameRefreshInterval = 5 * time.Minute
+
 type TeamService struct {
 	queries db.Queries
-	conn    *pgxpool.Pool
+
+	// lastNameRefresh maps a course phase ID to the time its names were last copied from core.
+	lastNameRefresh sync.Map
 }
 
 var TeamServiceSingleton *TeamService
@@ -77,6 +84,19 @@ func GetAllocation(ctx context.Context, coursePhaseID, courseParticipationID uui
 	return teamID, nil
 }
 
+// RefreshParticipantNamesIfStale runs RefreshParticipantNames at most once per
+// nameRefreshInterval and course phase.
+func RefreshParticipantNamesIfStale(ctx context.Context, authHeader string, coursePhaseID uuid.UUID) error {
+	if last, ok := TeamServiceSingleton.lastNameRefresh.Load(coursePhaseID); ok && time.Since(last.(time.Time)) < nameRefreshInterval {
+		return nil
+	}
+	if err := RefreshParticipantNames(ctx, authHeader, coursePhaseID); err != nil {
+		return err
+	}
+	TeamServiceSingleton.lastNameRefresh.Store(coursePhaseID, time.Now())
+	return nil
+}
+
 // RefreshParticipantNames copies the participants' names from core into the local cache
 // the teams are served from. Core only lists participations to admins, lecturers and
 // editors, so authHeader must belong to one of them.
@@ -86,26 +106,58 @@ func RefreshParticipantNames(ctx context.Context, authHeader string, coursePhase
 		return fmt.Errorf("fetch participations from core: %w", err)
 	}
 
-	params := db.UpsertParticipantNamesParams{CoursePhaseID: coursePhaseID}
+	participants := make([]promptTypes.Person, 0, len(participations))
 	for _, participation := range participations {
 		courseParticipationID, err := uuid.Parse(participation.CourseParticipationID)
 		if err != nil {
 			log.WithError(err).Warn("Skipping participation with invalid courseParticipationID")
 			continue
 		}
-		params.CourseParticipationIds = append(params.CourseParticipationIds, courseParticipationID)
-		params.FirstNames = append(params.FirstNames, participation.Student.FirstName)
-		params.LastNames = append(params.LastNames, participation.Student.LastName)
+		participants = append(participants, promptTypes.Person{
+			ID:        courseParticipationID,
+			FirstName: participation.Student.FirstName,
+			LastName:  participation.Student.LastName,
+		})
 	}
-	if len(params.CourseParticipationIds) == 0 {
+	return StoreParticipantNames(ctx, TeamServiceSingleton.queries, coursePhaseID, participants)
+}
+
+// StoreParticipantNames upserts names into the participant name cache. Rows are written
+// in ID order so concurrent upserts lock them in the same order.
+func StoreParticipantNames(ctx context.Context, queries db.Queries, coursePhaseID uuid.UUID, participants []promptTypes.Person) error {
+	sorted := make([]promptTypes.Person, 0, len(participants))
+	for _, participant := range participants {
+		if participant.ID != uuid.Nil {
+			sorted = append(sorted, participant)
+		}
+	}
+	if len(sorted) == 0 {
 		return nil
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID.String() < sorted[j].ID.String() })
+
+	params := db.UpsertParticipantNamesParams{CoursePhaseID: coursePhaseID}
+	for _, participant := range sorted {
+		params.CourseParticipationIds = append(params.CourseParticipationIds, participant.ID)
+		params.FirstNames = append(params.FirstNames, participant.FirstName)
+		params.LastNames = append(params.LastNames, participant.LastName)
 	}
 
 	ctxWithTimeout, cancel := db.GetTimeoutContext(ctx)
 	defer cancel()
 
-	if err := TeamServiceSingleton.queries.UpsertParticipantNames(ctxWithTimeout, params); err != nil {
+	if err := queries.UpsertParticipantNames(ctxWithTimeout, params); err != nil {
 		return fmt.Errorf("store participant names: %w", err)
 	}
 	return nil
+}
+
+// tutorTeamResolver maps a tutor's university login to their team, which carries the tutor's ID.
+type tutorTeamResolver struct{}
+
+func (tutorTeamResolver) ResolveTutorTeam(ctx context.Context, coursePhaseID uuid.UUID, universityLogin string) (uuid.UUID, error) {
+	return TeamServiceSingleton.queries.GetTutorTeamByUniversityLogin(ctx, db.GetTutorTeamByUniversityLoginParams{
+		CoursePhaseID:   coursePhaseID,
+		UniversityLogin: universityLogin,
+	})
 }
