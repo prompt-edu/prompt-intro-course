@@ -27,6 +27,7 @@ server/                       # Intro course backend (default localhost:8082)
   seatPlan/                   # Seat plan creation + assignment
   tutor/                      # Tutor import + GitLab username management
   peerAssignment/             # Peer review groups + GitLab sync
+  team/                       # Tutor teams + allocations for inter-phase communication
   infrastructureSetup/        # GitLab course/student repo setup
   config/                     # prompt-sdk config endpoint registration
   copy/                       # prompt-sdk copy endpoint registration
@@ -198,6 +199,10 @@ Primary intro-course pages include:
 - `developerProfile`: student profile CRUD and exported device lists
 - `seatPlan`: seat plan creation, update, delete, own assignment lookup
 - `tutor`: tutor import and GitLab username updates
+- `team`: inter-phase outputs in the team allocation shape. Every tutor is one team
+  (team ID = tutor ID) holding the students seated in their seats: `GET /team` (`teams`),
+  `GET /allocation` and `GET /allocation/:courseParticipationID` (`teamAllocation`).
+  Student names are cached in `participant_name` and refreshed from core on staff reads.
 - `infrastructureSetup`: GitLab course setup and per-student repo setup/status
 - `copy`: copy endpoint registration for course-phase duplication
 - `config`: config endpoint registration for phase-level configuration
