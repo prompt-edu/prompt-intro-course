@@ -3,7 +3,6 @@ package peerAssignment
 import (
 	"context"
 	"errors"
-	"math/rand/v2"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,7 +30,7 @@ func GetAllPeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]peer
 	if err != nil {
 		log.WithFields(log.Fields{
 			"coursePhaseID": coursePhaseID,
-			"error":        err,
+			"error":         err,
 		}).Error("Failed to get peer assignments")
 		return nil, errors.New("failed to get peer assignments")
 	}
@@ -53,7 +52,7 @@ func GetOwnPeerAssignment(ctx context.Context, coursePhaseID uuid.UUID, coursePa
 		log.WithFields(log.Fields{
 			"coursePhaseID":         coursePhaseID,
 			"courseParticipationID": courseParticipationID,
-			"error":                err,
+			"error":                 err,
 		}).Error("Failed to get peers for student")
 		return peerAssignmentDTO.OwnPeerAssignment{}, errors.New("failed to get peer assignment")
 	}
@@ -66,7 +65,7 @@ func GetOwnPeerAssignment(ctx context.Context, coursePhaseID uuid.UUID, coursePa
 		log.WithFields(log.Fields{
 			"coursePhaseID":         coursePhaseID,
 			"courseParticipationID": courseParticipationID,
-			"error":                err,
+			"error":                 err,
 		}).Error("Failed to get reviewers for student")
 		return peerAssignmentDTO.OwnPeerAssignment{}, errors.New("failed to get peer assignment")
 	}
@@ -77,7 +76,7 @@ func GetOwnPeerAssignment(ctx context.Context, coursePhaseID uuid.UUID, coursePa
 	}, nil
 }
 
-// GeneratePeerAssignments creates peer groups (triples/quads) within each tutor group.
+// GeneratePeerAssignments makes every student a peer of everyone else in their tutor group.
 func GeneratePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]peerAssignmentDTO.PeerAssignment, error) {
 	ctxWithTimeout, cancel := db.GetTimeoutContext(ctx)
 	defer cancel()
@@ -124,11 +123,6 @@ func GeneratePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]pe
 			continue // cannot form a pair with fewer than 2 students
 		}
 
-		// Shuffle for randomness
-		rand.Shuffle(len(students), func(i, j int) {
-			students[i], students[j] = students[j], students[i]
-		})
-
 		groups := createPeerGroups(students)
 
 		for _, group := range groups {
@@ -164,48 +158,12 @@ func GeneratePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) ([]pe
 	return allAssignments, nil
 }
 
-// createPeerGroups splits students into groups of 3 (triples) or 4 (quads),
-// ensuring each student has 2-3 peers. Uses 3a + 4b = n to partition.
+// createPeerGroups keeps the entire tutor group together.
 func createPeerGroups(students []uuid.UUID) [][]uuid.UUID {
-	n := len(students)
-	if n < 2 {
+	if len(students) < 2 {
 		return nil
 	}
-	if n == 2 {
-		// Best effort: pair gives only 1 peer each
-		return [][]uuid.UUID{{students[0], students[1]}}
-	}
-
-	// Determine how many quads we need to absorb the remainder after triples
-	numQuads := 0
-	switch n % 3 {
-	case 1:
-		numQuads = 1 // 3a + 4(1) covers remainder 1
-	case 2:
-		if n >= 8 {
-			numQuads = 2 // 3a + 4(2) covers remainder 2
-		}
-		// n=5: fall through with 0 quads, handle remainder below
-	}
-	numTriples := (n - 4*numQuads) / 3
-
-	var groups [][]uuid.UUID
-	idx := 0
-	for i := 0; i < numTriples; i++ {
-		groups = append(groups, []uuid.UUID{students[idx], students[idx+1], students[idx+2]})
-		idx += 3
-	}
-	for i := 0; i < numQuads; i++ {
-		groups = append(groups, []uuid.UUID{students[idx], students[idx+1], students[idx+2], students[idx+3]})
-		idx += 4
-	}
-	// n=5 edge case: 1 triple + 2 remaining → best-effort pair
-	if idx < n {
-		remaining := make([]uuid.UUID, n-idx)
-		copy(remaining, students[idx:])
-		groups = append(groups, remaining)
-	}
-	return groups
+	return [][]uuid.UUID{students}
 }
 
 // UpdatePeerAssignments replaces all peer assignments with the provided set.
@@ -262,7 +220,7 @@ func DeletePeerAssignments(ctx context.Context, coursePhaseID uuid.UUID) error {
 	if err != nil {
 		log.WithFields(log.Fields{
 			"coursePhaseID": coursePhaseID,
-			"error":        err,
+			"error":         err,
 		}).Error("Failed to delete peer assignments")
 		return errors.New("failed to delete peer assignments")
 	}

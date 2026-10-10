@@ -18,6 +18,11 @@ const sidebarItems: SidebarMenuItemProps = {
       requiredPermissions: [Role.PROMPT_ADMIN, Role.COURSE_LECTURER],
     },
     {
+      title: 'Repository Setup',
+      goToPath: '/repository-setup',
+      requiredPermissions: [Role.PROMPT_ADMIN, Role.COURSE_LECTURER],
+    },
+    {
       title: 'Tutor Import',
       goToPath: '/tutors',
       requiredPermissions: [Role.PROMPT_ADMIN, Role.COURSE_LECTURER],

@@ -1,10 +1,12 @@
 package infrastructureSetup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -13,6 +15,84 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
+
+func TestSemesterTagIsBoundToCoursePhase(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	phaseID := uuid.MustParse("4179d58a-d00d-4fa7-94a5-397bc69fab02")
+	courseID := uuid.MustParse("5179d58a-d00d-4fa7-94a5-397bc69fab03")
+	coreRequests := 0
+	core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		coreRequests++
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/course_phases/" + phaseID.String():
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": phaseID, "courseID": courseID})
+		case "/api/courses/" + courseID.String():
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": courseID, "semesterTag": "ws2627"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer core.Close()
+	t.Setenv("SERVER_CORE_HOST", core.URL)
+
+	for _, test := range []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		wantStatus int
+	}{
+		{"reset", http.MethodPost, "/gitlab/demo/reset", `{"semesterTag":"SS2728","expectedProjectID":1,"expectedSourceSHA":"` + strings.Repeat("a", 40) + `"}`, http.StatusBadRequest},
+		{"course setup", http.MethodPost, "/gitlab/course-setup", `{"semesterTag":"SS2728"}`, http.StatusBadRequest},
+		{"course status", http.MethodGet, "/gitlab/course-setup?semesterTag=SS2728", "", http.StatusBadRequest},
+		{"student setup", http.MethodPost, "/gitlab/student-setup/" + uuid.NewString(), `{"semesterTag":"SS2728"}`, http.StatusBadRequest},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			router := gin.New()
+			group := router.Group("/course_phase/:coursePhaseID")
+			group.POST("/gitlab/demo/reset", resetDemo)
+			group.POST("/gitlab/course-setup", createCourseSetup)
+			group.GET("/gitlab/course-setup", getCourseSetup)
+			group.POST("/gitlab/student-setup/:courseParticipationID", setupStudentInfrastructure)
+
+			req := httptest.NewRequest(test.method, "/course_phase/"+phaseID.String()+test.path, bytes.NewBufferString(test.body))
+			req.Header.Set("Authorization", "Bearer test-token")
+			req.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, req)
+			assert.Equal(t, test.wantStatus, response.Code)
+			assert.Contains(t, response.Body.String(), "does not belong to this course phase")
+		})
+	}
+	assert.Equal(t, 8, coreRequests)
+
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("Authorization", "Bearer test-token")
+	response := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(response)
+	c.Request = request
+	tag, ok := requireSemesterTagForPhase(c, phaseID, " WS2627 ")
+	assert.True(t, ok)
+	assert.Equal(t, "IOS2627", tag)
+	assert.Equal(t, 10, coreRequests)
+}
+
+func TestSemesterTagCheckFailsClosedWhenCoreIsUnavailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer core.Close()
+	t.Setenv("SERVER_CORE_HOST", core.URL)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	_, ok := requireSemesterTagForPhase(c, uuid.New(), "WS2627")
+	assert.False(t, ok)
+	assert.Equal(t, http.StatusBadGateway, c.Writer.Status())
+}
 
 type InfrastructureRouterTestSuite struct {
 	suite.Suite

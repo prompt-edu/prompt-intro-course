@@ -5,6 +5,7 @@ import { DeveloperProfilesLecturerPage } from '../src/introCourse/pages/Develope
 import { IntroCourseParticipantsPage } from '../src/introCourse/pages/IntroCourseParticipantsPage/IntroCourseParticipantsPage'
 import { MailingPage } from '../src/introCourse/pages/Mailing/MailingPage'
 import { PeerAssignmentPage } from '../src/introCourse/pages/PeerAssignment/PeerAssignmentPage'
+import { RepositorySetupPage } from '../src/introCourse/pages/RepositorySetup/RepositorySetupPage'
 import { SeatAssignmentPage } from '../src/introCourse/pages/SeatAssignment/SeatAssignmentPage'
 import { TutorImportPage } from '../src/introCourse/pages/TutorImport/TutorImportPage'
 
@@ -26,6 +27,11 @@ const routes: ExtendedRouteObject[] = [
   {
     path: '/developer-profiles',
     element: <DeveloperProfilesLecturerPage />,
+    requiredPermissions: [Role.PROMPT_ADMIN, Role.COURSE_LECTURER],
+  },
+  {
+    path: '/repository-setup',
+    element: <RepositorySetupPage />,
     requiredPermissions: [Role.PROMPT_ADMIN, Role.COURSE_LECTURER],
   },
   {

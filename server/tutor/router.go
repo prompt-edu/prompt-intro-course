@@ -5,9 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	promptSDK "github.com/prompt-edu/prompt-sdk"
 	"github.com/prompt-edu/prompt-intro-course/server/coreRequests"
 	"github.com/prompt-edu/prompt-intro-course/server/tutor/tutorDTO"
+	promptSDK "github.com/prompt-edu/prompt-sdk"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -89,7 +89,10 @@ func importTutors(c *gin.Context) {
 		tutorIDs[i] = tutor.ID
 	}
 	var keycloakWarnings []string
-	if err := coreRequests.SendAddStudentsToKeycloakGroup(c.GetHeader("Authorization"), courseID, tutorIDs, KEYCLOAK_GROUP_NAME); err != nil {
+	if err := coreRequests.SendEnsureCustomKeycloakGroup(c.GetHeader("Authorization"), courseID, KEYCLOAK_GROUP_NAME); err != nil {
+		log.Warn("Failed to ensure tutor Keycloak group (continuing with import): ", err)
+		keycloakWarnings = append(keycloakWarnings, "Failed to ensure tutor keycloak group '"+KEYCLOAK_GROUP_NAME+"': "+err.Error())
+	} else if err := coreRequests.SendAddStudentsToKeycloakGroup(c.GetHeader("Authorization"), courseID, tutorIDs, KEYCLOAK_GROUP_NAME); err != nil {
 		log.Warn("Failed to add tutors to custom keycloak group (continuing with import): ", err)
 		keycloakWarnings = append(keycloakWarnings, "Failed to add tutors to keycloak group '"+KEYCLOAK_GROUP_NAME+"': "+err.Error())
 	}

@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -27,6 +28,39 @@ func makeGitLabError(statusCode int, message string) *gitlab.ErrorResponse {
 	}
 }
 
+func TestStudentProjectDisplayName(t *testing.T) {
+	assert.Equal(t, "Example Long Student Name - ab57xyz", studentProjectDisplayName("Example Long Student Name", "ab57xyz"))
+	assert.Equal(t, "Anne-Marie O Connor - go36kex", studentProjectDisplayName("Anne-Marie O'Connor", "go36kex"))
+	assert.Equal(t, "Çelik Yücel - go57bak", studentProjectDisplayName("Çelik Yücel", "go57bak"))
+}
+
+func TestStudentBundleIdentifier(t *testing.T) {
+	first := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	second := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+	const coursePath = "ase/ipraktikum/ios2627/Introcourse"
+	identifier := studentBundleIdentifier(first, coursePath)
+	assert.Equal(t, identifier, studentBundleIdentifier(first, coursePath))
+	assert.NotEqual(t, identifier, studentBundleIdentifier(second, coursePath))
+	assert.Regexp(t, `^de\.tum\.cit\.aet\.ios2627\.s[0-9a-f]{16}\.introcourseapp$`, identifier)
+	assert.NotContains(t, identifier, first.String())
+}
+
+func TestStudentBundleTemplateRequiresPlaceholder(t *testing.T) {
+	assert.NoError(t, validateStudentSigningTemplate([]templateFile{{Path: "project.yml", Content: "PRODUCT_BUNDLE_IDENTIFIER: {{.BundleIdentifier}}\nDEVELOPMENT_TEAM: {{.DevelopmentTeam}}"}}))
+	assert.ErrorContains(t, validateStudentSigningTemplate([]templateFile{{Path: "project.yml", Content: "PRODUCT_BUNDLE_IDENTIFIER: duplicate"}}), "lacks")
+	assert.ErrorContains(t, validateStudentSigningTemplate(nil), "no project.yml")
+}
+
+func TestDevelopmentTeamID(t *testing.T) {
+	t.Setenv("APPLE_DEVELOPMENT_TEAM_ID", "")
+	_, err := developmentTeamID()
+	assert.ErrorContains(t, err, "APPLE_DEVELOPMENT_TEAM_ID")
+	t.Setenv("APPLE_DEVELOPMENT_TEAM_ID", "ABCDEFGHIJ")
+	teamID, err := developmentTeamID()
+	assert.NoError(t, err)
+	assert.Equal(t, "ABCDEFGHIJ", teamID)
+}
+
 func TestApplyTemplateVars(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -34,6 +68,18 @@ func TestApplyTemplateVars(t *testing.T) {
 		vars     templateVars
 		expected string
 	}{
+		{
+			name:     "sets the assigned app identifier",
+			content:  "PRODUCT_BUNDLE_IDENTIFIER: {{.BundleIdentifier}}",
+			vars:     templateVars{BundleIdentifier: "de.tum.cit.aet.ios2627.s1234567890abcdef.introcourseapp"},
+			expected: "PRODUCT_BUNDLE_IDENTIFIER: de.tum.cit.aet.ios2627.s1234567890abcdef.introcourseapp",
+		},
+		{
+			name:     "sets the signing team",
+			content:  "DEVELOPMENT_TEAM: {{.DevelopmentTeam}}",
+			vars:     templateVars{DevelopmentTeam: "ABCDEFGHIJ"},
+			expected: "DEVELOPMENT_TEAM: ABCDEFGHIJ",
+		},
 		{
 			name:    "replaces student name and deadline",
 			content: "# {{.StudentName}}'s App\n\n**Deadline:** **{{.SubmissionDeadline}}**",
@@ -152,9 +198,9 @@ func TestFetchTemplateFiles(t *testing.T) {
 
 	// Keys are the decoded file paths (matching r.URL.Path after ServeMux decoding)
 	fileContents := map[string]string{
-		"student_repo_template/README.md":                "# {{.StudentName}}'s App\nDeadline: {{.SubmissionDeadline}}",
-		"student_repo_template/.githooks/post-checkout":  "#!/bin/bash\nxcodegen generate\n",
-		"student_repo_template/.gitignore":               "*.xcodeproj\n",
+		"student_repo_template/README.md":               "# {{.StudentName}}'s App\nDeadline: {{.SubmissionDeadline}}",
+		"student_repo_template/.githooks/post-checkout": "#!/bin/bash\nxcodegen generate\n",
+		"student_repo_template/.gitignore":              "*.xcodeproj\n",
 	}
 
 	server := fakeGitLabServer(t, treeEntries, fileContents)
@@ -319,6 +365,10 @@ func TestCreateProjectFiles(t *testing.T) {
 			})
 			return
 		}
+		if path == "/api/v4/projects/200/repository/tree" {
+			w.WriteHeader(http.StatusNotFound) // new project has no main branch yet
+			return
+		}
 
 		// Raw file content endpoints (teaching material repo)
 		filePrefix := "/api/v4/projects/100/repository/files/"
@@ -404,7 +454,7 @@ func TestCreateProjectFiles(t *testing.T) {
 }
 
 func TestCreateProjectFilesIdempotent(t *testing.T) {
-	// Verify that createProjectFiles handles "already exists" errors gracefully
+	// Verify that a retry skips files already present in the student project.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
@@ -415,13 +465,18 @@ func TestCreateProjectFilesIdempotent(t *testing.T) {
 			})
 			return
 		}
+		if path == "/api/v4/projects/200/repository/tree" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"name": "file.txt", "type": "blob", "path": "file.txt", "mode": "100644"}})
+			return
+		}
 
 		if strings.Contains(path, "/repository/files/") && strings.HasSuffix(path, "/raw") {
 			_, _ = fmt.Fprint(w, "content")
 			return
 		}
 
-		// CreateCommit returns "already exists" error (repo already initialized)
+		// A correct retry does not attempt a commit for an existing file.
 		if path == "/api/v4/projects/200/repository/commits" && r.Method == http.MethodPost {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
@@ -445,9 +500,49 @@ func TestCreateProjectFilesIdempotent(t *testing.T) {
 		teachingMaterialProjectID: "100",
 	}
 
-	// Should succeed (silently skip since files already exist)
+	// Should succeed without a commit because all template files already exist.
 	err = createProjectFiles(client, 200, "test-repo", templateVars{StudentName: "Alice"})
 	assert.NoError(t, err)
+}
+
+func TestCreateProjectFilesFillsMissingFiles(t *testing.T) {
+	var commitBody map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case path == "/api/v4/projects/100/repository/tree":
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"name": "README.md", "type": "blob", "path": "student_repo_template/README.md", "mode": "100644"},
+				{"name": "setup-git2-conflict.sh", "type": "blob", "path": "student_repo_template/exercises/setup-git2-conflict.sh", "mode": "100755"},
+			})
+		case path == "/api/v4/projects/200/repository/tree":
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"name": "README.md", "type": "blob", "path": "README.md", "mode": "100644"}})
+		case strings.HasPrefix(path, "/api/v4/projects/100/repository/files/"):
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = fmt.Fprint(w, "file content")
+		case path == "/api/v4/projects/200/repository/commits" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&commitBody)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "filled"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	origSvc := InfrastructureServiceSingleton
+	InfrastructureServiceSingleton = &InfrastructureService{teachingMaterialProjectID: "100"}
+	defer func() { InfrastructureServiceSingleton = origSvc }()
+
+	require.NoError(t, createProjectFiles(client, 200, "test-repo", templateVars{}))
+	require.NotNil(t, commitBody)
+	actions := commitBody["actions"].([]interface{})
+	require.Len(t, actions, 1)
+	action := actions[0].(map[string]interface{})
+	assert.Equal(t, "exercises/setup-git2-conflict.sh", action["file_path"])
+	assert.Equal(t, true, action["execute_filemode"])
 }
 
 func TestCreateProjectFilesNotConfigured(t *testing.T) {
@@ -611,7 +706,7 @@ func TestCreateOrGetProject(t *testing.T) {
 			// GetProject: go-gitlab URL-encodes path slashes, Go decodes them
 			if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v4/projects/") {
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprint(w, `{"id":99,"name":"existing-project"}`)
+				_, _ = fmt.Fprint(w, `{"id":99,"name":"existing-project","path_with_namespace":"group/path/test-project"}`)
 				return
 			}
 			http.NotFound(w, r)
@@ -628,6 +723,27 @@ func TestCreateOrGetProject(t *testing.T) {
 		project, err := createOrGetProject(client, opts, "group/path")
 		require.NoError(t, err)
 		assert.Equal(t, "existing-project", project.Name)
+	})
+
+	t.Run("rejects a redirect to an archived project", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if r.Method == http.MethodPost {
+				w.WriteHeader(http.StatusConflict)
+				_, _ = fmt.Fprint(w, `{"message":"conflict"}`)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": 99, "path_with_namespace": "group/path/demo-before-reset",
+			})
+		}))
+		defer server.Close()
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+		_, err = createOrGetProject(client, &gitlab.CreateProjectOptions{
+			Name: gitlab.Ptr("demo"), Path: gitlab.Ptr("demo"),
+		}, "group/path")
+		require.ErrorContains(t, err, "resolves to")
 	})
 
 	t.Run("propagates non-conflict error", func(t *testing.T) {
@@ -652,19 +768,34 @@ func TestCreateOrGetProject(t *testing.T) {
 }
 
 func TestCreateDemoProject(t *testing.T) {
+	board := &fakeStatusBoard{}
 	var (
-		projectCreated     atomic.Bool
-		branchProtected    atomic.Bool
-		boardCreated       atomic.Bool
-		sharedWithGroup    atomic.Bool
-		dailyIssuesCreated atomic.Int32
-		commitBody         map[string]interface{}
-		createProjectBody  map[string]interface{}
+		projectCreated      atomic.Bool
+		branchProtected     atomic.Bool
+		boardCreated        atomic.Bool
+		approvalRuleCreated atomic.Bool
+		dailyIssuesCreated  atomic.Int32
+		commitBody          map[string]interface{}
+		createProjectBody   map[string]interface{}
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
+		if handleDemoTutorAccessFixture(w, r) {
+			return
+		}
+		if board.handle(t, w, r) {
+			return
+		}
+		if path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodGet {
+			if branchProtected.Load() {
+				_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}]`))
+			} else {
+				_, _ = w.Write([]byte(`[]`))
+			}
+			return
+		}
 
 		// CreateProject
 		if r.Method == http.MethodPost && path == "/api/v4/projects" {
@@ -672,7 +803,7 @@ func TestCreateDemoProject(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&createProjectBody)
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"id": 300, "name": "demo",
+				"id": 300, "name": "demo", "path_with_namespace": "ase/ipraktikum/introcourse/demo",
 			})
 			return
 		}
@@ -701,13 +832,17 @@ func TestCreateDemoProject(t *testing.T) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/octet-stream")
-			_, _ = fmt.Fprint(w, "# {{.StudentName}}'s Demo")
+			_, _ = fmt.Fprint(w, "# {{.StudentName}}'s Demo\n\nSubmission deadline: {{.SubmissionDeadline}}")
 			return
 		}
 
 		// CreateCommit
 		if path == "/api/v4/projects/300/repository/commits" && r.Method == http.MethodPost {
-			_ = json.NewDecoder(r.Body).Decode(&commitBody)
+			var body map[string]interface{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["branch"] == "main" {
+				commitBody = body
+			}
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "commit123"})
 			return
@@ -720,9 +855,28 @@ func TestCreateDemoProject(t *testing.T) {
 		}
 
 		// ProtectBranch
+		if path == "/api/v4/projects/300/protected_branches/main" && r.Method == http.MethodGet {
+			if branchProtected.Load() {
+				_, _ = w.Write([]byte(`{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}`))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if strings.HasPrefix(path, "/api/v4/projects/300/protected_branches/exercise/git2-") && r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		if path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodPost {
-			branchProtected.Store(true)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{"name": "main"})
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			name, _ := body["name"].(string)
+			mergeLevel := 0
+			if name == "main" {
+				branchProtected.Store(true)
+				mergeLevel = 40
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"name": name, "push_access_levels": []any{map[string]any{"access_level": 0}}, "merge_access_levels": []any{map[string]any{"access_level": mergeLevel}}})
 			return
 		}
 
@@ -753,11 +907,14 @@ func TestCreateDemoProject(t *testing.T) {
 			return
 		}
 
-		// ShareProjectWithGroup
-		if strings.HasSuffix(path, "/share") && r.Method == http.MethodPost {
-			sharedWithGroup.Store(true)
+		if path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode([]interface{}{})
+			return
+		}
+		if path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodPost {
+			approvalRuleCreated.Store(true)
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 1})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 1, "name": "Tutor Approval", "rule_type": "regular", "approvals_required": 1, "groups": []map[string]interface{}{{"id": 50}}})
 			return
 		}
 
@@ -796,8 +953,9 @@ func TestCreateDemoProject(t *testing.T) {
 	// Verify all setup steps executed
 	assert.True(t, projectCreated.Load(), "project should be created")
 	assert.True(t, branchProtected.Load(), "main branch should be protected")
-	// Issue board setup is no longer part of configureProject
-	assert.True(t, sharedWithGroup.Load(), "demo should be shared with tutors group")
+	assert.True(t, board.created, "course status board should be created")
+	assert.Len(t, board.lists, 5)
+	assert.True(t, approvalRuleCreated.Load(), "demo should require tutor approval")
 
 	// Verify CI/CD config path points to shared repo
 	assert.Equal(t, ".gitlab-ci.yml@ase/ipraktikum/introcourse/ci-cd", createProjectBody["ci_config_path"])
@@ -812,7 +970,9 @@ func TestCreateDemoProject(t *testing.T) {
 	action := actions[0].(map[string]interface{})
 	assert.Equal(t, "README.md", action["file_path"])
 	assert.Contains(t, action["content"], "Demo")
+	assert.Contains(t, action["content"], "Submission deadline: See the course schedule in Outline")
 	assert.NotContains(t, action["content"], "{{.StudentName}}")
+	assert.NotContains(t, action["content"], "{{.SubmissionDeadline}}")
 
 	// Verify daily issues were created
 	assert.Equal(t, int32(1), dailyIssuesCreated.Load(), "should create 1 daily issue")
@@ -863,9 +1023,26 @@ func TestFetchTemplateFilesPartialFailure(t *testing.T) {
 
 func TestCreateDemoProjectIdempotent(t *testing.T) {
 	// Verify createDemoProject succeeds when all resources already exist
+	board := &fakeStatusBoard{created: true, hidden: true, lists: map[string]int{
+		"gid://gitlab/WorkItems::Statuses::Custom::Status/80": 0,
+		"gid://gitlab/WorkItems::Statuses::Custom::Status/81": 1,
+		"gid://gitlab/WorkItems::Statuses::Custom::Status/85": 2,
+		"gid://gitlab/WorkItems::Statuses::Custom::Status/87": 3,
+		"gid://gitlab/WorkItems::Statuses::Custom::Status/82": 4,
+	}}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
+		if handleDemoTutorAccessFixture(w, r) {
+			return
+		}
+		if board.handle(t, w, r) {
+			return
+		}
+		if path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`[{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}]`))
+			return
+		}
 
 		// CreateProject returns 409 Conflict (project already exists)
 		if r.Method == http.MethodPost && path == "/api/v4/projects" {
@@ -877,7 +1054,12 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 		// GetProject (fetches existing project after conflict)
 		if r.Method == http.MethodGet && strings.HasPrefix(path, "/api/v4/projects/") && !strings.Contains(path, "/repository") && !strings.Contains(path, "/boards") && !strings.Contains(path, "/protected_branches") && !strings.Contains(path, "/approval_rules") && !strings.Contains(path, "/issues") {
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"id": 300, "name": "demo",
+				"id": 300, "name": "demo", "path_with_namespace": "ase/ipraktikum/introcourse/demo",
+				"visibility": "private", "ci_config_path": ".gitlab-ci.yml@ase/ipraktikum/introcourse/ci-cd",
+				"merge_method": "merge", "squash_option": "default_on",
+				"remove_source_branch_after_merge":                 true,
+				"only_allow_merge_if_pipeline_succeeds":            true,
+				"only_allow_merge_if_all_discussions_are_resolved": true,
 			})
 			return
 		}
@@ -897,6 +1079,19 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			return
 		}
 
+		if path == "/api/v4/projects/300/repository/tree" {
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"name": "README.md", "type": "blob", "path": "README.md", "mode": "100644"}})
+			return
+		}
+		if path == "/api/v4/projects/300/repository/branches/main" && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": "main"})
+			return
+		}
+		if strings.HasPrefix(path, "/api/v4/projects/300/repository/branches/exercise/git2-") && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": strings.TrimPrefix(path, "/api/v4/projects/300/repository/branches/")})
+			return
+		}
+
 		// Raw file content
 		if strings.HasPrefix(path, "/api/v4/projects/100/repository/files/") && strings.HasSuffix(path, "/raw") {
 			filePath := strings.TrimPrefix(path, "/api/v4/projects/100/repository/files/")
@@ -910,7 +1105,7 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			return
 		}
 
-		// CreateCommit returns "already exists" (files already pushed)
+		// A correct retry does not commit files that are already present.
 		if path == "/api/v4/projects/300/repository/commits" && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = fmt.Fprint(w, `{"message":"A file with this name already exists"}`)
@@ -923,11 +1118,15 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			return
 		}
 
-		// ProtectBranch succeeds after unprotect
-		if path == "/api/v4/projects/300/protected_branches" && r.Method == http.MethodPost {
+		// Existing branch stays protected throughout the retry.
+		if path == "/api/v4/projects/300/protected_branches/main" && r.Method == http.MethodGet {
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"name": "main", "push_access_levels": []map[string]interface{}{{"access_level": 40}},
+				"name": "main", "push_access_levels": []map[string]interface{}{{"access_level": 0}}, "merge_access_levels": []map[string]interface{}{{"access_level": 40}},
 			})
+			return
+		}
+		if strings.HasPrefix(path, "/api/v4/projects/300/protected_branches/exercise/git2-") && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": strings.TrimPrefix(path, "/api/v4/projects/300/protected_branches/"), "push_access_levels": []map[string]any{{"access_level": 0}}, "merge_access_levels": []map[string]any{{"access_level": 0}}})
 			return
 		}
 
@@ -951,10 +1150,8 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 			return
 		}
 
-		// ShareProjectWithGroup returns "already shared" (idempotent)
-		if strings.HasSuffix(path, "/share") && r.Method == http.MethodPost {
-			w.WriteHeader(http.StatusConflict)
-			_, _ = fmt.Fprint(w, `{"message":"already a member"}`)
+		if path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"id": 1, "name": "Tutor Approval", "rule_type": "regular", "approvals_required": 1, "groups": []map[string]interface{}{{"id": 50}}}})
 			return
 		}
 
@@ -988,10 +1185,10 @@ func TestCreateDemoProjectIdempotent(t *testing.T) {
 
 func TestParseIssueContent(t *testing.T) {
 	tests := []struct {
-		name        string
-		content     string
-		wantTitle   string
-		wantDesc    string
+		name      string
+		content   string
+		wantTitle string
+		wantDesc  string
 	}{
 		{
 			name:      "standard heading and description",
@@ -1231,7 +1428,7 @@ func TestCreateCICDProject(t *testing.T) {
 				_ = json.NewDecoder(r.Body).Decode(&createProjectBody)
 				w.WriteHeader(http.StatusCreated)
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"id": 500, "name": "ci-cd",
+					"id": 500, "name": "ci-cd", "path_with_namespace": "ase/ipraktikum/introcourse/ci-cd",
 				})
 				return
 			}
@@ -1244,6 +1441,11 @@ func TestCreateCICDProject(t *testing.T) {
 			}
 			// GetRawFile
 			if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/repository/files/") {
+				if strings.Contains(r.URL.Path, "/projects/500/") {
+					w.WriteHeader(http.StatusNotFound)
+					_, _ = fmt.Fprint(w, `{"message":"404 File Not Found"}`)
+					return
+				}
 				w.Header().Set("Content-Type", "application/octet-stream")
 				_, _ = fmt.Fprint(w, "stages:\n  - lint\n")
 				return
@@ -1277,7 +1479,7 @@ func TestCreateCICDProject(t *testing.T) {
 
 		// Verify CI/CD files were pushed
 		require.NotNil(t, commitBody, "should push CI/CD files via commit")
-		assert.Equal(t, "Initialize CI/CD pipeline from course template", commitBody["commit_message"])
+		assert.Equal(t, "Synchronize CI/CD pipeline with course template", commitBody["commit_message"])
 		actions, ok := commitBody["actions"].([]interface{})
 		require.True(t, ok, "commit should have actions")
 		require.Len(t, actions, 1)
@@ -1297,7 +1499,7 @@ func TestCreateCICDProject(t *testing.T) {
 			}
 			if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v4/projects/ase") {
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"id": 500, "name": "ci-cd",
+					"id": 500, "name": "ci-cd", "path_with_namespace": "ase/ipraktikum/introcourse/ci-cd",
 				})
 				return
 			}
@@ -1337,7 +1539,50 @@ func TestCreateCICDProject(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("succeeds with no CI/CD files in teaching material", func(t *testing.T) {
+	t.Run("updates stale CI/CD files in an existing project", func(t *testing.T) {
+		var commitBody map[string]interface{}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch {
+			case r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects":
+				w.WriteHeader(http.StatusConflict)
+				_, _ = fmt.Fprint(w, `{"message":"conflict"}`)
+			case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/repository/tree"):
+				_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"name": ".gitlab-ci.yml", "path": "ci_cd/.gitlab-ci.yml", "type": "blob", "mode": "100644"}})
+			case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/repository/files/"):
+				w.Header().Set("Content-Type", "application/octet-stream")
+				if strings.Contains(r.URL.Path, "/projects/500/") {
+					_, _ = fmt.Fprint(w, "old pipeline")
+				} else {
+					_, _ = fmt.Fprint(w, "new pipeline")
+				}
+			case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v4/projects/"):
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 500, "name": "ci-cd", "path_with_namespace": "ase/ipraktikum/introcourse/ci-cd"})
+			case r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects/500/repository/commits":
+				_ = json.NewDecoder(r.Body).Decode(&commitBody)
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "updated"})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer server.Close()
+
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+		origSvc := InfrastructureServiceSingleton
+		InfrastructureServiceSingleton = &InfrastructureService{teachingMaterialProjectID: "test-teaching-project"}
+		defer func() { InfrastructureServiceSingleton = origSvc }()
+
+		require.NoError(t, createCICDProject(client, 1, "ase/ipraktikum/introcourse"))
+		require.NotNil(t, commitBody)
+		actions := commitBody["actions"].([]interface{})
+		require.Len(t, actions, 1)
+		assert.Equal(t, "update", actions[0].(map[string]interface{})["action"])
+		assert.Equal(t, "new pipeline", actions[0].(map[string]interface{})["content"])
+	})
+
+	t.Run("fails with no CI/CD files in teaching material", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 
@@ -1368,7 +1613,7 @@ func TestCreateCICDProject(t *testing.T) {
 		defer func() { InfrastructureServiceSingleton = origSvc }()
 
 		err = createCICDProject(client, 1, "ase/ipraktikum/introcourse")
-		assert.NoError(t, err)
+		assert.ErrorContains(t, err, "no CI/CD files")
 	})
 }
 
@@ -1428,6 +1673,38 @@ func TestFetchCICDFiles(t *testing.T) {
 	})
 }
 
+func TestConfigureProjectDoesNotUnprotectExistingMainForMissingTemplate(t *testing.T) {
+	var unprotected bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300/protected_branches":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `[{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}]`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v4/projects/300/protected_branches/main":
+			unprotected = true
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300/repository/branches/main":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"name":"main"}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300/protected_branches/main":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"name":"main","push_access_levels":[{"access_level":0}],"merge_access_levels":[{"access_level":40}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300/repository/tree":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `[]`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	require.ErrorContains(t, configureProjectWithMaterial(client, 300, "demo", templateVars{}, &materialSnapshot{
+		templates: []templateFile{{Path: "README.md", Content: "demo"}},
+	}, 0), "reviewed MR")
+	assert.False(t, unprotected)
+}
+
 func TestEnsureApprovalRule(t *testing.T) {
 	t.Run("creates rule with tutors group", func(t *testing.T) {
 		var ruleCreated bool
@@ -1447,7 +1724,7 @@ func TestEnsureApprovalRule(t *testing.T) {
 				_ = json.NewDecoder(r.Body).Decode(&ruleBody)
 				w.WriteHeader(http.StatusCreated)
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"id": 1, "name": "Tutor Approval",
+					"id": 1, "name": "Tutor Approval", "rule_type": "regular", "approvals_required": 1, "groups": []map[string]interface{}{{"id": 42}},
 				})
 				return
 			}
@@ -1475,7 +1752,7 @@ func TestEnsureApprovalRule(t *testing.T) {
 
 			if r.URL.Path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodGet {
 				_ = json.NewEncoder(w).Encode([]map[string]interface{}{
-					{"id": 1, "name": "Tutor Approval", "approvals_required": 1},
+					{"id": 1, "name": "Tutor Approval", "rule_type": "regular", "approvals_required": 1, "groups": []map[string]interface{}{{"id": 42}}},
 				})
 				return
 			}
@@ -1494,6 +1771,90 @@ func TestEnsureApprovalRule(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, ruleCreated, "should not create duplicate rule")
 	})
+
+	t.Run("replaces an any-approver rule with a tutor group rule", func(t *testing.T) {
+		var created, deleted bool
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch {
+			case r.URL.Path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodGet:
+				_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"id": 1, "name": "Tutor Approval", "rule_type": "any_approver", "approvals_required": 1}})
+			case r.URL.Path == "/api/v4/projects/300/approval_rules" && r.Method == http.MethodPost:
+				created = true
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": 2, "name": "Tutor Approval", "rule_type": "regular", "approvals_required": 1, "groups": []map[string]interface{}{{"id": 42}}})
+			case r.URL.Path == "/api/v4/projects/300/approval_rules/1" && r.Method == http.MethodDelete:
+				deleted = true
+				w.WriteHeader(http.StatusNoContent)
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer server.Close()
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+		require.NoError(t, ensureApprovalRule(client, 300, "test-repo", 42))
+		assert.True(t, created)
+		assert.True(t, deleted)
+	})
+
+	t.Run("removes non-tutor eligible approvers", func(t *testing.T) {
+		var updated map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch {
+			case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300/approval_rules":
+				_ = json.NewEncoder(w).Encode([]map[string]any{{
+					"id": 1, "name": "Tutor Approval", "rule_type": "regular", "approvals_required": 1,
+					"users": []map[string]any{{"id": 9}}, "groups": []map[string]any{{"id": 42}, {"id": 20}},
+				}})
+			case r.Method == http.MethodPut && r.URL.Path == "/api/v4/projects/300/approval_rules/1":
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&updated))
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"id": 1, "name": "Tutor Approval", "rule_type": "regular", "approvals_required": 1,
+					"groups": []map[string]any{{"id": 42}},
+				})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer server.Close()
+		client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+		require.NoError(t, err)
+		require.NoError(t, ensureApprovalRule(client, 300, "test-repo", 42))
+		assert.Equal(t, []any{}, updated["user_ids"])
+		assert.Equal(t, []any{float64(42)}, updated["group_ids"])
+	})
+}
+
+func TestReconcileExistingCourseProjectSettings(t *testing.T) {
+	var edited map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v4/projects/300":
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&edited))
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 300})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/300":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": 300, "visibility": "private", "ci_config_path": ".gitlab-ci.yml@course/ci-cd",
+				"merge_method": "merge", "squash_option": "default_on",
+				"remove_source_branch_after_merge":                 true,
+				"only_allow_merge_if_pipeline_succeeds":            true,
+				"only_allow_merge_if_all_discussions_are_resolved": true,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := gitlab.NewClient("test-token", gitlab.WithBaseURL(server.URL+"/api/v4"))
+	require.NoError(t, err)
+	opts := newCourseProjectOptions("demo", "demo", 1, "course/ci-cd")
+	require.NoError(t, reconcileCourseProjectSettings(client, &gitlab.Project{ID: 300}, opts))
+	assert.Equal(t, ".gitlab-ci.yml@course/ci-cd", edited["ci_config_path"])
+	assert.Equal(t, true, edited["only_allow_merge_if_pipeline_succeeds"])
+	assert.Equal(t, true, edited["only_allow_merge_if_all_discussions_are_resolved"])
 }
 
 func TestEnsureApprovalConfiguration(t *testing.T) {

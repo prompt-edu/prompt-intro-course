@@ -1,9 +1,5 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  useCourseStore,
-  useGetCoursePhase,
-  useModifyCoursePhase,
-} from '@tumaet/prompt-shared-state'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCourseStore } from '@tumaet/prompt-shared-state'
 import {
   Button,
   Dialog,
@@ -14,12 +10,14 @@ import {
   DialogTrigger,
   Input,
 } from '@tumaet/prompt-ui-components'
-import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import type { GitlabRepoRequest } from '../../../interfaces/GitlabRepoRequest'
 import { createGitlabRepo } from '../../../network/mutations/createGitlabRepo'
-import { createIntroCourseGitlabInfrastructure } from '../../../network/mutations/createIntroCourseGitlabInfrastructure'
+import { getGitlabCourseSetup } from '../../../network/queries/getGitlabCourseSetup'
+import { getPeerAssignments } from '../../../network/queries/getPeerAssignments'
+import { getSeatPlan } from '../../../network/queries/getSeatPlan'
+import { gitlabCourseGroup } from '../../../utils/gitlabCourseGroup'
 import type { ParticipationWithDevProfiles } from '../interfaces/pariticipationWithDevProfiles'
 
 interface CreateGitlabReposDialogProps {
@@ -33,25 +31,35 @@ export const CreateGitlabReposDialog = ({
   const [successCount, setSuccessCount] = useState(0)
   const [errorCount, setErrorCount] = useState(0)
   const [isCreatingRepos, setIsCreatingRepos] = useState(false)
+  const stopRequested = useRef(false)
   const [logs, setLogs] = useState<string[]>([])
 
   // State for storing the user-entered deadline
   const [deadline, setDeadline] = useState('')
+  const [demoTested, setDemoTested] = useState(false)
 
   const { phaseId, courseId } = useParams<{ phaseId: string; courseId: string }>()
   const queryClient = useQueryClient()
 
   const { courses } = useCourseStore()
-  const semesterTag = courses.find((course) => course.id === courseId)?.semesterTag ?? ''
-
-  const { data: coursePhase, isPending, isError } = useGetCoursePhase()
-  const { mutate: mutateCoursePhase } = useModifyCoursePhase(
-    () => queryClient.invalidateQueries({ queryKey: ['course_phase', phaseId] }),
-    () => setLogs((prev) => [...prev, `❌ Failed to update course phase`]),
+  const semesterTag = gitlabCourseGroup(
+    courses.find((course) => course.id === courseId)?.semesterTag ?? '',
   )
-
-  const infraStructureExists: boolean =
-    coursePhase?.restrictedData?.gitLabInfrastructureSetup ?? false
+  const { data: courseSetup, isError: courseSetupError } = useQuery({
+    queryKey: ['gitlab-course-setup', phaseId, semesterTag],
+    queryFn: () => getGitlabCourseSetup(phaseId ?? '', semesterTag),
+    enabled: Boolean(isDialogOpen && phaseId && semesterTag),
+  })
+  const { data: seats, isError: seatsError } = useQuery({
+    queryKey: ['seatPlan', phaseId],
+    queryFn: () => getSeatPlan(phaseId ?? ''),
+    enabled: Boolean(isDialogOpen && phaseId),
+  })
+  const { data: peers, isError: peersError } = useQuery({
+    queryKey: ['peerAssignments', phaseId],
+    queryFn: () => getPeerAssignments(phaseId ?? ''),
+    enabled: Boolean(isDialogOpen && phaseId),
+  })
 
   const createGitlabRepoMutation = useMutation({
     mutationFn: ({
@@ -63,33 +71,69 @@ export const CreateGitlabReposDialog = ({
     }) => createGitlabRepo(phaseId ?? '', coursePhaseParticipationID, createGitlabRepoDTO),
   })
 
-  const createInfrastructureSetup = useMutation({
-    mutationFn: () => createIntroCourseGitlabInfrastructure(phaseId ?? '', { semesterTag }),
-    onSuccess: () =>
-      mutateCoursePhase({
-        id: phaseId ?? '',
-        restrictedData: { gitLabInfrastructureSetup: true },
-      }),
-    onError: (error) => setLogs((prev) => [...prev, `❌ Infrastructure setup error: ${error}`]),
-  })
-
+  const pendingProfiles = participantsWithDevProfiles.filter(
+    (participation) => !participation.devProfile && !participation.gitlabStatus?.gitlabSuccess,
+  )
+  const missingGitlabUsername = participantsWithDevProfiles.filter(
+    (participation) =>
+      participation.devProfile &&
+      !participation.devProfile.gitLabUsername &&
+      !participation.gitlabStatus?.gitlabSuccess,
+  )
+  const missingUniversityLogin = participantsWithDevProfiles.filter(
+    (participation) =>
+      participation.devProfile?.gitLabUsername &&
+      !participation.participation.student.universityLogin &&
+      !participation.gitlabStatus?.gitlabSuccess,
+  )
+  const missingStudentName = participantsWithDevProfiles.filter(
+    (participation) =>
+      participation.devProfile?.gitLabUsername &&
+      participation.participation.student.universityLogin &&
+      !`${participation.participation.student.firstName ?? ''} ${participation.participation.student.lastName ?? ''}`.trim() &&
+      !participation.gitlabStatus?.gitlabSuccess,
+  )
   const participationsReadyForGitlab = participantsWithDevProfiles.filter(
     (participation) =>
-      participation.devProfile?.gitLabUsername && !participation.gitlabStatus?.gitlabSuccess,
+      participation.devProfile?.gitLabUsername &&
+      participation.participation.student.universityLogin &&
+      `${participation.participation.student.firstName ?? ''} ${participation.participation.student.lastName ?? ''}`.trim() &&
+      !participation.gitlabStatus?.gitlabSuccess,
   )
+  const readyIDs = new Set(
+    participationsReadyForGitlab.map((item) => item.participation.courseParticipationID),
+  )
+  const seatedWithTutor = new Set(
+    (seats ?? [])
+      .filter((seat) => !seat.isTutorSeat && seat.assignedStudent && seat.assignedTutor)
+      .map((seat) => seat.assignedStudent),
+  )
+  const studentsWithPeers = new Set((peers ?? []).flatMap((peer) => [peer.studentID, peer.peerID]))
+  const missingTutorSeats = [...readyIDs].filter((id) => !seatedWithTutor.has(id)).length
+  const missingPeerGroups = [...readyIDs].filter((id) => !studentsWithPeers.has(id)).length
+  const assignmentsReady =
+    Boolean(seats && peers) &&
+    !seatsError &&
+    !peersError &&
+    missingTutorSeats === 0 &&
+    missingPeerGroups === 0
 
   const triggerCreateRepos = async () => {
+    stopRequested.current = false
     setIsCreatingRepos(true)
     setLogs([])
     setSuccessCount(0)
     setErrorCount(0)
 
     for (const participation of participationsReadyForGitlab) {
+      if (stopRequested.current) break
       try {
         await createGitlabRepoMutation.mutateAsync({
           coursePhaseParticipationID: participation.participation.courseParticipationID,
           createGitlabRepoDTO: {
-            repoName: participation.participation.student.universityLogin ?? '', // use the TUM-ID as repository Name
+            // The server keeps the TUM ID as the stable URL path and uses
+            // "Student Name - TUM ID" as the visible GitLab project name.
+            repoName: participation.participation.student.universityLogin ?? '',
             studentName:
               `${participation.participation.student.firstName ?? ''} ${participation.participation.student.lastName ?? ''}`.trim(),
 
@@ -111,6 +155,7 @@ export const CreateGitlabReposDialog = ({
       }
     }
 
+    await queryClient.invalidateQueries({ queryKey: ['gitlab_statuses', phaseId] })
     setIsCreatingRepos(false)
   }
 
@@ -120,54 +165,61 @@ export const CreateGitlabReposDialog = ({
       setErrorCount(0)
       setLogs([])
       setDeadline('') // Reset the deadline field whenever the dialog opens
+      setDemoTested(false)
     }
   }, [isDialogOpen])
-
-  if (isPending) {
-    return (
-      <div className='flex justify-center items-center h-64'>
-        <Loader2 className='h-12 w-12 animate-spin text-primary' />
-      </div>
-    )
-  }
-
-  if (isError) {
-    return (
-      <div className='flex justify-center items-center h-64 text-red-600'>
-        <AlertCircle className='h-12 w-12 mr-2' /> Failed to load course phase data.
-      </div>
-    )
-  }
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DialogTrigger asChild>
-        <Button>Create Gitlab Repositories</Button>
+        <Button>Create Student Repositories</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create Gitlab Repositories</DialogTitle>
+          <DialogTitle>Create Student Repositories</DialogTitle>
           <DialogDescription>
-            Infrastructure setup and repo creation for students.
-            <br />
-            <strong>Important: </strong>Make sure that every student has a tutor assigned!
+            Each ready student receives a repository from the verified teaching material. Seat,
+            tutor, and peer assignments must be complete before the batch starts.
           </DialogDescription>
         </DialogHeader>
 
-        <section className='flex items-center justify-between py-4 border-b'>
-          <span>Create Gitlab Course Group</span>
-          {infraStructureExists ? (
-            <CheckCircle className='text-green-500' />
+        <section className='space-y-2 py-4 border-b'>
+          <p className='text-sm'>
+            Set up and test the demo in{' '}
+            <Link className='underline' to='../repository-setup'>
+              Repository Setup
+            </Link>{' '}
+            first.
+          </p>
+          {courseSetupError ? (
+            <p className='text-sm text-destructive'>Could not verify GitLab setup.</p>
+          ) : courseSetup?.checks.demoReady ? (
+            <p className='text-sm text-green-700'>
+              Demo configuration matches current teaching material.
+            </p>
           ) : (
-            <Button
-              disabled={createInfrastructureSetup.isPending}
-              onClick={() => createInfrastructureSetup.mutate()}
-            >
-              {createInfrastructureSetup.isPending
-                ? 'Creating Infrastructure...'
-                : 'Create Infrastructure'}
-            </Button>
+            <p className='text-sm text-amber-700'>
+              Demo configuration is not ready for student repositories.
+            </p>
           )}
+          {courseSetup && !courseSetup.checks.signingReady && (
+            <p className='text-sm text-amber-700'>
+              The course Apple Developer team ID must be configured before creating student
+              repositories.
+            </p>
+          )}
+          <p className='text-sm text-muted-foreground'>
+            Creating repositories does not invite students to the Apple team or register their
+            devices. Check Apple access and device capacity in Repository Setup separately.
+          </p>
+          <label className='flex items-start gap-2 text-sm'>
+            <input
+              type='checkbox'
+              checked={demoTested}
+              onChange={(event) => setDemoTested(event.target.checked)}
+            />
+            <span>I tested the demo app, daily issues, merge request, review, and CI.</span>
+          </label>
         </section>
 
         <section className='mt-4'>
@@ -187,13 +239,53 @@ export const CreateGitlabReposDialog = ({
             className='w-full mb-4'
           />
 
-          <Button disabled={isCreatingRepos || !infraStructureExists} onClick={triggerCreateRepos}>
+          <p className='mb-3 text-sm text-muted-foreground'>
+            {participationsReadyForGitlab.length} ready to create; {pendingProfiles.length} waiting
+            for a developer profile; {missingGitlabUsername.length} missing a GitLab username;{' '}
+            {missingUniversityLogin.length} missing a TUM ID; {missingStudentName.length} missing a
+            name. Students still completing a profile are skipped for now and can be created in a
+            later run.
+          </p>
+          <p className='mb-3 text-sm'>
+            Assignment check: {missingTutorSeats} ready students without a tutor seat;{' '}
+            {missingPeerGroups} without a peer group.
+            {(seatsError || peersError) && ' Could not load assignments.'}
+          </p>
+          {pendingProfiles.length > 0 && (
+            <p className='mb-3 text-sm'>
+              Waiting for profile:{' '}
+              {pendingProfiles
+                .map(({ participation }) =>
+                  `${participation.student.firstName} ${participation.student.lastName}`.trim(),
+                )
+                .join(', ')}
+            </p>
+          )}
+
+          <Button
+            disabled={
+              isCreatingRepos ||
+              !courseSetup?.checks.demoReady ||
+              !courseSetup?.checks.signingReady ||
+              !assignmentsReady ||
+              !demoTested ||
+              !deadline.trim() ||
+              participationsReadyForGitlab.length === 0
+            }
+            onClick={triggerCreateRepos}
+          >
             Create Repositories ({participationsReadyForGitlab.length})
           </Button>
 
           {isCreatingRepos && (
-            <Button variant='outline' className='ml-2' onClick={() => setIsCreatingRepos(false)}>
-              Cancel
+            <Button
+              variant='outline'
+              className='ml-2'
+              onClick={() => {
+                stopRequested.current = true
+              }}
+            >
+              Stop after current student
             </Button>
           )}
 

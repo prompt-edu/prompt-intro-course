@@ -1,8 +1,11 @@
 import * as z from 'zod'
 
 export const instructorDevProfile = z.object({
-  appleID: z.string().email('Invalid email address'),
-  gitLabUsername: z.string(),
+  appleID: z.string().email('Invalid email address').or(z.literal('')),
+  gitLabUsername: z
+    .string()
+    .trim()
+    .regex(/^$|^[A-Za-z0-9_.-]+$/, 'Enter the username only, without a URL or email address'),
   hasMacBook: z.boolean(),
   // Use union type to handle empty strings properly with correct TypeScript inference
   iPhoneUDID: z

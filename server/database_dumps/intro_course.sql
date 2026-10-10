@@ -79,4 +79,15 @@ CREATE TABLE peer_assignment (
 
 CREATE INDEX idx_peer_assignment_peer ON peer_assignment (course_phase_id, peer_id);
 
+CREATE TABLE participant_name (
+  course_phase_id uuid NOT NULL,
+  course_participation_id uuid NOT NULL,
+  first_name text NOT NULL,
+  last_name text NOT NULL,
+  PRIMARY KEY (course_phase_id, course_participation_id)
+);
+
+INSERT INTO participant_name (course_phase_id, course_participation_id, first_name, last_name) VALUES
+('4179d58a-d00d-4fa7-94a5-397bc69fab02', '33333333-3333-3333-3333-333333333333', 'Sam', 'Student');
+
 COMMIT;

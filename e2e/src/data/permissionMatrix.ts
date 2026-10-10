@@ -1,4 +1,4 @@
-import { INTRO_COURSE_ROUTES } from './constants'
+import { INTRO_COURSE_ROUTES, STUDENT_WITH_PROFILE } from './constants'
 import { Role } from './roles'
 
 // Declarative access-control matrix for the intro-course remote. The browser and
@@ -103,4 +103,16 @@ export const STUDENT_API_SURFACES: ApiSurface[] = [
   { name: 'own seat assignment', path: '/seat_plan/own-assignment', allowed: ['student', 'student2'] },
   { name: 'own developer profile', path: '/developer_profile/self', allowed: ['student', 'student2'] },
   { name: 'own peer assignment', path: '/peer_assignments/own', allowed: ['student', 'student2'] },
+]
+
+// Inter-phase communication outputs ("teams", "teamAllocation"). Later phases such as
+// the assessment resolve them with their caller's token, so every role reads them.
+export const INTER_PHASE_API_SURFACES: ApiSurface[] = [
+  { name: 'tutor teams', path: '/team', allowed: MATRIX_ROLES },
+  { name: 'team allocations', path: '/allocation', allowed: MATRIX_ROLES },
+  {
+    name: "a seated student's team allocation",
+    path: `/allocation/${STUDENT_WITH_PROFILE.courseParticipationId}`,
+    allowed: MATRIX_ROLES,
+  },
 ]

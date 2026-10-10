@@ -64,7 +64,7 @@ test.describe('peer assignments: reading the seeded groups', () => {
     await expect(group).toHaveCount(1)
     await expect(group).toContainText(BACKGROUND_STUDENTS.first.gitlabUsername)
     // A1 has four members once Selma joins.
-    await expect(group).toContainText('Quad')
+    await expect(group).toContainText('4 members')
   })
 
   test('every seeded group is rendered', async ({ page }) => {
@@ -110,9 +110,12 @@ test.describe('peer assignments: mutating the groups', () => {
       `${GROUPED_STUDENT_COUNT} of ${GROUPED_STUDENT_COUNT} students grouped`,
       { timeout: 30_000 },
     )
-    // Generation partitions into 3s and 4s within each tutor group.
-    expect(await peers.groupCount()).toBeGreaterThan(0)
-    await expect(peers.groups.first()).toContainText(/Triple|Quad/)
+    // Everyone seated with a tutor belongs to that tutor's single peer group.
+    await expect(peers.groups).toHaveCount(SEEDED_TUTORS.length)
+    await expect(peers.members).toHaveCount(GROUPED_STUDENT_COUNT)
+    for (const tutor of SEEDED_TUTORS) {
+      await expect(peers.tutorCard(tutor.id).getByTestId('peer-group')).toHaveCount(1)
+    }
   })
 
   test('Edit Groups then Save Changes persists a membership change', async ({ page }) => {
@@ -131,7 +134,7 @@ test.describe('peer assignments: mutating the groups', () => {
     await peers.saveChangesButton.click()
     await expect(peers.editGroupsButton).toBeVisible({ timeout: 30_000 })
 
-    // Persisted: she is gone after a reload, and the group is a Triple again.
+    // Persisted: she is gone after a reload, and the other members stay together.
     await page.reload()
     await peers.expectGroupsLoaded()
     await expect(peers.member(STUDENT_WITH_PROFILE.courseParticipationId)).toBeHidden()
@@ -165,6 +168,7 @@ test.describe('peer assignments: GitLab sync without a token', () => {
     await peers.goto()
     await peers.expectGroupsLoaded()
 
+    await page.getByText('Older courses: per-peer GitLab access').click()
     await peers.syncButton.click()
     await expect(peers.error).toBeVisible({ timeout: 30_000 })
     await expect(peers.error).toContainText('GitLab')
@@ -175,6 +179,7 @@ test.describe('peer assignments: GitLab sync without a token', () => {
     await peers.goto()
     await peers.expectGroupsLoaded()
 
+    await page.getByText('Older courses: per-peer GitLab access').click()
     await peers.unsyncButton.click()
     await expect(peers.error).toBeVisible({ timeout: 30_000 })
     await expect(peers.error).toContainText('GitLab')

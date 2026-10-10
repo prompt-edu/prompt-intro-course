@@ -109,6 +109,32 @@ func (suite *DeveloperProfileRouterTestSuite) TestGetOwnDeveloperProfile() {
 	assert.Equal(suite.T(), "student1git", profile.GitLabUsername)
 }
 
+func (suite *DeveloperProfileRouterTestSuite) TestUpdateOwnDeveloperProfile() {
+	path := "/intro-course/api/course_phase/" + suite.coursePhaseID.String() + "/developer_profile/self"
+	original, err := GetOwnDeveloperProfile(suite.ctx, suite.coursePhaseID, suite.studentID)
+	assert.NoError(suite.T(), err)
+	defer func() {
+		assert.NoError(suite.T(), CreateOrUpdateDeveloperProfile(suite.ctx, suite.coursePhaseID, suite.studentID, original))
+	}()
+
+	update := developerProfileDTO.PostDeveloperProfile{
+		AppleID:        "corrected@apple.com",
+		GitLabUsername: "corrected-gitlab-user",
+		HasMacBook:     !original.HasMacBook,
+	}
+	body, _ := json.Marshal(update)
+	req, _ := http.NewRequest("PUT", path, bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	suite.router.ServeHTTP(resp, req)
+	assert.Equal(suite.T(), http.StatusOK, resp.Code)
+
+	updated, err := GetOwnDeveloperProfile(suite.ctx, suite.coursePhaseID, suite.studentID)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), update.GitLabUsername, updated.GitLabUsername)
+	assert.Equal(suite.T(), update.HasMacBook, updated.HasMacBook)
+}
+
 func (suite *DeveloperProfileRouterTestSuite) TestGetAllDeveloperProfiles() {
 	req, _ := http.NewRequest("GET", "/intro-course/api/course_phase/"+suite.coursePhaseID.String()+"/developer_profile", nil)
 	resp := httptest.NewRecorder()

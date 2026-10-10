@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import type { CoursePhaseParticipationsWithResolution } from '@tumaet/prompt-shared-state'
-import { getCoursePhaseParticipations } from '@tumaet/prompt-shared-state'
+import {
+  type CoursePhaseParticipationsWithResolution,
+  getCoursePhaseParticipations,
+  PassStatus,
+} from '@tumaet/prompt-shared-state'
 import {
   Button,
   ErrorPage,
@@ -39,6 +42,7 @@ import { getAllDeveloperProfiles } from '../../network/queries/getAllDeveloperPr
 import { getGitlabStatuses } from '../../network/queries/getGitlabStatuses'
 import { CreateGitlabReposDialog } from './components/CreateGitlabReposDialog'
 import { FilterMenu } from './components/FilterMenu'
+import { GitLabValidationDialog } from './components/GitLabValidationDialog'
 import { ProfileDetailsDialog } from './components/ProfileDetailsDialog'
 import { useDownloadDeveloperProfiles } from './hooks/useDownloadDeveloperProfiles'
 import { useGetFilteredParticipations } from './hooks/useGetFilteredParticipations'
@@ -125,7 +129,9 @@ export const DeveloperProfilesLecturerPage = () => {
 
   // Match participants with their developer profiles
   const participantsWithProfiles = useGetParticipationsWithProfiles(
-    coursePhaseParticipations?.participations || [],
+    coursePhaseParticipations?.participations.filter(
+      (participation) => participation.passStatus !== PassStatus.FAILED,
+    ) || [],
     developerProfiles || [],
     gitlabStatuses || [],
   )
@@ -169,6 +175,7 @@ export const DeveloperProfilesLecturerPage = () => {
           Showing {filteredParticipants.length} of {sortedParticipants.length} participants
         </div>
         <div className='flex gap-2'>
+          <GitLabValidationDialog participants={participantsWithProfiles} />
           <Button onClick={() => downloadProfiles(participantsWithProfiles)}>
             <Download className='h-4 w-4 mr-2' />
             Download Profiles
@@ -218,7 +225,7 @@ export const DeveloperProfilesLecturerPage = () => {
                 </TableHead>
                 <TableHead>Devices</TableHead>
                 <TableHead>GitLab Username</TableHead>
-                <TableHead>Apple ID</TableHead>
+                <TableHead>Apple Account</TableHead>
                 <TableHead>Gitlab Status</TableHead>
                 <TableHead className='text-right'>Actions</TableHead>
               </TableRow>

@@ -9,8 +9,12 @@ const udidSchema = z
 
 export const developerFormSchema = z
   .object({
-    appleID: z.string().email('Apple ID must be a valid email address'),
-    gitLabUsername: z.string().min(1, 'GitLab username is required'),
+    appleID: z.string().email('Enter a valid Apple Account email address'),
+    gitLabUsername: z
+      .string()
+      .trim()
+      .min(1, 'GitLab username is required')
+      .regex(/^[A-Za-z0-9_.-]+$/, 'Enter the username only, without a URL or email address'),
     hasMacBook: z.boolean(),
     hasIPhone: z.boolean(),
     iPhoneUDID: udidSchema,

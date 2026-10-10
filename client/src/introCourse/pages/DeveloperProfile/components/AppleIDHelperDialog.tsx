@@ -25,8 +25,10 @@ export const AppleIDHelperDialog = () => {
       </DialogTrigger>
       <DialogContent className='sm:max-w-[625px]'>
         <DialogHeader>
-          <DialogTitle>Creating an Apple ID</DialogTitle>
-          <DialogDescription>Follow these steps to create your Apple ID</DialogDescription>
+          <DialogTitle>Apple Account for Xcode</DialogTitle>
+          <DialogDescription>
+            Use an existing Apple Account or create one before submitting your profile.
+          </DialogDescription>
         </DialogHeader>
         <ScrollArea className='max-h-[80vh] pr-4'>
           <style>
@@ -42,27 +44,23 @@ export const AppleIDHelperDialog = () => {
           <div className='appleID'>
             <ol className='space-y-4 pl-5 text-sm'>
               <li>
-                Visit the Apple ID creation page:{' '}
+                If you need an account, visit{' '}
                 <a
-                  href='https://appleid.apple.com/account'
+                  href='https://account.apple.com/'
                   target='_blank'
                   rel='noopener noreferrer'
                   className='font-medium text-primary hover:underline'
                 >
-                  https://appleid.apple.com/account
+                  account.apple.com
                   <ExternalLink className='ml-1 inline-block h-4 w-4' />
                 </a>
               </li>
-              <li>Click on &quot;Create Your Apple ID&quot;</li>
+              <li>Create your Apple Account and verify your email address and phone number.</li>
+              <li>Enter that account&apos;s email address in your developer profile.</li>
               <li>
-                Fill in your personal information, including name, birthday, and email address
+                If the course sends you a team invitation, accept it within three days. Sign in with
+                the same account in Xcode.
               </li>
-              <li>Choose a strong password that meets Apple&apos;s requirements</li>
-              <li>Set up security questions or use two-factor authentication for added security</li>
-              <li>
-                Verify your email address by clicking the link in the verification email from Apple
-              </li>
-              <li>Once verified, your Apple ID is ready to use</li>
             </ol>
           </div>
         </ScrollArea>

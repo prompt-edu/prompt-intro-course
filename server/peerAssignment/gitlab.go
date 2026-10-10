@@ -3,6 +3,7 @@ package peerAssignment
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,8 +17,9 @@ import (
 
 const peerReviewRuleName = "Peer Review"
 
-// SyncPeerAssignmentsToGitlab adds peers as Reporter members and creates
-// "Peer Review" approval rules on each student's GitLab project.
+// SyncPeerAssignmentsToGitlab verifies group-based review access for new
+// repositories. Older repositories still receive per-assignment Reporter
+// membership and an optional approval rule.
 func SyncPeerAssignmentsToGitlab(ctx context.Context, coursePhaseID uuid.UUID, semesterTag string) ([]peerAssignmentDTO.SyncResult, error) {
 	svc := PeerAssignmentServiceSingleton
 	if svc.gitlabClient == nil {
@@ -119,6 +121,8 @@ func syncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cours
 
 	// 5. Find reviewee's project by convention path
 	// semesterTag is passed as-is (case must match what infrastructure setup used)
+	tutorSubgroupPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s",
+		gitlabutil.IPraktikumGroupName, semesterTag, tutor.GitlabUsername.String)
 	projectPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s/%s",
 		gitlabutil.IPraktikumGroupName, semesterTag, tutor.GitlabUsername.String, revieweeProfile.GitlabUsername)
 
@@ -133,8 +137,6 @@ func syncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cours
 		// project where the reviewee is a Developer member.
 		log.WithField("conventionPath", projectPath).Debug("Convention path not found, falling back to subgroup search")
 
-		tutorSubgroupPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s",
-			gitlabutil.IPraktikumGroupName, semesterTag, tutor.GitlabUsername.String)
 		tutorSubgroup, _, grpErr := git.Groups.GetGroup(tutorSubgroupPath, nil)
 		if grpErr != nil {
 			return fmt.Errorf("project %q not found and tutor subgroup %q also not found: %w", projectPath, tutorSubgroupPath, grpErr)
@@ -171,7 +173,19 @@ func syncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cours
 		project = found
 	}
 
-	// 6. Add reviewer as Reporter (idempotent)
+	// Current repositories share a peer-reviewer group at Developer level so
+	// reviewers can request changes in addition to commenting and approving.
+	// The assignment only identifies a preferred reviewer; it must not add
+	// project membership or change the group-based approval rule.
+	peerGroupID, err := sharedPeerReviewGroupID(git, project.ID, tutorSubgroupPath)
+	if err != nil {
+		return err
+	}
+	if peerGroupID != 0 {
+		return verifyGroupPeerAccess(git, project.ID, peerGroupID, reviewerGitlabUser.ID)
+	}
+
+	// 6. Add reviewer as Reporter for legacy repositories (idempotent)
 	_, _, err = git.ProjectMembers.AddProjectMember(project.ID, &gitlab.AddProjectMemberOptions{
 		UserID:      gitlab.Ptr(reviewerGitlabUser.ID),
 		AccessLevel: gitlab.Ptr(gitlab.ReporterPermissions),
@@ -203,9 +217,8 @@ func getCachedUser(git *gitlab.Client, username string, cache map[string]*gitlab
 	return u, nil
 }
 
-// UnsyncPeerAssignmentsFromGitlab revokes Reporter access and removes "Peer Review"
-// approval rules for all current peer assignments. This is the inverse of
-// SyncPeerAssignmentsToGitlab — call it before clearing/regenerating assignments.
+// UnsyncPeerAssignmentsFromGitlab removes per-assignment access from legacy
+// repositories. Group-based peer review access is independent of assignments.
 func UnsyncPeerAssignmentsFromGitlab(ctx context.Context, coursePhaseID uuid.UUID, semesterTag string) ([]peerAssignmentDTO.SyncResult, error) {
 	svc := PeerAssignmentServiceSingleton
 	if svc.gitlabClient == nil {
@@ -298,6 +311,8 @@ func unsyncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cou
 	}
 
 	// 5. Find reviewee's project
+	tutorSubgroupPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s",
+		gitlabutil.IPraktikumGroupName, semesterTag, tutor.GitlabUsername.String)
 	projectPath := fmt.Sprintf("ase/%s/%s/Introcourse/%s/%s",
 		gitlabutil.IPraktikumGroupName, semesterTag, tutor.GitlabUsername.String, revieweeProfile.GitlabUsername)
 
@@ -307,6 +322,14 @@ func unsyncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cou
 			return nil // project doesn't exist — nothing to revoke
 		}
 		return fmt.Errorf("find project %q: %w", projectPath, err)
+	}
+	peerGroupID, err := sharedPeerReviewGroupID(git, project.ID, tutorSubgroupPath)
+	if err != nil {
+		return err
+	}
+	if peerGroupID != 0 {
+		// Group-wide access is independent of the generated peer assignments.
+		return nil
 	}
 
 	// 6. Remove reviewer from "Peer Review" approval rule (do this BEFORE revoking membership)
@@ -321,6 +344,54 @@ func unsyncSinglePeerAccess(ctx context.Context, svc *PeerAssignmentService, cou
 	}
 
 	return nil
+}
+
+// The optional Peer Review approval rule can be absent on a partly configured
+// repository. The intended peer group shared into the project is the access
+// model; only repositories without that share use per-assignment membership.
+func sharedPeerReviewGroupID(git *gitlab.Client, projectID int64, tutorSubgroupPath string) (int64, error) {
+	groupPath := tutorSubgroupPath + "/peer-reviewers"
+	group, _, err := git.Groups.GetGroup(groupPath, nil)
+	if gitlabutil.IsNotFoundError(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("find peer review group %q: %w", groupPath, err)
+	}
+	if !strings.EqualFold(group.FullPath, groupPath) {
+		return 0, fmt.Errorf("peer review group %q resolves to %q", groupPath, group.FullPath)
+	}
+
+	project, _, err := git.Projects.GetProject(projectID, nil)
+	if err != nil {
+		return 0, fmt.Errorf("inspect peer review project share: %w", err)
+	}
+	for _, shared := range project.SharedWithGroups {
+		if shared.GroupID == group.ID {
+			return group.ID, nil
+		}
+	}
+	return 0, nil
+}
+
+func verifyGroupPeerAccess(git *gitlab.Client, projectID, peerGroupID, reviewerID int64) error {
+	member, _, err := git.GroupMembers.GetGroupMember(peerGroupID, reviewerID)
+	if err != nil {
+		return fmt.Errorf("reviewer is not a direct member of the peer group: %w", err)
+	}
+	if member.AccessLevel < gitlab.DeveloperPermissions {
+		return fmt.Errorf("reviewer needs at least Developer access in the peer group")
+	}
+	project, _, err := git.Projects.GetProject(projectID, nil)
+	if err != nil {
+		return fmt.Errorf("inspect peer group project share: %w", err)
+	}
+	for _, shared := range project.SharedWithGroups {
+		if shared.GroupID == peerGroupID && shared.GroupAccessLevel >= int64(gitlab.DeveloperPermissions) {
+			return nil
+		}
+	}
+	return fmt.Errorf("peer group does not have Developer access to the project")
 }
 
 // removePeerFromReviewRule removes a user from the "Peer Review" approval rule.

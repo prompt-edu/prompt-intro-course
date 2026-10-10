@@ -17,6 +17,7 @@ type StudentData struct {
 
 type Participation struct {
 	CourseParticipationID string      `json:"courseParticipationID"`
+	PassStatus            string      `json:"passStatus"`
 	Student               StudentData `json:"student"`
 }
 

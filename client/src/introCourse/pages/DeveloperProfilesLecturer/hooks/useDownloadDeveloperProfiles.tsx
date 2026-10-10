@@ -20,7 +20,7 @@ export const useDownloadDeveloperProfiles = () => {
         return value
       }
 
-      const header = `First Name,Last Name,${translations.university['login-name']},Matriculation,Apple ID,MacBook,iPhone,iPad,Apple Watch,GitlabID\n`
+      const header = `First Name,Last Name,${translations.university['login-name']},Matriculation,Apple Account email,MacBook,iPhone,iPad,Apple Watch,GitlabID\n`
       const rows = participants
         .map(({ participation, devProfile }) => {
           const firstName = escapeCsv(participation.student.firstName)

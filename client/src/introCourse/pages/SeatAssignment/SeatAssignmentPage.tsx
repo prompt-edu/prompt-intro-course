@@ -2,11 +2,13 @@ import { useQuery } from '@tanstack/react-query'
 import {
   type CoursePhaseParticipationsWithResolution,
   getCoursePhaseParticipations,
+  PassStatus,
 } from '@tumaet/prompt-shared-state'
 import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   ErrorPage,
   ManagementPageHeader,
 } from '@tumaet/prompt-ui-components'
@@ -31,6 +33,7 @@ import { useGetParticipationsWithDevProfile } from './hooks/useGetParticipationW
 export const SeatAssignmentPage = () => {
   const { phaseId } = useParams<{ phaseId: string }>()
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid')
+  const [excludedStudentIDs, setExcludedStudentIDs] = useState<Set<string>>(new Set())
 
   // Data fetching
   const {
@@ -92,8 +95,13 @@ export const SeatAssignmentPage = () => {
     isParticipationsError || isDeveloperProfileError || isTutorsLoadingError || isSeatPlanError
 
   const developerWithProfiles = useGetParticipationsWithDevProfile(
-    coursePhaseParticipations?.participations || [],
+    coursePhaseParticipations?.participations.filter(
+      (participation) => participation.passStatus !== PassStatus.FAILED,
+    ) || [],
     developerProfiles || [],
+  )
+  const seatCandidates = developerWithProfiles.filter(
+    (dev) => !excludedStudentIDs.has(dev.participation.courseParticipationID),
   )
 
   if (isPending) {
@@ -120,19 +128,59 @@ export const SeatAssignmentPage = () => {
   return (
     <div className='space-y-6'>
       <ManagementPageHeader>Seat Assignment</ManagementPageHeader>
+      <Card>
+        <CardContent className='pt-6'>
+          <details>
+            <summary className='cursor-pointer font-medium'>
+              Seat roster: {seatCandidates.length} of {developerWithProfiles.length} participants
+              included
+            </summary>
+            <p className='my-3 text-sm text-muted-foreground'>
+              Uncheck anyone who should not receive a seat in this assignment run. This selection
+              resets when the page reloads; saved seat assignments remain shared.
+            </p>
+            <div className='max-h-64 overflow-y-auto grid gap-2 sm:grid-cols-2'>
+              {developerWithProfiles.map((dev) => {
+                const id = dev.participation.courseParticipationID
+                const student = dev.participation.student
+                return (
+                  <div key={id} className='flex items-center gap-2 text-sm'>
+                    <Checkbox
+                      id={`seat-roster-${id}`}
+                      checked={!excludedStudentIDs.has(id)}
+                      onCheckedChange={(checked) =>
+                        setExcludedStudentIDs((current) => {
+                          const next = new Set(current)
+                          if (checked === true) next.delete(id)
+                          else next.add(id)
+                          return next
+                        })
+                      }
+                    />
+                    <label htmlFor={`seat-roster-${id}`} className='cursor-pointer'>
+                      {student.firstName} {student.lastName}
+                      {!dev.profile && <span className='text-destructive'> (profile missing)</span>}
+                    </label>
+                  </div>
+                )
+              })}
+            </div>
+          </details>
+        </CardContent>
+      </Card>
       <SeatUploader existingSeats={seats || []} />
       {seats.length > 0 && <SeatMacAssigner existingSeats={seats} />}
       {seats.length > 0 && (
         <SeatTutorAssigner
           seats={seats}
           tutors={tutors || []}
-          numberOfStudents={developerWithProfiles.length}
+          numberOfStudents={seatCandidates.length}
         />
       )}
       {seats.length > 0 && (
         <SeatStudentAssigner
           seats={seats}
-          developerWithProfiles={developerWithProfiles}
+          developerWithProfiles={seatCandidates}
           tutors={tutors}
           peerAssignments={peerAssignments}
         />

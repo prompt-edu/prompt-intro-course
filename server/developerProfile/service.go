@@ -10,11 +10,13 @@ import (
 	db "github.com/prompt-edu/prompt-intro-course/server/db/sqlc"
 	"github.com/prompt-edu/prompt-intro-course/server/developerProfile/developerProfileDTO"
 	log "github.com/sirupsen/logrus"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 type DeveloperProfileService struct {
-	queries db.Queries
-	conn    *pgxpool.Pool
+	queries      db.Queries
+	conn         *pgxpool.Pool
+	gitlabClient *gitlab.Client
 }
 
 var DeveloperProfileServiceSingleton *DeveloperProfileService

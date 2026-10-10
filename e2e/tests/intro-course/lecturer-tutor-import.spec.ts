@@ -115,14 +115,21 @@ test.describe('tutor import: the tutor table', () => {
     await expect(page.getByRole('dialog')).toBeHidden()
   })
 
-  test('Sync to Keycloak reports back without breaking the page', async ({ page }) => {
+  test('Sync to Keycloak grants tutors access without warnings', async ({ page }) => {
     const tutors = new TutorImportPage(page)
 
-    // Re-imports the same tutors, which the server upserts and then retries
-    // against Keycloak. It either succeeds silently or surfaces warnings; both
-    // are acceptable, what matters is that the table survives.
+    // Re-importing the same tutors repairs both Keycloak groups and keeps the
+    // persisted tutor records intact.
+    const syncResponse = page.waitForResponse(
+      (response) => response.url().includes('/tutor/course/') && response.request().method() === 'POST',
+    )
     await tutors.syncToKeycloakButton.click()
-    await expect(tutors.syncToKeycloakButton).toBeEnabled({ timeout: 60_000 })
+    const response = await syncResponse
+    expect(response.status()).toBe(201)
+    const body = await response.text()
+    expect(body ? (JSON.parse(body).warnings ?? []) : []).toEqual([])
+    await expect(tutors.syncToKeycloakButton).toBeEnabled()
+    await expect(page.getByText(/Failed to .*keycloak group/i)).toBeHidden()
     await expect(tutors.tutorRow(SEEDED_TUTORS[0].id)).toBeVisible()
   })
 })

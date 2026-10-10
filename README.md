@@ -69,3 +69,6 @@ CI/CD workflows are in `.github/workflows/`:
 - `dev.yml` runs tests, builds, and deploys to dev VM
 - `prod.yml` runs release builds and deploys to prod VM
 - `deploy.yml` deploys only intro-course containers using `docker-compose.prod.yml`
+
+For the 2026–27 student-repository rollout and provisional three-room seat plan, see
+[`docs/ios-2026-27-setup.md`](docs/ios-2026-27-setup.md).

@@ -4,12 +4,12 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	promptSDK "github.com/prompt-edu/prompt-sdk"
+	"github.com/prompt-edu/prompt-intro-course/server/gitlabutil"
 	"github.com/prompt-edu/prompt-intro-course/server/peerAssignment/peerAssignmentDTO"
+	promptSDK "github.com/prompt-edu/prompt-sdk"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -170,8 +170,8 @@ func deletePeerAssignments(c *gin.Context) {
 }
 
 // syncPeerAssignmentsToGitlab godoc
-// @Summary Sync peer assignments to GitLab
-// @Description Adds peers as Reporter members and creates approval rules on GitLab.
+// @Summary Check GitLab peer review access
+// @Description Verifies group-based Developer review access for current repositories; creates per-peer access only for legacy repositories.
 // @Tags peer-assignment
 // @Accept json
 // @Produce json
@@ -196,7 +196,7 @@ func syncPeerAssignmentsToGitlab(c *gin.Context) {
 		return
 	}
 
-	semesterTag := strings.ToUpper(req.SemesterTag)
+	semesterTag := gitlabutil.CourseGroupName(req.SemesterTag)
 	if !semesterTagPattern.MatchString(semesterTag) {
 		handleError(c, http.StatusBadRequest, errors.New("invalid semester tag format"))
 		return
@@ -213,8 +213,8 @@ func syncPeerAssignmentsToGitlab(c *gin.Context) {
 }
 
 // unsyncPeerAssignmentsFromGitlab godoc
-// @Summary Unsync peer assignments from GitLab
-// @Description Revokes Reporter access and removes approval rules for all current peer assignments.
+// @Summary Remove legacy GitLab peer access
+// @Description Removes per-peer access from legacy repositories. Group-based access on current repositories is independent of assignments.
 // @Tags peer-assignment
 // @Accept json
 // @Produce json
@@ -239,7 +239,7 @@ func unsyncPeerAssignmentsFromGitlab(c *gin.Context) {
 		return
 	}
 
-	semesterTag := strings.ToUpper(req.SemesterTag)
+	semesterTag := gitlabutil.CourseGroupName(req.SemesterTag)
 	if !semesterTagPattern.MatchString(semesterTag) {
 		handleError(c, http.StatusBadRequest, errors.New("invalid semester tag format"))
 		return
