@@ -1,15 +1,15 @@
 module github.com/prompt-edu/prompt-intro-course/server
 
-go 1.27.1
+go 1.27.3
 
 require (
-	github.com/getsentry/sentry-go v0.49.0
-	github.com/getsentry/sentry-go/gin v0.49.0
-	github.com/getsentry/sentry-go/logrus v0.49.0
+	github.com/getsentry/sentry-go v0.50.0
+	github.com/getsentry/sentry-go/gin v0.50.0
+	github.com/getsentry/sentry-go/logrus v0.50.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/prompt-edu/prompt-sdk v1.4.1
+	github.com/prompt-edu/prompt-sdk v1.4.2
 	github.com/sirupsen/logrus v1.10.2
 	github.com/stretchr/testify v1.12.1
 	github.com/swaggo/swag v1.16.6
