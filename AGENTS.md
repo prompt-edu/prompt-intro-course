@@ -180,6 +180,12 @@ module/
 migrate -path ./db/migration -database $DATABASE_URL up
 ```
 
+- Every migration after the base schema (`0001`) ships a matching `NNNN_name.down.sql` that
+  reverses it, so `migrate ... goto 1` rolls the database back. `0001` stays up-only, as in the
+  other PROMPT services.
+- When a rollback cannot restore data, say so in a comment in the down file (see
+  `0003_udid.down.sql`).
+
 ## Intro-Course Specific Functional Areas
 
 ### Client pages

@@ -1,0 +1,5 @@
+BEGIN;
+
+ALTER TABLE seat DROP COLUMN IF EXISTS is_tutor_seat;
+
+COMMIT;
