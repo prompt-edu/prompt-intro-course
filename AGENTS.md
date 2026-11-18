@@ -324,7 +324,9 @@ Notes:
 - The suite runs serially (`workers: 1`): all specs share the single seeded course phase. Mutating
   specs snapshot and restore their slice of the fixture.
 - `e2e/keycloak/realm.json` is a copy of the platform repo's e2e realm plus this repo's host ports
-  and the `/Prompt/ios2425-iPraktikumFull` group tree; re-apply both when refreshing it.
+  the `/Prompt/ios2425-iPraktikumFull` group tree, and the `kc-admin-api` client scope on
+  `prompt-server` (required by the Admin REST API since Keycloak 26.8.2); re-apply all three when
+  refreshing it.
 - **Adding a migration**: add a mount line to `db-intro-course` in `docker-compose.e2e.yml` and
   bump the version in `e2e/seed/intro-course/90_schema_migrations.sql`.
 - **Adding a route**: add it to `e2e/src/data/permissionMatrix.ts` so the permission matrix covers

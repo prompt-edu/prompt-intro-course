@@ -105,8 +105,8 @@ Three layers, all real.
 
 **The realm** (`keycloak/realm.json`) is a copy of `prompt2/e2e/keycloak/realm.json`. Keeping this
 repo's *service names* identical to that stack is what makes the copy work — its redirect URIs
-already list `http://client-core/*`. Two additions on top of the upstream file, both of which must
-be re-applied when refreshing it:
+already list `http://client-core/*`. Three additions on top of the upstream file, all of which must
+be re-applied when refreshing it (drop the third once upstream carries it):
 
 1. This repo's host ports (`4100` / `18190`) are appended to `prompt-client`'s redirect URIs and
    web origins and to `prompt-server`'s redirect URIs, so a host-side Playwright run can complete
@@ -116,6 +116,11 @@ be re-applied when refreshing it:
    the UI; the seeded course is inserted straight into the database, so nothing ever created it.
    Without it the tutor page's `PUT /api/keycloak/:courseID/group` fails with
    *"Group path does not exist"* and the tutor table stays gated forever.
+3. The `kc-admin-api` client scope is defined and assigned as a default scope to `prompt-server`.
+   Since Keycloak 26.8.2 the Admin REST API rejects tokens without that scope's audience, so
+   without it every core call to the Admin API (the same group endpoint) fails with a 401. The
+   scope must be defined in the file: a realm import ignores a reference to a scope it does not
+   define.
 
 Username equals password for every user. On the seeded course (`iPraktikumFull`):
 
