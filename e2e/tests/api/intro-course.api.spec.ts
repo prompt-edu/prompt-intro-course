@@ -150,10 +150,14 @@ test.describe('intro course api: student-scoped endpoints', () => {
   })
 })
 
+// prompt-sdk's Person also carries email and universityLogin. The intro course leaves
+// them empty, so the team outputs expose no contact data.
 interface TeamPerson {
   id: string
   firstName: string
   lastName: string
+  email: string
+  universityLogin: string
 }
 
 interface Team {
@@ -197,13 +201,21 @@ test.describe('intro course api: inter-phase team outputs', () => {
     const aliceTeam = teams.find((t) => t.id === alice.id)
     expect(aliceTeam?.name).toBe(`${alice.firstName} ${alice.lastName}`)
     expect(aliceTeam?.tutors).toEqual([
-      { id: alice.id, firstName: alice.firstName, lastName: alice.lastName },
+      {
+        id: alice.id,
+        firstName: alice.firstName,
+        lastName: alice.lastName,
+        email: '',
+        universityLogin: '',
+      },
     ])
     // The lecturer's read refreshes the cached names from core.
     expect(aliceTeam?.members).toContainEqual({
       id: STUDENT_WITH_PROFILE.courseParticipationId,
       firstName: STUDENT_WITH_PROFILE.firstName,
       lastName: STUDENT_WITH_PROFILE.lastName,
+      email: '',
+      universityLogin: '',
     })
   })
 

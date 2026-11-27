@@ -3,6 +3,7 @@ package team
 import (
 	"errors"
 	"net/http"
+	"slices"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -61,8 +62,8 @@ func getTeams(c *gin.Context) {
 		return
 	}
 
-	if tutorTeamID, scoped := promptSDK.GetTutorTeamID(c); scoped {
-		teams = filterTeamsByID(teams, tutorTeamID)
+	if tutorTeamIDs, scoped := promptSDK.GetTutorTeamIDs(c); scoped {
+		teams = filterTeamsByID(teams, tutorTeamIDs)
 	}
 	c.JSON(http.StatusOK, gin.H{"teams": teams})
 }
@@ -92,8 +93,8 @@ func getAllocations(c *gin.Context) {
 		return
 	}
 
-	if tutorTeamID, scoped := promptSDK.GetTutorTeamID(c); scoped {
-		allocations = filterAllocationsByTeam(allocations, tutorTeamID)
+	if tutorTeamIDs, scoped := promptSDK.GetTutorTeamIDs(c); scoped {
+		allocations = filterAllocationsByTeam(allocations, tutorTeamIDs)
 	}
 	c.JSON(http.StatusOK, allocations)
 }
@@ -137,26 +138,27 @@ func getAllocation(c *gin.Context) {
 		return
 	}
 
-	if tutorTeamID, scoped := promptSDK.GetTutorTeamID(c); scoped && teamID != tutorTeamID {
+	if tutorTeamIDs, scoped := promptSDK.GetTutorTeamIDs(c); scoped && !slices.Contains(tutorTeamIDs, teamID) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "access restricted to assigned team"})
 		return
 	}
 	c.JSON(http.StatusOK, teamDTO.Allocation{TeamAllocation: teamID})
 }
 
-func filterTeamsByID(teams []promptTypes.Team, teamID uuid.UUID) []promptTypes.Team {
+func filterTeamsByID(teams []promptTypes.Team, teamIDs []uuid.UUID) []promptTypes.Team {
+	result := make([]promptTypes.Team, 0)
 	for _, team := range teams {
-		if team.ID == teamID {
-			return []promptTypes.Team{team}
+		if slices.Contains(teamIDs, team.ID) {
+			result = append(result, team)
 		}
 	}
-	return []promptTypes.Team{}
+	return result
 }
 
-func filterAllocationsByTeam(allocations []teamDTO.AllocationWithParticipation, teamID uuid.UUID) []teamDTO.AllocationWithParticipation {
+func filterAllocationsByTeam(allocations []teamDTO.AllocationWithParticipation, teamIDs []uuid.UUID) []teamDTO.AllocationWithParticipation {
 	result := make([]teamDTO.AllocationWithParticipation, 0)
 	for _, allocation := range allocations {
-		if allocation.TeamAllocation == teamID {
+		if slices.Contains(teamIDs, allocation.TeamAllocation) {
 			result = append(result, allocation)
 		}
 	}
